@@ -244,3 +244,60 @@ export function buildMdatHeader(contentBytes: number): Uint8Array {
   if (normalSize <= 0xffffffff) return concatBytes([u32(normalSize), fourcc('mdat')]);
   return concatBytes([u32(1), fourcc('mdat'), u64(16 + contentBytes)]);
 }
+
+// --- Step 5 finding: per-sample File.slice()/arrayBuffer() calls are dominated by browser
+// per-call overhead (measured ~84 MB/s in Chrome vs. 300-600+ MB/s in Node for the same file),
+// because this source interleaves tracks far more finely than our own ~1s output chunking, so a
+// track's own consecutive samples are NOT close together in the file. Reading a bigger WINDOW
+// per call and slicing the needed sample(s) out of it in memory trades some wasted over-read
+// bytes for far fewer, larger calls -- a clear net win in the sweep (1MB windows: ~1230 MB/s
+// vs. ~84 MB/s per-sample, at a ~5.8x over-read ratio). Shared here so the real export path and
+// the diagnostic sweep use identical windowing logic rather than two implementations drifting.
+
+export interface CoalescedReadStats {
+  windowReads: number;
+  windowBytesRead: number;
+}
+
+/**
+ * Walks `chunks` in schedule order, grouping each track's consecutive selected samples into
+ * windows up to `windowBytes`, fetching each window in one read, and invoking `onSample` with
+ * just that sample's own bytes (sliced out of the window, not the whole window).
+ */
+export async function forEachSampleCoalesced(
+  file: File,
+  chunks: WriteChunk[],
+  windowBytes: number,
+  onSample: (track: TrackIndex, sampleIdx: number, bytes: Uint8Array) => Promise<void>,
+): Promise<CoalescedReadStats> {
+  let windowReads = 0;
+  let windowBytesRead = 0;
+  for (const chunk of chunks) {
+    const { track } = chunk;
+    let i = chunk.startIdx;
+    while (i <= chunk.endIdx) {
+      const windowStart = track.offset[i]!;
+      let windowEnd = windowStart;
+      let j = i;
+      while (j <= chunk.endIdx && track.offset[j]! + track.size[j]! - windowStart <= windowBytes) {
+        windowEnd = track.offset[j]! + track.size[j]!;
+        j += 1;
+      }
+      if (j === i) {
+        // a single sample bigger than the window -- read it directly, can't coalesce further
+        windowEnd = track.offset[i]! + track.size[i]!;
+        j = i + 1;
+      }
+      const windowBuf = new Uint8Array(await file.slice(windowStart, windowEnd).arrayBuffer());
+      windowReads += 1;
+      windowBytesRead += windowEnd - windowStart;
+      for (let k = i; k < j; k += 1) {
+        const relOffset = track.offset[k]! - windowStart;
+        const len = track.size[k]!;
+        await onSample(track, k, windowBuf.subarray(relOffset, relOffset + len));
+      }
+      i = j;
+    }
+  }
+  return { windowReads, windowBytesRead };
+}

@@ -4,7 +4,10 @@ import { clearTimingRecords, getTimingRecords, markStart, markEnd } from '../../
 import { buildResult, recordResult } from '../../measure/record';
 import { buildMp4Index, type Mp4Index } from './mp4-index';
 import { selectSamples, type SelectionResult } from './select';
-import { buildMoov, buildMdatHeader, planWriteSchedule, type WriteChunk } from './remux-write';
+import { buildMoov, buildMdatHeader, planWriteSchedule, forEachSampleCoalesced, type WriteChunk } from './remux-write';
+
+/** Chosen from the Step 5 chunk-size sweep: best throughput per byte of over-read waste. */
+const COALESCE_WINDOW_BYTES = 1 * 1024 * 1024;
 
 interface SaveFilePickerOptions {
   suggestedName?: string;
@@ -168,6 +171,7 @@ exportBtn.addEventListener('click', () => {
 
       let bytesWritten = 0;
       let sampleReads = 0;
+      let windowReads = 0;
       let abortedFileState = 'completed';
 
       const memory = await sampleMemoryDuring(async () => {
@@ -179,25 +183,30 @@ exportBtn.addEventListener('click', () => {
           await writeChunk(writable, mdatHeader);
           bytesWritten += mdatHeader.byteLength;
 
-          for (const chunk of built.schedule) {
-            if (abortController?.signal.aborted) {
-              // FileSystemWritableFileStream buffers into a swap file and only replaces the
-              // real target on close(); abort() discards that swap file instead. So the
-              // expected result is neither a truncated nor a locked file, but NO file at all
-              // (or the pre-existing file left untouched if you picked one that already
-              // existed) -- verify this against what showSaveFilePicker's target actually
-              // shows after the abort completes, and correct this note if it disagrees.
-              abortedFileState = 'aborted -- FSA write is transactional, so the target should be untouched/absent, not truncated (verify against actual browser behavior)';
-              break;
-            }
-            for (let i = chunk.startIdx; i <= chunk.endIdx; i += 1) {
-              const off = chunk.track.offset[i]!;
-              const len = chunk.track.size[i]!;
-              const buf = await currentFile!.slice(off, off + len).arrayBuffer();
-              await writeChunk(writable, buf);
-              bytesWritten += len;
-              sampleReads += 1;
-            }
+          // Coalesced reads, not per-sample: measured per-sample throughput in Chrome against
+          // the 27GB fixture at ~37MB/s combined read+write (spec's fail threshold is 100MB/s)
+          // because per-call File.slice()/arrayBuffer() overhead dominates when this source
+          // interleaves tracks far more finely than our own output-side chunking. A 1MB window
+          // (chosen from a 256KB/1MB/4MB/16MB sweep: best throughput-per-byte-of-waste) measured
+          // ~1230MB/s for reads alone.
+          const stats = await forEachSampleCoalesced(currentFile!, built.schedule, COALESCE_WINDOW_BYTES, async (_track, _i, bytes) => {
+            if (abortController?.signal.aborted) throw new DOMException('export aborted', 'AbortError');
+            await writeChunk(writable, bytes);
+            bytesWritten += bytes.byteLength;
+            sampleReads += 1;
+          });
+          windowReads = stats.windowReads;
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            // FileSystemWritableFileStream buffers into a swap file and only replaces the
+            // real target on close(); abort() discards that swap file instead. So the
+            // expected result is neither a truncated nor a locked file, but NO file at all
+            // (or the pre-existing file left untouched if you picked one that already
+            // existed) -- verify this against what showSaveFilePicker's target actually
+            // shows after the abort completes, and correct this note if it disagrees.
+            abortedFileState = 'aborted -- FSA write is transactional, so the target should be untouched/absent, not truncated (verify against actual browser behavior)';
+          } else {
+            throw err;
           }
         } finally {
           if (abortedFileState !== 'completed') await writable.abort();
@@ -209,8 +218,8 @@ exportBtn.addEventListener('click', () => {
       const throughputMBps = bytesWritten / 1e6 / (pass2Timing.durationMs / 1000);
       elog(
         `pass 2 (streamed write): ${pass2Timing.durationMs.toFixed(0)}ms, wrote ${bytesWritten}B ` +
-          `(${(bytesWritten / 1e6).toFixed(1)}MB), ${sampleReads} per-sample reads, ` +
-          `${throughputMBps.toFixed(1)} MB/s, status=${abortedFileState}`,
+          `(${(bytesWritten / 1e6).toFixed(1)}MB), ${sampleReads} samples via ${windowReads} coalesced ` +
+          `${(COALESCE_WINDOW_BYTES / 1e6).toFixed(1)}MB-window reads, ${throughputMBps.toFixed(1)} MB/s, status=${abortedFileState}`,
       );
       elog(`heap: before=${memory.before.bytes} peak=${memory.peak.bytes} after=${memory.after.bytes} method=${memory.method} consistent=${memory.consistent}`);
 
@@ -244,6 +253,8 @@ exportBtn.addEventListener('click', () => {
           bytesWritten,
           throughputMBps,
           sampleReads,
+          windowReads,
+          coalesceWindowBytes: COALESCE_WINDOW_BYTES,
           memoryMethod: memory.method,
           memoryConsistent: memory.consistent,
           memoryBeforeBytes: memory.before.bytes,
@@ -290,34 +301,13 @@ async function timePerSampleReads(file: File, schedule: WriteChunk[]): Promise<{
   return { ms: performance.now() - t0, bytes };
 }
 
-/** Coalesces nearby per-sample reads into fixed-size windows: reads a window once, slices samples out of it in memory. */
+/** Coalesces nearby per-sample reads into fixed-size windows -- shares the real export path's windowing logic (forEachSampleCoalesced) so the sweep measures exactly what export would do. */
 async function timeCoalescedReads(file: File, schedule: WriteChunk[], windowBytes: number): Promise<{ ms: number; bytes: number; windowReads: number }> {
   const t0 = performance.now();
-  let bytes = 0;
-  let windowReads = 0;
-  for (const chunk of schedule) {
-    let i = chunk.startIdx;
-    while (i <= chunk.endIdx) {
-      const windowStart = chunk.track.offset[i]!;
-      let windowEnd = windowStart;
-      let j = i;
-      // grow the window to include as many consecutive samples as fit within windowBytes
-      while (j <= chunk.endIdx && chunk.track.offset[j]! + chunk.track.size[j]! - windowStart <= windowBytes) {
-        windowEnd = chunk.track.offset[j]! + chunk.track.size[j]!;
-        j += 1;
-      }
-      if (j === i) {
-        // a single sample bigger than the window -- read it directly, can't coalesce
-        windowEnd = chunk.track.offset[i]! + chunk.track.size[i]!;
-        j = i + 1;
-      }
-      await file.slice(windowStart, windowEnd).arrayBuffer();
-      windowReads += 1;
-      bytes += windowEnd - windowStart;
-      i = j;
-    }
-  }
-  return { ms: performance.now() - t0, bytes, windowReads };
+  const stats = await forEachSampleCoalesced(file, schedule, windowBytes, async () => {
+    /* sweep only measures read throughput; nothing to do with the sliced sample bytes */
+  });
+  return { ms: performance.now() - t0, bytes: stats.windowBytesRead, windowReads: stats.windowReads };
 }
 
 sweepBtn.addEventListener('click', () => {
