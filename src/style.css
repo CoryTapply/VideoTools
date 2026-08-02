@@ -1,0 +1,18 @@
+body {
+  font: 14px/1.5 ui-monospace, monospace;
+  max-width: 860px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #ddd;
+  background: #111;
+}
+a { color: #6cf; }
+button { font: inherit; padding: 0.4rem 0.8rem; }
+input[type='text'] { font: inherit; padding: 0.2rem; }
+pre {
+  background: #000;
+  border: 1px solid #333;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+  min-height: 4rem;
+}

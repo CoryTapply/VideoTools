@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>videotools spikes</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <h1>video trimmer feasibility spikes</h1>
+    <p>Run dev server with <code>npm run dev</code> (no COI headers) or <code>npm run dev:coi</code>
+      (COOP/COEP, required for <code>measureUserAgentSpecificMemory()</code>).</p>
+    <ul>
+      <li><a href="/spike1-file-access.html">spike1: file access</a> -- chunked reads of a huge local file</li>
+      <li><a href="/spike2-mp4-parse.html">spike2: mp4 parse</a> -- moov/keyframe index, faststart vs not</li>
+      <li><a href="/spike3-seek-preview.html">spike3: seek preview</a> -- random seek + frame capture latency</li>
+      <li><a href="/spike4-remux-trim.html">spike4: remux trim</a> -- byte-range cut cost, no re-encode</li>
+    </ul>
+  </body>
+</html>
