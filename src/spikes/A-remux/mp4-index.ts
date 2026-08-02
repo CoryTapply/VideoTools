@@ -78,6 +78,14 @@ export interface Mp4Index {
   retainedBytes: number;
 }
 
+/** Spike B / Step 2 -- optional cumulative per-stage build timing, summed across all tracks. */
+export interface StageTimings {
+  sttsMs: number;
+  cttsMs: number;
+  stszMs: number;
+  stscStcoMs: number;
+}
+
 function rawBoxBytes(view: DataView, box: { offset: number; boxSize: number }): Uint8Array {
   return new Uint8Array(view.buffer, view.byteOffset + box.offset, box.boxSize).slice();
 }
@@ -318,7 +326,12 @@ function readHandlerType(view: DataView, box: { offset: number; headerSize: numb
   );
 }
 
-function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: number; boxSize: number }, mvhdTimescale: number): TrackIndex {
+function buildTrackIndex(
+  view: DataView,
+  trak: { offset: number; headerSize: number; boxSize: number },
+  mvhdTimescale: number,
+  stageTimings?: StageTimings,
+): TrackIndex {
   const trakStart = trak.offset + trak.headerSize;
   const trakEnd = trak.offset + trak.boxSize;
 
@@ -385,13 +398,16 @@ function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: num
   const stblStart = stblBox.offset + stblBox.headerSize;
   const stblEnd = stblBox.offset + stblBox.boxSize;
 
+  const sttsT0 = performance.now();
   const sttsBox = findChild(view, stblStart, stblEnd, 'stts');
   if (!sttsBox) throw new Error('stbl missing stts');
   const { durations, sampleCount } = parseStts(view, sttsBox);
 
   const dts = new Float64Array(sampleCount);
   for (let i = 1; i < sampleCount; i += 1) dts[i] = dts[i - 1]! + durations[i - 1]!;
+  if (stageTimings) stageTimings.sttsMs += performance.now() - sttsT0;
 
+  const cttsT0 = performance.now();
   const cttsBox = findChild(view, stblStart, stblEnd, 'ctts');
   let cts: Float64Array;
   let hasCtts = false;
@@ -405,7 +421,9 @@ function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: num
   } else {
     cts = dts.slice();
   }
+  if (stageTimings) stageTimings.cttsMs += performance.now() - cttsT0;
 
+  const stszT0 = performance.now();
   const stszBox = findChild(view, stblStart, stblEnd, 'stsz');
   const stz2Box = stszBox ? undefined : findChild(view, stblStart, stblEnd, 'stz2');
   let size: Uint32Array;
@@ -413,7 +431,9 @@ function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: num
   else if (stz2Box) size = parseStz2(view, stz2Box);
   else throw new Error('stbl missing stsz/stz2');
   if (size.length !== sampleCount) throw new Error(`stsz sample count ${size.length} != stts sample count ${sampleCount}`);
+  if (stageTimings) stageTimings.stszMs += performance.now() - stszT0;
 
+  const stscStcoT0 = performance.now();
   const stscBox = findChild(view, stblStart, stblEnd, 'stsc');
   if (!stscBox) throw new Error('stbl missing stsc');
   const stsc = parseStsc(view, stscBox);
@@ -424,6 +444,7 @@ function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: num
   if (!chunkBox) throw new Error('stbl missing stco/co64');
   const chunkOffsets = parseChunkOffsets(view, chunkBox);
   const offset = computeSampleOffsets(chunkOffsets, stsc, size);
+  if (stageTimings) stageTimings.stscStcoMs += performance.now() - stscStcoT0;
 
   const stssBox = findChild(view, stblStart, stblEnd, 'stss');
   const sync = parseStss(view, stssBox, sampleCount);
@@ -460,7 +481,7 @@ function trackRetainedBytes(t: TrackIndex): number {
   return t.dts.byteLength + t.cts.byteLength + t.size.byteLength + t.offset.byteLength + t.sync.byteLength;
 }
 
-export async function buildMp4Index(file: File): Promise<Mp4Index> {
+export async function buildMp4Index(file: File, stageTimings?: StageTimings): Promise<Mp4Index> {
   const t0 = performance.now();
 
   const moovHeader = await findTopLevelBox(file, 'moov');
@@ -487,7 +508,7 @@ export async function buildMp4Index(file: File): Promise<Mp4Index> {
   const tracks: TrackIndex[] = [];
   for (const box of iterateBoxes(view, moovContentStart, moovContentEnd)) {
     if (box.type !== 'trak') continue;
-    tracks.push(buildTrackIndex(view, box, mvhdTimescale));
+    tracks.push(buildTrackIndex(view, box, mvhdTimescale, stageTimings));
   }
 
   const buildMs = performance.now() - t0;
