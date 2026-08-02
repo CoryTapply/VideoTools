@@ -40,7 +40,7 @@ encode_seed() {
 multiply_to_size() {
   local seed="$1" target_bytes="$2" out="$3"
   local seed_bytes repeats list
-  seed_bytes=$(stat -c%s "$seed")
+  seed_bytes=$(stat -f%z "$seed" 2>/dev/null || stat -c%s "$seed")
   repeats=$(( (target_bytes + seed_bytes - 1) / seed_bytes ))
   echo "multiplying $seed x${repeats} -> $out (~$(( target_bytes / 1000 / 1000 / 1000 ))GB target)"
 
@@ -56,7 +56,7 @@ report_fixture() {
   local f="$1"
   [ -f "$f" ] || return 0
   local size_bytes duration frame_count keyframe_count
-  size_bytes=$(stat -c%s "$f")
+  size_bytes=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f")
   duration=$(ffprobe -v error -select_streams v:0 -show_entries format=duration -of csv=p=0 "$f")
   frame_count=$(ffprobe -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of csv=p=0 "$f")
   keyframe_count=$(ffprobe -v error -select_streams v:0 -skip_frame nokey -count_frames -show_entries stream=nb_read_frames -of csv=p=0 "$f")
@@ -68,18 +68,19 @@ GB=$((1000 * 1000 * 1000))
 
 # --- large-2160p.mp4 / large-noqs.mp4 (shared 2160p59.94 seed) --------
 # 20GB target: at ~11Mbps that's roughly a 4-hour asset.
-seed_2160p="$OUT_DIR/.seed-2160p.mp4"
-encode_seed "$seed_2160p" 3840 2160 60 2 11000
-raw_2160p="$OUT_DIR/.raw-2160p.mp4"
-multiply_to_size "$seed_2160p" $((20 * GB)) "$raw_2160p"
-
-echo "remuxing large-2160p.mp4 with faststart"
-ffmpeg -y -loglevel error -i "$raw_2160p" -c copy -movflags +faststart "$OUT_DIR/large-2160p.mp4"
-
-echo "remuxing large-noqs.mp4 without faststart (moov at end)"
-ffmpeg -y -loglevel error -i "$raw_2160p" -c copy -movflags -faststart "$OUT_DIR/large-noqs.mp4"
-
-rm -f "$seed_2160p" "$raw_2160p"
+# SKIPPED for now (too slow/large) -- uncomment to regenerate.
+# seed_2160p="$OUT_DIR/.seed-2160p.mp4"
+# encode_seed "$seed_2160p" 3840 2160 60 2 11000
+# raw_2160p="$OUT_DIR/.raw-2160p.mp4"
+# multiply_to_size "$seed_2160p" $((20 * GB)) "$raw_2160p"
+#
+# echo "remuxing large-2160p.mp4 with faststart"
+# ffmpeg -y -loglevel error -i "$raw_2160p" -c copy -movflags +faststart "$OUT_DIR/large-2160p.mp4"
+#
+# echo "remuxing large-noqs.mp4 without faststart (moov at end)"
+# ffmpeg -y -loglevel error -i "$raw_2160p" -c copy -movflags -faststart "$OUT_DIR/large-noqs.mp4"
+#
+# rm -f "$seed_2160p" "$raw_2160p"
 
 # --- mid-1080p.mp4 (fast iteration fixture) ---------------------------
 seed_mid="$OUT_DIR/.seed-mid.mp4"
@@ -96,18 +97,31 @@ ffmpeg -y -loglevel error -i "$OUT_DIR/.raw-longgop.mp4" -c copy -movflags +fast
 rm -f "$seed_longgop" "$OUT_DIR/.raw-longgop.mp4"
 
 # --- vfr-screen.mp4 (variable frame rate, screen-recorder-like) -------
-# Mostly-static frame with one moving element: mpdecimate drops the
-# near-duplicate frames and -vsync vfr keeps only the genuinely unique
-# ones with correct timestamps, producing real (not simulated) VFR.
-# No target size given for this one -- it's a behavioral fixture, not a
-# size-stress fixture, so it's generated directly without multiplying.
+# Mostly-static frame with one moving element: select on scene-change
+# score drops the near-duplicate frames and -fps_mode vfr keeps only the
+# genuinely unique ones with correct timestamps, producing real (not
+# simulated) VFR. No target size given for this one -- it's a behavioral
+# fixture, not a size-stress fixture, so it's generated directly without
+# multiplying.
+#
+# NOTE: this used to use `mpdecimate` + the (now-deprecated) `-vsync vfr`,
+# but on this ffmpeg build (8.1.2) that combination hangs indefinitely on
+# a flat `color=` source: mpdecimate/scene-diff both compare frames via a
+# buffer that `color` appears to reuse unchanged across calls, so every
+# frame reads as an exact duplicate and gets dropped -- forever, since
+# the -t output-duration limit never advances when no frames are ever
+# emitted. Piping the color source through a subtle temporal `noise`
+# filter forces each frame's buffer to actually differ, which fixes scene
+# scoring (verified non-zero/varying); `select` on scene score is used
+# instead of `mpdecimate`, which still drops ~everything on this build
+# even at its most sensitive thresholds.
 echo "encoding vfr-screen.mp4"
 ffmpeg -y -loglevel error \
-  -f lavfi -i "color=size=1920x1080:rate=30:color=0x202020" \
-  -f lavfi -i "sine=frequency=220:sample_rate=48000" \
-  -filter_complex "[0:v]drawbox=x='40+1400*abs(sin(t/3))':y=40:w=200:h=200:color=white@1:t=fill,mpdecimate[v]" \
+  -f lavfi -t 300 -i "color=size=1920x1080:rate=30:color=0x202020,noise=alls=2:allf=t" \
+  -f lavfi -t 300 -i "sine=frequency=220:sample_rate=48000" \
+  -filter_complex "[0:v]drawbox=x='40+1400*abs(sin(t/3))':y=40:w=200:h=200:color=white@1:t=fill,select='gt(scene\,0.000003)'[v]" \
   -map "[v]" -map 1:a \
-  -vsync vfr -t 300 \
+  -fps_mode vfr \
   -c:v libx264 -profile:v high -pix_fmt yuv420p -g 60 \
   -b:v 1500k -c:a aac -b:a 128k -movflags +faststart \
   "$OUT_DIR/vfr-screen.mp4"

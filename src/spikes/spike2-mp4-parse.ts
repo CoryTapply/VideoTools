@@ -22,24 +22,37 @@ function walkBoxes(view: DataView, start: number, end: number): BoxInfo[] {
   const boxes: BoxInfo[] = [];
   let offset = start;
   while (offset + 8 <= end) {
-    const size = view.getUint32(offset);
+    const size32 = view.getUint32(offset);
     const type = boxTypeAt(view, offset);
-    const boxSize = size === 0 ? end - offset : size;
+    // size32 === 1 means the real size is a 64-bit "largesize" right after the header --
+    // required for any box (typically mdat) bigger than 2^32-1 bytes (~4.29GB).
+    const headerSize = size32 === 1 ? 16 : 8;
+    const boxSize = size32 === 1 ? Number(view.getBigUint64(offset + 8)) : size32 === 0 ? end - offset : size32;
     boxes.push({ type, offset, size: boxSize });
-    if (CONTAINER_TYPES.has(type)) boxes.push(...walkBoxes(view, offset + 8, offset + boxSize));
+    if (CONTAINER_TYPES.has(type)) boxes.push(...walkBoxes(view, offset + headerSize, offset + boxSize));
     offset += boxSize;
   }
   return boxes;
 }
 
-/** Reads only top-level box headers from disk (8 bytes at a time) until moov is found -- never touches mdat. */
+/** Reads only top-level box headers from disk (8-16 bytes at a time) until moov is found -- never touches mdat. */
 async function findMoov(file: File): Promise<BoxInfo> {
   let offset = 0;
   while (offset + 8 <= file.size) {
     const view = new DataView(await file.slice(offset, offset + 8).arrayBuffer());
-    const size = view.getUint32(0);
+    const size32 = view.getUint32(0);
     const type = boxTypeAt(view, 0);
-    const boxSize = size === 0 ? file.size - offset : size;
+    // size32 === 1 means the real size is a 64-bit "largesize" right after the header --
+    // required for any box (typically mdat) bigger than 2^32-1 bytes (~4.29GB). A 27GB+
+    // OBS recording's mdat always needs this; without it, offset only advances by 1 byte
+    // per iteration and the scan effectively never reaches moov.
+    let boxSize: number;
+    if (size32 === 1) {
+      const largeView = new DataView(await file.slice(offset + 8, offset + 16).arrayBuffer());
+      boxSize = Number(largeView.getBigUint64(0));
+    } else {
+      boxSize = size32 === 0 ? file.size - offset : size32;
+    }
     if (type === 'moov') return { type, offset, size: boxSize };
     offset += boxSize;
   }
