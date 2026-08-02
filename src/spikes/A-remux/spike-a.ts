@@ -6,8 +6,14 @@ import { buildMp4Index, type Mp4Index } from './mp4-index';
 import { selectSamples, type SelectionResult } from './select';
 import { buildMoov, buildMdatHeader, planWriteSchedule, forEachWindowCoalesced, type WriteChunk } from './remux-write';
 
-/** Chosen from the Step 5 chunk-size sweep: best throughput per byte of over-read waste. */
-const COALESCE_WINDOW_BYTES = 1 * 1024 * 1024;
+/**
+ * Chosen from the Step 5 chunk-size sweep. Was 1MB (1230.5MB/s in the read-only sweep); real
+ * export throughput plateaued at ~80.5MB/s after write-batching, well short of the sweep's
+ * read-only number -- trying 4MB next (1568.9MB/s in the sweep, ~27% more than 1MB, before
+ * returns really flatten out toward 16MB) as a cheap experiment before reaching for read/write
+ * pipelining.
+ */
+const COALESCE_WINDOW_BYTES = 4 * 1024 * 1024;
 
 interface SaveFilePickerOptions {
   suggestedName?: string;
