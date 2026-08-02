@@ -7,13 +7,14 @@ import { selectSamples, type SelectionResult } from './select';
 import { buildMoov, buildMdatHeader, planWriteSchedule, forEachWindowCoalesced, type WriteChunk } from './remux-write';
 
 /**
- * Chosen from the Step 5 chunk-size sweep. Was 1MB (1230.5MB/s in the read-only sweep); real
- * export throughput plateaued at ~80.5MB/s after write-batching, well short of the sweep's
- * read-only number -- trying 4MB next (1568.9MB/s in the sweep, ~27% more than 1MB, before
- * returns really flatten out toward 16MB) as a cheap experiment before reaching for read/write
+ * Chosen from the Step 5 chunk-size sweep. Was 1MB (80.5MB/s real export on ~1.29GB), then 4MB
+ * (91.1MB/s real export on the same 1,132,380,899-byte range that measured 37.0MB/s per-sample
+ * at the start -- a 2.46x improvement, just under the spec's ~100MB/s threshold). Trying 16MB
+ * next (1830.8MB/s in the read-only sweep vs. 4MB's 1568.9MB/s) since we're close enough that
+ * one more window-size step might clear the bar outright, before reaching for read/write
  * pipelining.
  */
-const COALESCE_WINDOW_BYTES = 4 * 1024 * 1024;
+const COALESCE_WINDOW_BYTES = 16 * 1024 * 1024;
 
 interface SaveFilePickerOptions {
   suggestedName?: string;
