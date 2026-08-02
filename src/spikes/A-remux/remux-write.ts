@@ -251,8 +251,14 @@ export function buildMdatHeader(contentBytes: number): Uint8Array {
 // track's own consecutive samples are NOT close together in the file. Reading a bigger WINDOW
 // per call and slicing the needed sample(s) out of it in memory trades some wasted over-read
 // bytes for far fewer, larger calls -- a clear net win in the sweep (1MB windows: ~1230 MB/s
-// vs. ~84 MB/s per-sample, at a ~5.8x over-read ratio). Shared here so the real export path and
-// the diagnostic sweep use identical windowing logic rather than two implementations drifting.
+// vs. ~84 MB/s per-sample, at a ~5.8x over-read ratio).
+//
+// The first version of this coalesced reads but still called writable.write() once per SAMPLE
+// (~60k calls for a real export), which turned out to still be the dominant cost: a real browser
+// run only improved 37 -> 56.6 MB/s (should have been much closer to the sweep's read-only
+// speedup). Batching each window's needed sample bytes into ONE concatenated buffer and invoking
+// the callback once per WINDOW (not per sample) cuts both read AND write calls to the same count.
+// Shared here so the real export path and the diagnostic sweep use identical windowing logic.
 
 export interface CoalescedReadStats {
   windowReads: number;
@@ -261,14 +267,14 @@ export interface CoalescedReadStats {
 
 /**
  * Walks `chunks` in schedule order, grouping each track's consecutive selected samples into
- * windows up to `windowBytes`, fetching each window in one read, and invoking `onSample` with
- * just that sample's own bytes (sliced out of the window, not the whole window).
+ * windows up to `windowBytes`, fetching each window in one read, and invoking `onWindow` ONCE per
+ * window with just the needed sample bytes concatenated together (over-read waste discarded).
  */
-export async function forEachSampleCoalesced(
+export async function forEachWindowCoalesced(
   file: File,
   chunks: WriteChunk[],
   windowBytes: number,
-  onSample: (track: TrackIndex, sampleIdx: number, bytes: Uint8Array) => Promise<void>,
+  onWindow: (bytes: Uint8Array, sampleCount: number) => Promise<void>,
 ): Promise<CoalescedReadStats> {
   let windowReads = 0;
   let windowBytesRead = 0;
@@ -291,11 +297,14 @@ export async function forEachSampleCoalesced(
       const windowBuf = new Uint8Array(await file.slice(windowStart, windowEnd).arrayBuffer());
       windowReads += 1;
       windowBytesRead += windowEnd - windowStart;
+      const sampleCount = j - i;
+      const parts: Uint8Array[] = [];
       for (let k = i; k < j; k += 1) {
         const relOffset = track.offset[k]! - windowStart;
         const len = track.size[k]!;
-        await onSample(track, k, windowBuf.subarray(relOffset, relOffset + len));
+        parts.push(windowBuf.subarray(relOffset, relOffset + len));
       }
+      await onWindow(sampleCount === 1 ? parts[0]! : concatBytes(parts), sampleCount);
       i = j;
     }
   }

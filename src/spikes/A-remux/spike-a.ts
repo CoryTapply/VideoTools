@@ -4,7 +4,7 @@ import { clearTimingRecords, getTimingRecords, markStart, markEnd } from '../../
 import { buildResult, recordResult } from '../../measure/record';
 import { buildMp4Index, type Mp4Index } from './mp4-index';
 import { selectSamples, type SelectionResult } from './select';
-import { buildMoov, buildMdatHeader, planWriteSchedule, forEachSampleCoalesced, type WriteChunk } from './remux-write';
+import { buildMoov, buildMdatHeader, planWriteSchedule, forEachWindowCoalesced, type WriteChunk } from './remux-write';
 
 /** Chosen from the Step 5 chunk-size sweep: best throughput per byte of over-read waste. */
 const COALESCE_WINDOW_BYTES = 1 * 1024 * 1024;
@@ -183,17 +183,18 @@ exportBtn.addEventListener('click', () => {
           await writeChunk(writable, mdatHeader);
           bytesWritten += mdatHeader.byteLength;
 
-          // Coalesced reads, not per-sample: measured per-sample throughput in Chrome against
-          // the 27GB fixture at ~37MB/s combined read+write (spec's fail threshold is 100MB/s)
-          // because per-call File.slice()/arrayBuffer() overhead dominates when this source
-          // interleaves tracks far more finely than our own output-side chunking. A 1MB window
-          // (chosen from a 256KB/1MB/4MB/16MB sweep: best throughput-per-byte-of-waste) measured
-          // ~1230MB/s for reads alone.
-          const stats = await forEachSampleCoalesced(currentFile!, built.schedule, COALESCE_WINDOW_BYTES, async (_track, _i, bytes) => {
+          // Coalesced reads AND writes, batched per-window rather than per-sample: a first
+          // version coalesced only reads but still called writable.write() once per sample
+          // (~60k calls), and a real browser run only improved 37 -> 56.6MB/s -- writes were
+          // still the dominant cost. Batching each window's needed sample bytes into one
+          // concatenated buffer and writing that ONCE per window (not per sample) should get
+          // much closer to the sweep's ~1230MB/s read-only number. A 1MB window was chosen from
+          // the 256KB/1MB/4MB/16MB sweep as the best throughput-per-byte-of-waste point.
+          const stats = await forEachWindowCoalesced(currentFile!, built.schedule, COALESCE_WINDOW_BYTES, async (bytes, sampleCount) => {
             if (abortController?.signal.aborted) throw new DOMException('export aborted', 'AbortError');
             await writeChunk(writable, bytes);
             bytesWritten += bytes.byteLength;
-            sampleReads += 1;
+            sampleReads += sampleCount;
           });
           windowReads = stats.windowReads;
         } catch (err) {
@@ -301,11 +302,11 @@ async function timePerSampleReads(file: File, schedule: WriteChunk[]): Promise<{
   return { ms: performance.now() - t0, bytes };
 }
 
-/** Coalesces nearby per-sample reads into fixed-size windows -- shares the real export path's windowing logic (forEachSampleCoalesced) so the sweep measures exactly what export would do. */
+/** Coalesces nearby per-sample reads into fixed-size windows -- shares the real export path's windowing logic (forEachWindowCoalesced) so the sweep measures exactly what export would do. */
 async function timeCoalescedReads(file: File, schedule: WriteChunk[], windowBytes: number): Promise<{ ms: number; bytes: number; windowReads: number }> {
   const t0 = performance.now();
-  const stats = await forEachSampleCoalesced(file, schedule, windowBytes, async () => {
-    /* sweep only measures read throughput; nothing to do with the sliced sample bytes */
+  const stats = await forEachWindowCoalesced(file, schedule, windowBytes, async () => {
+    /* sweep only measures read throughput; nothing to do with the window's sliced bytes */
   });
   return { ms: performance.now() - t0, bytes: stats.windowBytesRead, windowReads: stats.windowReads };
 }
