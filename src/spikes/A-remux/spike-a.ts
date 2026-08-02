@@ -3,7 +3,7 @@ import { sampleMemoryDuring } from '../../measure/memory';
 import { clearTimingRecords, getTimingRecords, markStart, markEnd } from '../../measure/timing';
 import { buildResult, recordResult } from '../../measure/record';
 import { buildMp4Index, type Mp4Index } from './mp4-index';
-import { selectSamples, type SelectionResult } from './select';
+import { selectSamples, localUnitsToPresentationSec, type SelectionResult } from './select';
 import { buildMoov, buildMdatHeader, planWriteSchedule, forEachWindowCoalesced, type WriteChunk } from './remux-write';
 
 /**
@@ -245,8 +245,8 @@ exportBtn.addEventListener('click', () => {
           ` -- then diff frame counts/durations/timescales against step 3's output (won't be byte-identical; should agree structurally).`,
       );
       for (const r of selection.ranges) {
-        const firstT = (r.track.cts[r.startIdx]! - (r.track.editList?.[0]?.mediaTime ?? 0)) / r.track.timescale;
-        const lastT = (r.track.cts[r.endIdx]! - (r.track.editList?.[0]?.mediaTime ?? 0)) / r.track.timescale;
+        const firstT = localUnitsToPresentationSec(r.track, r.track.cts[r.startIdx]!);
+        const lastT = localUnitsToPresentationSec(r.track, r.track.cts[r.endIdx]!);
         elog(`5. A/V sync check, track ${r.track.trackId} [${r.track.handlerType}]: first=${firstT.toFixed(4)}s last=${lastT.toFixed(4)}s`);
       }
 

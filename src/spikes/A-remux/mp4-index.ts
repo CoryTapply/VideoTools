@@ -41,15 +41,29 @@ export interface TrackIndex {
   /** minf's children other than stbl (vmhd/smhd, dinf, ...), concatenated verbatim in original order. */
   rawMinfPrefix: Uint8Array;
   /**
-   * Edit list entries (edts/elst), if present -- e.g. encoder priming-delay
-   * offsets. `mediaTime` is in THIS track's timescale; `segmentDuration` is
-   * in the movie (mvhd) timescale. Honored during Step 2 sample selection:
-   * presentation time 0 maps to track-local media time `mediaTime`, not 0.
-   * Multi-entry edit lists (edit-based cuts, not just a priming offset) are
-   * rare and NOT specially handled here -- only the first entry's mediaTime
-   * is used as the presentation-to-media offset.
+   * Edit list entries (edts/elst), if present -- kept for display/debugging only. Use
+   * `editOffsetTicks` for actual presentation-time math; see its doc comment for why.
    */
   editList?: EditListEntry[];
+  /**
+   * Fully-resolved presentation-to-media offset, in THIS TRACK's own timescale units: local
+   * (track-timescale) time `editOffsetTicks` maps to presentation time 0. 0 if there's no edit
+   * list.
+   *
+   * Computed here (not lazily from `editList`) because getting it right requires converting
+   * between two DIFFERENT timescales and rounding at the right point: `elst`'s `segmentDuration`
+   * is in the MOVIE (mvhd) timescale but `mediaTime` is in THIS track's timescale. A leading
+   * "empty edit" (`mediaTime === -1`) represents a real presentation-timeline gap before content
+   * starts (confirmed on our own vfr-screen.mp4 fixture: a 2-entry list with an empty edit
+   * followed by the real AAC-priming-delay edit) and must be added to the offset -- but naively
+   * adding `emptySegmentDuration / mvhdTimescale` (seconds) to `mediaTime / trackTimescale`
+   * (seconds) doesn't round the same way an integer-tick demuxer does, and produces small but
+   * real errors (~1 part in 4000 on that fixture -- confirmed by cross-checking against
+   * mediabunny, an independent demuxer, in Spike B). The empty edit's gap must first be
+   * converted into (rounded to) the TRACK's own timescale, matching how all other sample math
+   * in this codebase is already done in track-timescale units, not seconds.
+   */
+  editOffsetTicks: number;
 }
 
 export interface Mp4Index {
@@ -304,20 +318,26 @@ function readHandlerType(view: DataView, box: { offset: number; headerSize: numb
   );
 }
 
-function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: number; boxSize: number }): TrackIndex {
+function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: number; boxSize: number }, mvhdTimescale: number): TrackIndex {
   const trakStart = trak.offset + trak.headerSize;
   const trakEnd = trak.offset + trak.boxSize;
 
   const editList = checkForEditList(view, trakStart, trakEnd);
-  if (editList && editList.length > 1) {
-    // A single-entry edit list is the common priming-delay case, handled in Step 2.
-    // Multiple entries mean real edit-based cuts, which this spike doesn't attempt to honor.
-    throw new Error(
-      `track has a multi-entry edts/elst edit list (${editList.length} entries) -- ` +
-        `only single-entry (priming-delay) edit lists are handled. Entries: ${JSON.stringify(editList)}`,
-    );
-  }
   if (editList) {
+    // mediaTime === -1 marks an "empty edit" per the ISO spec: a presentation-timeline gap with
+    // no media, commonly used to align tracks that don't naturally start at the same instant
+    // (confirmed on our own vfr-screen.mp4 fixture: [{mediaTime:-1, ...}, {mediaTime:1024, ...}]
+    // -- a tiny empty edit followed by the real AAC-priming-delay edit). This is still just a
+    // priming-delay pattern, not a genuine multi-segment cut, so only entries with a REAL
+    // mediaTime count toward the "how many edits" check -- see editOffset() in select.ts, which
+    // picks the first non-empty entry rather than always entry[0].
+    const realEdits = editList.filter((e) => e.mediaTime !== -1);
+    if (realEdits.length > 1) {
+      throw new Error(
+        `track has an edts/elst edit list with ${realEdits.length} real (non-empty) edits -- ` +
+          `only a single real edit (optionally preceded by empty edits) is handled. Entries: ${JSON.stringify(editList)}`,
+      );
+    }
     // eslint-disable-next-line no-console
     console.log('edit list found (will be honored as a presentation-time offset):', editList);
   }
@@ -334,6 +354,15 @@ function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: num
   const mdhdBox = findChild(view, mdiaStart, mdiaEnd, 'mdhd');
   if (!mdhdBox) throw new Error('mdia missing mdhd');
   const mdhd = parseMdhd(view, mdhdBox);
+
+  const realEdit = editList?.find((e) => e.mediaTime !== -1);
+  let editOffsetTicks = 0;
+  if (realEdit) {
+    const emptyEditTicks = (editList ?? [])
+      .filter((e) => e.mediaTime === -1)
+      .reduce((sum, e) => sum + Math.round((e.segmentDuration / mvhdTimescale) * mdhd.timescale), 0);
+    editOffsetTicks = realEdit.mediaTime - emptyEditTicks;
+  }
 
   const hdlrBox = findChild(view, mdiaStart, mdiaEnd, 'hdlr');
   if (!hdlrBox) throw new Error('mdia missing hdlr');
@@ -423,6 +452,7 @@ function buildTrackIndex(view: DataView, trak: { offset: number; headerSize: num
     rawHdlr: rawBoxBytes(view, hdlrBox),
     rawMinfPrefix,
     editList,
+    editOffsetTicks,
   };
 }
 
@@ -457,7 +487,7 @@ export async function buildMp4Index(file: File): Promise<Mp4Index> {
   const tracks: TrackIndex[] = [];
   for (const box of iterateBoxes(view, moovContentStart, moovContentEnd)) {
     if (box.type !== 'trak') continue;
-    tracks.push(buildTrackIndex(view, box));
+    tracks.push(buildTrackIndex(view, box, mvhdTimescale));
   }
 
   const buildMs = performance.now() - t0;

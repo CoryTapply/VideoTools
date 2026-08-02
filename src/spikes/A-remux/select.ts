@@ -26,15 +26,16 @@ export interface SelectionResult {
   inShiftSec: number;
 }
 
-function editOffset(track: TrackIndex): number {
-  return track.editList?.[0]?.mediaTime ?? 0;
+export function editOffset(track: TrackIndex): number {
+  return track.editOffsetTicks;
 }
 
 function presentationToLocalUnits(track: TrackIndex, presentationSec: number): number {
   return editOffset(track) + presentationSec * track.timescale;
 }
 
-function localUnitsToPresentationSec(track: TrackIndex, localUnits: number): number {
+/** Edit-list-adjusted presentation seconds for a raw local (track-timescale) timestamp -- exported for cross-checking against other demuxers, which report presentation time relative to the edit point too. */
+export function localUnitsToPresentationSec(track: TrackIndex, localUnits: number): number {
   return (localUnits - editOffset(track)) / track.timescale;
 }
 
