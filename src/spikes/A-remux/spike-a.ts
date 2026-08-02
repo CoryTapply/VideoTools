@@ -7,14 +7,18 @@ import { selectSamples, type SelectionResult } from './select';
 import { buildMoov, buildMdatHeader, planWriteSchedule, forEachWindowCoalesced, type WriteChunk } from './remux-write';
 
 /**
- * Chosen from the Step 5 chunk-size sweep. Was 1MB (80.5MB/s real export on ~1.29GB), then 4MB
- * (91.1MB/s real export on the same 1,132,380,899-byte range that measured 37.0MB/s per-sample
- * at the start -- a 2.46x improvement, just under the spec's ~100MB/s threshold). Trying 16MB
- * next (1830.8MB/s in the read-only sweep vs. 4MB's 1568.9MB/s) since we're close enough that
- * one more window-size step might clear the bar outright, before reaching for read/write
- * pipelining.
+ * Chosen from the Step 5 chunk-size sweep, on the same 1,132,380,899-byte real-export range
+ * throughout: 1MB -> 80.5MB/s, 4MB -> 91.1MB/s, 16MB -> 92.0MB/s. Window size plateaus at 4MB --
+ * 16MB halved the read-call count again (841 -> 421) for a <1% throughput change, well short of
+ * the read-only sweep's predicted ~17% gain, so the remaining bottleneck past 4MB is genuine
+ * disk-write bandwidth and/or the lack of overlap between reading and writing (each window is
+ * fully read, then fully written, with no pipelining) -- not call count. Settled on 4MB: same
+ * throughput as 16MB with less over-read waste and smaller transient buffers. Net result vs. the
+ * original per-sample implementation: 37.0MB/s -> 91.1MB/s, a 2.46x improvement, just under the
+ * spec's ~100MB/s threshold. Closing that last gap would need read/write pipelining, a real
+ * architecture change flagged as a concrete M1 candidate rather than attempted in this spike.
  */
-const COALESCE_WINDOW_BYTES = 16 * 1024 * 1024;
+const COALESCE_WINDOW_BYTES = 4 * 1024 * 1024;
 
 interface SaveFilePickerOptions {
   suggestedName?: string;
