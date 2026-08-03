@@ -155,9 +155,9 @@ throughputBtn.addEventListener('click', () => {
   })();
 });
 
-function logDistribution(label: string, d: LatencyDistribution): void {
-  llog(`${label}: p50=${d.p50.toFixed(0)}ms p95=${d.p95.toFixed(0)}ms p99=${d.p99.toFixed(0)}ms max=${d.max.toFixed(0)}ms`);
-  llog(`  n=${d.count} errors=${d.errorCount} meanFramesDecoded=${d.meanFramesDecoded.toFixed(1)}`);
+function logDistribution(log: (msg: string) => void, label: string, d: LatencyDistribution): void {
+  log(`${label}: p50=${d.p50.toFixed(0)}ms p95=${d.p95.toFixed(0)}ms p99=${d.p99.toFixed(0)}ms max=${d.max.toFixed(0)}ms`);
+  log(`  n=${d.count} errors=${d.errorCount} meanFramesDecoded=${d.meanFramesDecoded.toFixed(1)}`);
 }
 
 // --- 3. arbitrary-frame latency: cold-start restart-from-keyframe decode to a random
@@ -176,14 +176,14 @@ latencyBtn.addEventListener('click', () => {
       llog(`sampling ${count} random non-keyframe targets, renderTarget=${renderTarget}`);
 
       const { result, distribution, targetSampleIndices } = await runArbitraryFrameLatency(currentFile, videoTrack, count, 'prefer-hardware', renderTarget);
-      logDistribution('WebCodecs cold-start (prefer-hardware)', distribution);
+      logDistribution(llog, 'WebCodecs cold-start (prefer-hardware)', distribution);
       if (result.errors.length > 0) llog(`  worker errors: ${JSON.stringify(result.errors)}`);
       const failed = result.results.filter((r) => r.error);
       for (const f of failed.slice(0, 5)) llog(`  chain error: framesDecoded=${f.framesDecoded} ${f.error}`);
 
       llog('\nseeking the SAME targets with a <video> element for a direct comparison...');
       const videoBaseline = await runVideoSeekBaseline(currentFile, videoTrack, targetSampleIndices);
-      logDistribution('<video>.currentTime seek baseline', videoBaseline);
+      logDistribution(llog, '<video>.currentTime seek baseline', videoBaseline);
 
       const verdict = distribution.p50 < videoBaseline.p50 ? 'WebCodecs is FASTER (p50)' : 'WebCodecs is SLOWER (p50)';
       llog(`\nverdict: ${verdict} -- WebCodecs p50=${distribution.p50.toFixed(0)}ms vs <video> p50=${videoBaseline.p50.toFixed(0)}ms`);
@@ -212,7 +212,7 @@ warmScrubBtn.addEventListener('click', () => {
         wlog(`\n=== ${hwAccel}: simulating ${stepCount} forward scrub stops with a single warm decoder ===`);
         const report = await runWarmScrubLatency(currentFile, videoTrack, stepCount, hwAccel);
         wlog(`first stop (cold, restart-from-keyframe): ${report.firstStopLatencyMs.toFixed(0)}ms`);
-        logDistribution('subsequent stops (warm, no restart)', report.incremental);
+        logDistribution(wlog, 'subsequent stops (warm, no restart)', report.incremental);
         wlog(`  arrived progressively (before the single trailing flush): ${report.incrementalArrivedProgressivelyCount}/${report.incrementalTotalCount}`);
         if (report.raw.errors.length > 0) wlog(`  worker errors: ${JSON.stringify(report.raw.errors)}`);
         wlog(`  frame counts per stop (samples decoded since previous stop): ${JSON.stringify(report.raw.frameCounts)}`);
