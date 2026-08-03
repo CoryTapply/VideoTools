@@ -7,9 +7,34 @@ are real measurements taken during this work — reported in-browser (Chrome) un
 otherwise noted — not synthetic estimates, except where explicitly labeled
 "extrapolated."
 
-No `results/*.json` records or `M0-FINDINGS.md` existed prior to this document; every
-number here was pulled directly from the session's real browser output and cross-checked
-against the raw transcript rather than backfilled from memory.
+No `results/*.json` records or `M0-FINDINGS.md` existed prior to this document. Most
+numbers were pulled directly from the session's real browser output and cross-checked
+against the raw transcript; several Spike A numbers came from structured JSON records
+already saved to `fixtures/A-remux_*.json` by the harness, discovered mid-write when a
+gap in this document turned out to already have real data behind it. None of it was
+backfilled from memory.
+
+## Executive summary
+
+- **Spike A (remux + streamed export): GO.** Every fail condition — throughput, export
+  heap growth, abort behavior, the write-side 64-bit largesize path, all 3 required
+  export ranges, playback in VLC/QuickTime/Chrome — is confirmed clean with real data.
+  Export throughput scales with export size and comfortably clears the 100MB/s bar for
+  this product's actual use case (multi-GB exports); only very small trims are slower.
+- **Spike B (index at scale): GO, no caveats.** Zero correctness mismatches against an
+  independent reference implementation. Every quantitative bar (build time, memory,
+  query latency) clears with 3–47x margin.
+- **Spike C (WebCodecs scrub + thumbnails): GO-WITH-CHANGES — one required architecture
+  change.** On-demand frame decode (cold or kept warm across a drag) does not work: it
+  fails the spec's own stated bar for scrub latency. The fix is a different design, not
+  a tuning problem — pre-decode a sparse frame cache and serve scrub drags from lookups
+  instead of live decode. That design was built and tested here and works decisively
+  (60Hz sustained, ~100x latency margin). Everything else in Spike C (filmstrip
+  thumbnails, index integration) passes cleanly.
+- **Bottom line: M1 can proceed.** The only required change from the original
+  architecture is the scrub interaction, which needs to be built on the pre-decoded
+  cache design validated in this document, not on-demand decode. See §3 for the full
+  list of design changes and §4 for concrete constants to build against.
 
 ## 1. Headline table
 
@@ -187,32 +212,11 @@ thumbnail atlas both completed with real, actionable findings.
 
 ## 5. Known gaps
 
-- ~~Spike A: the abort-mid-export test was never triggered and observed in a live
-  run~~ — **CLOSED**: confirmed in a real run (1620s mid-file range, aborted partway
-  through pass 2). The target is left as a real, unlocked, exactly 0-byte file — never
-  truncated with partial content, matching (with one correction: the target isn't
-  literally absent, since `showSaveFilePicker` already reserved that directory entry)
-  the code's original transactional-write hypothesis.
-- ~~Spike A: the "3 export ranges" requirement was only 2/3 confirmed via
-  ffprobe/ffmpeg~~ — **CLOSED**: all three now have a full structural comparison
-  passing. Near-start (0-210s window, 5 real runs): 1-frame boundary tolerance, clean.
-  Last-frame (in=4200s, out requested past the true file end at 99,999,999s — correctly
-  clamped to the actual last frame at 4225.75s): frame count matched the ffmpeg
-  reference exactly (1544 = 1544), zero decode errors. Mid-file (in=1200s, out=2820s,
-  10.39GB, exported reproducibly twice at 162.97MB/s and 134.94MB/s): frame count
-  97,202 vs. the ffmpeg reference's 97,201 — the same 1-frame boundary tolerance seen
-  everywhere else in this project — and `ffmpeg -f null -` confirms zero decode errors.
-  Its output file's `mdat` header was also directly verified to use the 64-bit
-  largesize form correctly (see below).
-- ~~Spike A: literal human playback confirmation in VLC and QuickTime~~ — **CLOSED**:
-  both the last-frame and mid-file exports were confirmed by the user to play correctly
-  in VLC, QuickTime Player, and Chrome.
-- ~~Spike A: the write-side 64-bit `largesize` path was never deliberately exercised
-  with a real >4.29GB export~~ — **CLOSED**: confirmed via the 1200-2820s mid-file
-  export (10,393,802,406 bytes / 10.39GB). Directly inspected the output file's `mdat`
-  box header: `size32=1` (the largesize marker) with `size64=10,388,027,510`, and
-  `ftyp(32) + moov(5,774,864) + mdat(10,388,027,510) = 10,393,802,406` matches the file
-  size on disk exactly. The write-side path works correctly on a real >4.29GB export.
+Spike A originally had five open validation gaps (export heap growth, abort behavior,
+all 3 required export ranges, VLC/QuickTime playback, and the write-side >4.29GB
+`largesize` path). All five are now closed with real data — see §2's Spike A verdict
+for the full detail on each. What's still genuinely open:
+
 - **Spike C: the cache-backed scrub memory footprint** (item 3's "report the memory held
   by 600 cached ImageBitmaps") could only be estimated theoretically (~131.8MB raw
   RGBA), not measured — `performance.memory.usedJSHeapSize` does not count
@@ -244,8 +248,10 @@ thumbnail atlas both completed with real, actionable findings.
   - **Index build time (107.1ms) and query latency (tens-to-hundreds of ns/op)** are
     CPU/memory-bound rather than disk-bound and should be comparatively
     storage-independent, though a slower CPU would still scale these up somewhat.
-- **Launch-blocker assessment:** every gap originally flagged here is now fully closed.
-  Heap growth, abort behavior, VLC/QuickTime/Chrome playback, the write-side >4.29GB
-  `largesize` path, and all 3 required export ranges (each with a passing
-  ffprobe/ffmpeg structural comparison) are confirmed fine with real data. Nothing here
-  remains a plausible launch blocker for Spike A.
+- **Launch-blocker assessment:** nothing here is launch-blocking. Spike A has no open
+  items (see above). Spike C's memory-footprint gap is a measurement limitation, not a
+  design risk — the cache-based scrub architecture it describes already works
+  decisively on every metric that *was* measured (latency, hit rate, 60Hz
+  sustainability). The single-machine caveat matters most for progress-estimate
+  accuracy (export throughput, cache build time) on lower-end hardware, not for
+  correctness.
