@@ -2,6 +2,8 @@
 import { buildMp4Index, type TrackIndex } from '../A-remux/mp4-index';
 import { keyframeIntervalStats, pickSpreadKeyframes, runKeyframeThroughput } from './keyframe-throughput';
 import type { KeyframeThroughputResult } from './decode-worker';
+import { extractAvcDecoderConfig } from './avc-config';
+import { stripNonVclNals } from './nal-strip';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -18,6 +20,10 @@ root.innerHTML = `
   <label>keyframes to sample: <input type="number" id="keyframeCount" value="200" /></label><br /><br />
   <button id="throughputBtn" disabled>2. Keyframe throughput (filmstrip path)</button>
   <pre id="throughputLog"></pre>
+
+  <hr />
+  <button id="mainThreadBtn" disabled>DIAGNOSTIC: decode 1 keyframe on the main thread (no Worker)</button>
+  <pre id="mainThreadLog"></pre>
 `;
 
 const fileInput = root.querySelector<HTMLInputElement>('#file')!;
@@ -26,12 +32,17 @@ const indexLog = root.querySelector<HTMLPreElement>('#indexLog')!;
 const keyframeCountInput = root.querySelector<HTMLInputElement>('#keyframeCount')!;
 const throughputBtn = root.querySelector<HTMLButtonElement>('#throughputBtn')!;
 const throughputLog = root.querySelector<HTMLPreElement>('#throughputLog')!;
+const mainThreadBtn = root.querySelector<HTMLButtonElement>('#mainThreadBtn')!;
+const mainThreadLog = root.querySelector<HTMLPreElement>('#mainThreadLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
 };
 const tlog = (msg: string): void => {
   throughputLog.textContent += `${msg}\n`;
+};
+const mlog = (msg: string): void => {
+  mainThreadLog.textContent += `${msg}\n`;
 };
 
 let currentFile: File | undefined;
@@ -42,6 +53,7 @@ fileInput.addEventListener('change', () => {
   videoTrack = undefined;
   buildIndexBtn.disabled = !currentFile;
   throughputBtn.disabled = true;
+  mainThreadBtn.disabled = true;
 });
 
 buildIndexBtn.addEventListener('click', () => {
@@ -60,6 +72,7 @@ buildIndexBtn.addEventListener('click', () => {
       const stats = keyframeIntervalStats(videoTrack);
       ilog(`real keyframes: ${stats.realKeyframeCount}, interval min/mean/max = ${stats.minIntervalSec.toFixed(3)}s / ${stats.meanIntervalSec.toFixed(3)}s / ${stats.maxIntervalSec.toFixed(3)}s`);
       throughputBtn.disabled = false;
+      mainThreadBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -99,6 +112,54 @@ throughputBtn.addEventListener('click', () => {
       tlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       throughputBtn.disabled = false;
+    }
+  })();
+});
+
+// --- DIAGNOSTIC: decode a single keyframe directly on the main thread, bypassing the Worker
+// entirely, to bisect whether the observed hang (identical on two different files, two
+// different resolutions/levels, hardware AND software) is Worker-specific or general. ---
+mainThreadBtn.addEventListener('click', () => {
+  void (async () => {
+    if (!currentFile || !videoTrack) return;
+    mainThreadBtn.disabled = true;
+    mainThreadLog.textContent = '';
+    try {
+      const targets = pickSpreadKeyframes(videoTrack, 1);
+      const target = targets[0]!;
+      mlog(`decoding 1 keyframe at offset=${target.offset} size=${target.size} timestampUs=${target.timestampUs}`);
+
+      const decoderConfig = extractAvcDecoderConfig(videoTrack);
+      const raw = new Uint8Array(await currentFile.slice(target.offset, target.offset + target.size).arrayBuffer());
+      const { result: bytes, nalTypesSeen, stripped } = stripNonVclNals(raw);
+      mlog(`NAL types seen: [${nalTypesSeen.join(', ')}], stripped=${stripped}, size=${bytes.byteLength} (was ${raw.byteLength})`);
+
+      const outcome = await new Promise<string>((resolve) => {
+        const decoder = new VideoDecoder({
+          output(frame) {
+            resolve(`SUCCESS: got a VideoFrame ${frame.displayWidth}x${frame.displayHeight}, format=${frame.format}, timestamp=${frame.timestamp}`);
+            frame.close();
+          },
+          error(err) {
+            resolve(`decoder error: ${String(err)}`);
+          },
+        });
+        decoder.configure({
+          codec: decoderConfig.codec,
+          codedWidth: decoderConfig.codedWidth,
+          codedHeight: decoderConfig.codedHeight,
+          description: decoderConfig.description,
+          hardwareAcceleration: 'prefer-hardware',
+        });
+        const chunk = new EncodedVideoChunk({ type: 'key', timestamp: target.timestampUs, data: bytes });
+        decoder.decode(chunk);
+        setTimeout(() => resolve(`TIMEOUT after 10000ms (decoder.state=${decoder.state}, decodeQueueSize=${decoder.decodeQueueSize})`), 10_000);
+      });
+      mlog(outcome);
+    } catch (err) {
+      mlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      mainThreadBtn.disabled = false;
     }
   })();
 });
