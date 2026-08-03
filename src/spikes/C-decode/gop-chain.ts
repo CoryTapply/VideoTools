@@ -24,7 +24,7 @@ export interface DecodeChain {
   chain: ChainSample[];
 }
 
-function precedingSyncSampleIndex(track: TrackIndex, targetIdx: number): number {
+export function precedingSyncSampleIndex(track: TrackIndex, targetIdx: number): number {
   for (let i = targetIdx; i >= 0; i -= 1) if (track.sync[i] === 1) return i;
   return 0; // sample 0 is always sync in every fixture seen so far; falls back defensively
 }

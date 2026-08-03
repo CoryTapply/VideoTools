@@ -5,6 +5,7 @@ import type { KeyframeThroughputResult } from './decode-worker';
 import { extractAvcDecoderConfig } from './avc-config';
 import { stripNonVclNals } from './nal-strip';
 import { runArbitraryFrameLatency, runVideoSeekBaseline, type LatencyDistribution } from './arbitrary-frame-latency';
+import { runWarmScrubLatency } from './warm-scrub-latency';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -29,6 +30,11 @@ root.innerHTML = `
   <pre id="latencyLog"></pre>
 
   <hr />
+  <label>scrub stops: <input type="number" id="warmStepCount" value="30" /></label><br /><br />
+  <button id="warmScrubBtn" disabled>3b. Warm-decoder forward scrub (sequential, no restart)</button>
+  <pre id="warmScrubLog"></pre>
+
+  <hr />
   <button id="mainThreadBtn" disabled>DIAGNOSTIC: decode 1 keyframe on the main thread (no Worker)</button>
   <pre id="mainThreadLog"></pre>
 `;
@@ -45,6 +51,9 @@ const latencyCountInput = root.querySelector<HTMLInputElement>('#latencyCount')!
 const renderTargetInput = root.querySelector<HTMLInputElement>('#renderTarget')!;
 const latencyBtn = root.querySelector<HTMLButtonElement>('#latencyBtn')!;
 const latencyLog = root.querySelector<HTMLPreElement>('#latencyLog')!;
+const warmStepCountInput = root.querySelector<HTMLInputElement>('#warmStepCount')!;
+const warmScrubBtn = root.querySelector<HTMLButtonElement>('#warmScrubBtn')!;
+const warmScrubLog = root.querySelector<HTMLPreElement>('#warmScrubLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
@@ -58,6 +67,9 @@ const mlog = (msg: string): void => {
 const llog = (msg: string): void => {
   latencyLog.textContent += `${msg}\n`;
 };
+const wlog = (msg: string): void => {
+  warmScrubLog.textContent += `${msg}\n`;
+};
 
 let currentFile: File | undefined;
 let videoTrack: TrackIndex | undefined;
@@ -69,6 +81,7 @@ fileInput.addEventListener('change', () => {
   throughputBtn.disabled = true;
   mainThreadBtn.disabled = true;
   latencyBtn.disabled = true;
+  warmScrubBtn.disabled = true;
 });
 
 buildIndexBtn.addEventListener('click', () => {
@@ -89,6 +102,7 @@ buildIndexBtn.addEventListener('click', () => {
       throughputBtn.disabled = false;
       mainThreadBtn.disabled = false;
       latencyBtn.disabled = false;
+      warmScrubBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -177,6 +191,33 @@ latencyBtn.addEventListener('click', () => {
       llog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       latencyBtn.disabled = false;
+    }
+  })();
+});
+
+// --- 3b. warm-decoder forward scrub: keep ONE VideoDecoder alive across a sequence of
+// forward-moving scrub stops, feeding samples continuously from wherever the previous stop
+// left off instead of restarting from the preceding keyframe each time. The first stop is an
+// unavoidable cold start (reported separately); every stop after that is the number that
+// matters -- does staying warm make sequential forward scrubbing cheap? ---
+warmScrubBtn.addEventListener('click', () => {
+  void (async () => {
+    if (!currentFile || !videoTrack) return;
+    warmScrubBtn.disabled = true;
+    warmScrubLog.textContent = '';
+    try {
+      const stepCount = Number(warmStepCountInput.value) || 30;
+      wlog(`simulating ${stepCount} forward scrub stops with a single warm decoder`);
+
+      const report = await runWarmScrubLatency(currentFile, videoTrack, stepCount, 'prefer-hardware');
+      wlog(`first stop (cold, restart-from-keyframe): ${report.firstStopLatencyMs.toFixed(0)}ms`);
+      logDistribution('subsequent stops (warm, no restart)', report.incremental);
+      if (report.raw.errors.length > 0) wlog(`  worker errors: ${JSON.stringify(report.raw.errors)}`);
+      wlog(`\nframe counts per stop (samples decoded since previous stop): ${JSON.stringify(report.raw.frameCounts)}`);
+    } catch (err) {
+      wlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      warmScrubBtn.disabled = false;
     }
   })();
 });
