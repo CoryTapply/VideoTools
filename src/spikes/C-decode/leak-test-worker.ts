@@ -54,10 +54,20 @@ async function run(req: LeakTestRequest): Promise<void> {
   let pendingResolve: (() => void) | undefined;
   let pendingReject: ((err: Error) => void) | undefined;
 
-  // Deliberately NOT calling frame.close() here -- that omission is the entire point of this
-  // test. Every VideoFrame handed to output() is leaked on purpose.
+  // Real bug caught here during a live run: an earlier version of this callback took no `frame`
+  // parameter at all, so the VideoFrame was never referenced by anything -- it became eligible
+  // for garbage collection the instant output() returned, regardless of never calling
+  // .close() explicitly. That's NOT what "forgetting to close a frame" means in production (a
+  // cache array or in-flight callback that holds a real reference and just never releases it):
+  // GC can still reclaim an unreferenced object, and if VideoFrame's backing resource is tied to
+  // a finalizer, that reclaims it too, silently defeating the entire point of this test. This is
+  // why a 10,000-frame run showed flat memory and no stall: nothing was actually being leaked.
+  // Fixed by pushing every frame into `leaked`, keeping it genuinely reachable and un-closeable
+  // for the rest of the run, matching the real bug class being tested.
+  const leaked: VideoFrame[] = [];
   const decoder = new VideoDecoder({
-    output() {
+    output(frame) {
+      leaked.push(frame);
       completedBeforeStall += 1;
       pendingResolve?.();
     },
