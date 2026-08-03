@@ -19,7 +19,7 @@ against the raw transcript rather than backfilled from memory.
 | Index retained bytes (27GB, all tracks) | 41.82MB (41,818,870 B) | ≤150MB | **PASS** |
 | Extrapolated 8hr/60fps (~1.7M samples) retained/build | ~49MB / ~114ms | ≤400MB / — | **PASS** (extrapolated) |
 | Remux export throughput (settled, 4MB coalesced R+W) | 91.1–92.0 MB/s | ≥100MB/s | **FAIL** (~8–9% short) |
-| Export JS heap growth | not measured | ≤100MB growth | **UNKNOWN** (gap) |
+| Export JS heap growth (5 real runs, 1MB/4MB/16MB windows) | peak growth 2.0–13.7MB, returns to baseline after close | ≤100MB growth | **PASS** (7–50x margin) |
 | Keyframe decode rate, 27GB, sequential | 42.2–42.5/sec | ≥50/sec | **FAIL** |
 | Keyframe decode rate, 27GB, batched (16) | 150.4/sec | ≥50/sec | **PASS** (3x margin) |
 | Keyframe decode rate, longgop.mp4, sequential | 178.0/sec | ≥50/sec | **PASS** |
@@ -51,10 +51,13 @@ boundary tolerance, clean multi-track A/V sync, zero decode errors, confirmed vi
   ~100MB/s bar by ~8–9%, even after fixing two real bottlenecks (per-sample reads at
   37.0MB/s, then per-sample writes at 56.6MB/s, both fixed via 4MB window coalescing).
   16MB windows plateaued with no further gain over 4MB — the ceiling isn't buffer size.
+- JS heap growth during export was measured across 5 real runs (peak growth 2.0–13.7MB,
+  always returning to baseline after close): a clean pass with 7–50x margin against the
+  ~100MB fail bar.
 - Several of the spec's own required validation steps were not confirmed complete (see
-  Known Gaps): JS heap growth during export, the abort-mid-export behavior, literal
-  VLC/QuickTime GUI playback, all 3 required export ranges, and the write-side 64-bit
-  `largesize` path on an actual >4.29GB output.
+  Known Gaps): the abort-mid-export behavior, literal VLC/QuickTime GUI playback, all 3
+  required export ranges, and the write-side 64-bit `largesize` path on an actual
+  >4.29GB output.
 
 ### Spike B — index at scale: **GO**
 
@@ -153,9 +156,6 @@ thumbnail atlas both completed with real, actionable findings.
 
 ## 5. Known gaps
 
-- **Spike A: JS heap growth during export was never measured or reported** — a real gap
-  against the spec's own "~100MB growth" fail condition. Should be measured before M1
-  commits to the current write pipeline.
 - **Spike A: the abort-mid-export test was implemented but never triggered and observed
   in a live run.** The code carries a documented hypothesis (the File System Access
   API's transactional write semantics mean `abort()` discards an internal swap file,
@@ -204,10 +204,11 @@ thumbnail atlas both completed with real, actionable findings.
   - **Index build time (107.1ms) and query latency (tens-to-hundreds of ns/op)** are
     CPU/memory-bound rather than disk-bound and should be comparatively
     storage-independent, though a slower CPU would still scale these up somewhat.
-- **Launch-blocker assessment:** the export heap-growth and abort-behavior gaps for
-  Spike A should be closed before shipping export (real data-loss/UX-surprise risk on a
-  long-running write operation). The VLC/QuickTime and multi-range gaps are lower risk
-  given the structural ffprobe comparison already passed, and are closer to "nice to
+- **Launch-blocker assessment:** the abort-behavior gap for Spike A should be closed
+  before shipping export (real data-loss/UX-surprise risk on a long-running write
+  operation); heap growth is already confirmed fine (7–50x margin, 5 real runs). The
+  VLC/QuickTime and multi-range gaps are lower risk given the structural ffprobe
+  comparison already passed, and are closer to "nice to
   close" than launch-blocking. The write-side >4.29GB `largesize` gap matters
   specifically if a single trimmed export can exceed that size (plausible for long 4K
   exports) and should be deliberately tested before launch rather than assumed correct.
