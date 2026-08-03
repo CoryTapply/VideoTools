@@ -7,6 +7,7 @@ import { stripNonVclNals } from './nal-strip';
 import { runArbitraryFrameLatency, runVideoSeekBaseline, type LatencyDistribution } from './arbitrary-frame-latency';
 import { runWarmScrubLatency } from './warm-scrub-latency';
 import { buildScrubCache, simulateDrag, closeAllBitmaps, measureHeapAfterClose, THUMB_WIDTH, THUMB_HEIGHT } from './cache-scrub';
+import { runLeakTest } from './leak-test';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -40,6 +41,10 @@ root.innerHTML = `
   <pre id="cacheScrubLog"></pre>
 
   <hr />
+  <button id="leakTestBtn" disabled>5. Leak test: decode 100 keyframes WITHOUT frame.close()</button>
+  <pre id="leakTestLog"></pre>
+
+  <hr />
   <button id="mainThreadBtn" disabled>DIAGNOSTIC: decode 1 keyframe on the main thread (no Worker)</button>
   <pre id="mainThreadLog"></pre>
 `;
@@ -61,6 +66,8 @@ const warmScrubBtn = root.querySelector<HTMLButtonElement>('#warmScrubBtn')!;
 const warmScrubLog = root.querySelector<HTMLPreElement>('#warmScrubLog')!;
 const cacheScrubBtn = root.querySelector<HTMLButtonElement>('#cacheScrubBtn')!;
 const cacheScrubLog = root.querySelector<HTMLPreElement>('#cacheScrubLog')!;
+const leakTestBtn = root.querySelector<HTMLButtonElement>('#leakTestBtn')!;
+const leakTestLog = root.querySelector<HTMLPreElement>('#leakTestLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
@@ -80,6 +87,9 @@ const wlog = (msg: string): void => {
 const clog = (msg: string): void => {
   cacheScrubLog.textContent += `${msg}\n`;
 };
+const kLog = (msg: string): void => {
+  leakTestLog.textContent += `${msg}\n`;
+};
 
 let currentFile: File | undefined;
 let videoTrack: TrackIndex | undefined;
@@ -93,6 +103,7 @@ fileInput.addEventListener('change', () => {
   latencyBtn.disabled = true;
   warmScrubBtn.disabled = true;
   cacheScrubBtn.disabled = true;
+  leakTestBtn.disabled = true;
 });
 
 buildIndexBtn.addEventListener('click', () => {
@@ -115,6 +126,7 @@ buildIndexBtn.addEventListener('click', () => {
       latencyBtn.disabled = false;
       warmScrubBtn.disabled = false;
       cacheScrubBtn.disabled = false;
+      leakTestBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -286,6 +298,26 @@ cacheScrubBtn.addEventListener('click', () => {
       clog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       cacheScrubBtn.disabled = false;
+    }
+  })();
+});
+
+// --- 5. leak test: decode 100 keyframes WITHOUT ever calling frame.close(), to observe the
+// real failure mode when frames are forgotten -- a realistic bug class, not a contrived one. ---
+leakTestBtn.addEventListener('click', () => {
+  void (async () => {
+    if (!currentFile || !videoTrack) return;
+    leakTestBtn.disabled = true;
+    leakTestLog.textContent = '';
+    try {
+      kLog('decoding 100 keyframes without calling frame.close()...');
+      const result = await runLeakTest(currentFile, videoTrack, 100, 'prefer-hardware');
+      kLog(`completed ${result.completedBeforeStall}/${result.requested} before stalling (${result.totalMs.toFixed(0)}ms)`);
+      kLog(`exact error: ${result.exactError ?? '(none -- all 100 completed without failure)'}`);
+    } catch (err) {
+      kLog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      leakTestBtn.disabled = false;
     }
   })();
 });
