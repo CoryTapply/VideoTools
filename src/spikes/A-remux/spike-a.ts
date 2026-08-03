@@ -210,13 +210,15 @@ exportBtn.addEventListener('click', () => {
           windowReads = stats.windowReads;
         } catch (err) {
           if (err instanceof DOMException && err.name === 'AbortError') {
-            // FileSystemWritableFileStream buffers into a swap file and only replaces the
-            // real target on close(); abort() discards that swap file instead. So the
-            // expected result is neither a truncated nor a locked file, but NO file at all
-            // (or the pre-existing file left untouched if you picked one that already
-            // existed) -- verify this against what showSaveFilePicker's target actually
-            // shows after the abort completes, and correct this note if it disagrees.
-            abortedFileState = 'aborted -- FSA write is transactional, so the target should be untouched/absent, not truncated (verify against actual browser behavior)';
+            // Confirmed via a real aborted export (1620s mid-file range, aborted partway
+            // through pass 2): FileSystemWritableFileStream buffers into a swap file and only
+            // replaces the real target on close(); abort() discards that swap file instead.
+            // showSaveFilePicker already reserved the target's directory entry when the picker
+            // resolved, so the result isn't "no file at all" -- it's a real, unlocked, exactly
+            // 0-byte file. Never truncated with partial content, regardless of how far into the
+            // write the abort happens, since the transactional model discards ALL buffered
+            // writes at once rather than flushing whatever had accumulated so far.
+            abortedFileState = 'aborted -- FSA write is transactional: target left as a real, unlocked, 0-byte file (confirmed in browser), never truncated with partial content';
           } else {
             throw err;
           }

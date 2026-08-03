@@ -20,6 +20,7 @@ against the raw transcript rather than backfilled from memory.
 | Extrapolated 8hr/60fps (~1.7M samples) retained/build | ~49MB / ~114ms | ≤400MB / — | **PASS** (extrapolated) |
 | Remux export throughput (settled, 4MB coalesced R+W) | 91.1–92.0 MB/s | ≥100MB/s | **FAIL** (~8–9% short) |
 | Export JS heap growth (5 real runs, 1MB/4MB/16MB windows) | peak growth 2.0–13.7MB, returns to baseline after close | ≤100MB growth | **PASS** (7–50x margin) |
+| Abort-mid-export result (real run, 1620s mid-file range) | target left as real, unlocked, 0-byte file — never truncated | no truncated/locked file | **PASS** |
 | Keyframe decode rate, 27GB, sequential | 42.2–42.5/sec | ≥50/sec | **FAIL** |
 | Keyframe decode rate, 27GB, batched (16) | 150.4/sec | ≥50/sec | **PASS** (3x margin) |
 | Keyframe decode rate, longgop.mp4, sequential | 178.0/sec | ≥50/sec | **PASS** |
@@ -54,10 +55,14 @@ boundary tolerance, clean multi-track A/V sync, zero decode errors, confirmed vi
 - JS heap growth during export was measured across 5 real runs (peak growth 2.0–13.7MB,
   always returning to baseline after close): a clean pass with 7–50x margin against the
   ~100MB fail bar.
-- Several of the spec's own required validation steps were not confirmed complete (see
-  Known Gaps): the abort-mid-export behavior, literal VLC/QuickTime GUI playback, all 3
-  required export ranges, and the write-side 64-bit `largesize` path on an actual
-  >4.29GB output.
+- Abort-mid-export behavior is now confirmed in a real run (1620s mid-file range,
+  aborted partway through pass 2): the target is left as a real, unlocked, exactly
+  0-byte file — never truncated with partial content, matching the transactional
+  File System Access API write model (all buffered writes are discarded atomically on
+  `abort()`, regardless of how far into the write it happens).
+- Several of the spec's own required validation steps were not yet confirmed complete
+  (see Known Gaps): literal VLC/QuickTime GUI playback, all 3 required export ranges,
+  and the write-side 64-bit `largesize` path on an actual >4.29GB output.
 
 ### Spike B — index at scale: **GO**
 
@@ -156,12 +161,12 @@ thumbnail atlas both completed with real, actionable findings.
 
 ## 5. Known gaps
 
-- **Spike A: the abort-mid-export test was implemented but never triggered and observed
-  in a live run.** The code carries a documented hypothesis (the File System Access
-  API's transactional write semantics mean `abort()` discards an internal swap file,
-  leaving no truncated or locked file — not the target visibly untouched or absent) but
-  this was never confirmed against real browser behavior. A wrong assumption here could
-  surprise users mid-export; should-fix-before-launch, not launch-blocking on its own.
+- ~~Spike A: the abort-mid-export test was never triggered and observed in a live
+  run~~ — **CLOSED**: confirmed in a real run (1620s mid-file range, aborted partway
+  through pass 2). The target is left as a real, unlocked, exactly 0-byte file — never
+  truncated with partial content, matching (with one correction: the target isn't
+  literally absent, since `showSaveFilePicker` already reserved that directory entry)
+  the code's original transactional-write hypothesis.
 - **Spike A: incomplete confirmation of the "3 export ranges" requirement** (near-start,
   mid-file, ending at the very last frame). ffprobe/ffmpeg structural comparison passed
   cleanly for the range(s) that were tested, but I don't have confirmation all three —
@@ -204,11 +209,11 @@ thumbnail atlas both completed with real, actionable findings.
   - **Index build time (107.1ms) and query latency (tens-to-hundreds of ns/op)** are
     CPU/memory-bound rather than disk-bound and should be comparatively
     storage-independent, though a slower CPU would still scale these up somewhat.
-- **Launch-blocker assessment:** the abort-behavior gap for Spike A should be closed
-  before shipping export (real data-loss/UX-surprise risk on a long-running write
-  operation); heap growth is already confirmed fine (7–50x margin, 5 real runs). The
-  VLC/QuickTime and multi-range gaps are lower risk given the structural ffprobe
-  comparison already passed, and are closer to "nice to
+- **Launch-blocker assessment:** heap growth and abort behavior are both now confirmed
+  fine (7–50x heap margin over 5 real runs; abort leaves a real, unlocked, 0-byte file,
+  never truncated with partial content). The VLC/QuickTime and multi-range gaps are
+  lower risk given the structural ffprobe comparison already passed, and are closer to
+  "nice to
   close" than launch-blocking. The write-side >4.29GB `largesize` gap matters
   specifically if a single trimmed export can exceed that size (plausible for long 4K
   exports) and should be deliberately tested before launch rather than assumed correct.
