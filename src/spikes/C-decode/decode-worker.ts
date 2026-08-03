@@ -121,6 +121,14 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
       const chunk = new EncodedVideoChunk({ type: 'key', timestamp: target.timestampUs, data: bytes });
       const framePromise = new Promise<VideoFrame>((resolve, reject) => pending.push({ resolve, reject }));
       decoder.decode(chunk);
+      // Real finding (confirmed via a from-scratch main-thread diagnostic, not just this worker):
+      // this VideoDecoder implementation does not emit output for a queued decode() until
+      // flush() explicitly forces drainage -- a single decode() with no flush() hung
+      // indefinitely (no output(), no error()) even with a config independently confirmed valid
+      // by isConfigSupported. Since every keyframe here is fully independent (no benefit to
+      // cross-frame pipelining for this measurement), flushing after each decode is the correct
+      // fix, not just a workaround.
+      void decoder.flush();
       const stateAfterDecode = decoder.state;
       const queueSizeAfterDecode = decoder.decodeQueueSize;
       // Hard safety net: even if error() never fires (a truly silent stall, not just a
