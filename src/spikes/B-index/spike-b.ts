@@ -4,6 +4,7 @@ import { sampleMemoryDuring } from '../../measure/memory';
 import { buildMp4Index, type Mp4Index, type StageTimings } from '../A-remux/mp4-index';
 import { checkCorrectness } from './mediabunny-check';
 import { runQueryBenchmarks } from './queries';
+import { benchTransferables, benchSharedArrayBuffer } from './worker-transfer';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -35,6 +36,10 @@ root.innerHTML = `
   <label>iterations per query: <input type="number" id="queryIterations" value="10000" /></label><br /><br />
   <button id="queryBtn" disabled>4. Query latency (binary search etc.)</button>
   <pre id="queryLog"></pre>
+
+  <hr />
+  <button id="workerBtn" disabled>5. Worker transfer (transferables vs SharedArrayBuffer)</button>
+  <pre id="workerLog"></pre>
 `;
 
 const fileInput = root.querySelector<HTMLInputElement>('#file')!;
@@ -49,6 +54,8 @@ const scaleLog = root.querySelector<HTMLPreElement>('#scaleLog')!;
 const queryIterationsInput = root.querySelector<HTMLInputElement>('#queryIterations')!;
 const queryBtn = root.querySelector<HTMLButtonElement>('#queryBtn')!;
 const queryLog = root.querySelector<HTMLPreElement>('#queryLog')!;
+const workerBtn = root.querySelector<HTMLButtonElement>('#workerBtn')!;
+const workerLog = root.querySelector<HTMLPreElement>('#workerLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
@@ -62,6 +69,9 @@ const slog = (msg: string): void => {
 const qlog = (msg: string): void => {
   queryLog.textContent += `${msg}\n`;
 };
+const wlog = (msg: string): void => {
+  workerLog.textContent += `${msg}\n`;
+};
 
 let currentFile: File | undefined;
 let currentIndex: Mp4Index | undefined;
@@ -73,6 +83,7 @@ fileInput.addEventListener('change', () => {
   correctnessBtn.disabled = true;
   scaleBtn.disabled = true;
   queryBtn.disabled = true;
+  workerBtn.disabled = true;
 });
 
 // --- 1. build index ---
@@ -91,6 +102,7 @@ buildIndexBtn.addEventListener('click', () => {
       correctnessBtn.disabled = false;
       scaleBtn.disabled = false;
       queryBtn.disabled = false;
+      workerBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -237,6 +249,37 @@ queryBtn.addEventListener('click', () => {
       qlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       queryBtn.disabled = false;
+    }
+  })();
+});
+
+// --- 5. worker transfer: transferables (zero-copy, single owner) vs SharedArrayBuffer (not
+// zero-copy to set up, but the same memory can go to multiple workers at once). Run against the
+// video track (largest typed arrays of the 7, so the most representative timing). ---
+workerBtn.addEventListener('click', () => {
+  void (async () => {
+    if (!currentIndex) return;
+    workerBtn.disabled = true;
+    workerLog.textContent = '';
+    try {
+      const videoTrack = currentIndex.tracks.find((t) => t.handlerType === 'vide');
+      if (!videoTrack) {
+        wlog('no video track found');
+        return;
+      }
+      wlog(`video track: ${videoTrack.sampleCount} samples`);
+
+      const xfer = await benchTransferables(videoTrack);
+      wlog(`\ntransferables: ${xfer.ms.toFixed(2)}ms, zero-copy confirmed=${xfer.zeroCopyConfirmed} (source buffers detached to byteLength 0)`);
+      wlog(`  worker checksum=${xfer.reply.checksum}, received byte lengths=${JSON.stringify(xfer.reply.receivedByteLengths)}`);
+
+      const sab = await benchSharedArrayBuffer(videoTrack);
+      wlog(`\nSharedArrayBuffer (posted to 2 workers concurrently): ${sab.ms.toFixed(2)}ms`);
+      wlog(`  worker A checksum=${sab.reply.checksum}, worker B checksum=${sab.secondWorkerReply.checksum} (equal confirms both read the SAME memory: ${sab.reply.checksum === sab.secondWorkerReply.checksum})`);
+    } catch (err) {
+      wlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      workerBtn.disabled = false;
     }
   })();
 });
