@@ -8,6 +8,8 @@
 // worker rather than streaming bytes across -- both sides read directly from the same
 // underlying file.
 
+import { stripNonVclNals } from './nal-strip';
+
 declare const self: {
   onmessage: ((e: MessageEvent<KeyframeThroughputRequest>) => void) | null;
   postMessage: (message: unknown) => void;
@@ -105,8 +107,15 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
       const rt0 = performance.now();
       const readEnd = coalesceWindowBytes ? Math.max(target.offset + target.size, target.offset + coalesceWindowBytes) : target.offset + target.size;
       const raw = await file.slice(target.offset, readEnd).arrayBuffer();
-      const bytes = coalesceWindowBytes ? new Uint8Array(raw, 0, target.size) : new Uint8Array(raw);
+      const rawBytes = coalesceWindowBytes ? new Uint8Array(raw, 0, target.size) : new Uint8Array(raw);
       readMs += performance.now() - rt0;
+
+      // Real finding: this file's keyframes carry in-band SPS/PPS/SEI NAL units ahead of the
+      // IDR slice (confirmed by manually parsing sample 0's raw bytes), which appears to stall
+      // Chrome's VideoDecoder when it was already configured with the same parameter sets via
+      // `description`. Strip them, keeping only the actual VCL slice data.
+      const { result: bytes, nalTypesSeen, stripped } = stripNonVclNals(rawBytes);
+      if (completed === 0) errors.push(`first chunk NAL types seen: [${nalTypesSeen.join(', ')}], stripped=${stripped}, resulting size=${bytes.byteLength} (was ${rawBytes.byteLength})`);
 
       const dt0 = performance.now();
       const chunk = new EncodedVideoChunk({ type: 'key', timestamp: target.timestampUs, data: bytes });
