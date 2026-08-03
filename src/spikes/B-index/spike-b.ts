@@ -16,7 +16,11 @@ root.innerHTML = `
   <pre id="indexLog"></pre>
 
   <hr />
-  <label>random samples to byte-check per track: <input type="number" id="randomCount" value="1000" /></label><br /><br />
+  <label>random samples to byte-check per track: <input type="number" id="randomCount" value="1000" /></label><br />
+  <label><input type="checkbox" id="useStreamReader" checked />
+    BlobSource useStreamReader (uncheck to test the slower fallback path -- see notes if memory
+    balloons well after the operation visibly finishes)
+  </label><br /><br />
   <button id="correctnessBtn" disabled>2. Correctness cross-check vs mediabunny</button>
   <pre id="correctnessLog"></pre>
 
@@ -30,6 +34,7 @@ const buildIndexBtn = root.querySelector<HTMLButtonElement>('#buildIndex')!;
 const indexLog = root.querySelector<HTMLPreElement>('#indexLog')!;
 const randomCountInput = root.querySelector<HTMLInputElement>('#randomCount')!;
 const correctnessBtn = root.querySelector<HTMLButtonElement>('#correctnessBtn')!;
+const useStreamReaderInput = root.querySelector<HTMLInputElement>('#useStreamReader')!;
 const correctnessLog = root.querySelector<HTMLPreElement>('#correctnessLog')!;
 const scaleBtn = root.querySelector<HTMLButtonElement>('#scaleBtn')!;
 const scaleLog = root.querySelector<HTMLPreElement>('#scaleLog')!;
@@ -87,7 +92,9 @@ correctnessBtn.addEventListener('click', () => {
     try {
       const randomSampleCount = Number(randomCountInput.value) || 1000;
       clog(`cross-checking ${currentIndex.tracks.length} tracks against mediabunny (${randomSampleCount} random byte-checks/track)...`);
-      const report = await checkCorrectness(currentIndex, new BlobSource(currentFile), currentFile, randomSampleCount);
+      const useStreamReader = useStreamReaderInput.checked;
+      clog(`BlobSource useStreamReader=${useStreamReader}`);
+      const report = await checkCorrectness(currentIndex, new BlobSource(currentFile, { useStreamReader }), currentFile, randomSampleCount);
       clog(`\ndone in ${report.elapsedMs.toFixed(0)}ms`);
       clog(`per-track sample counts: ${JSON.stringify(report.perTrackSampleCounts)}`);
       clog(`full metadata samples checked: ${report.fullMetadataSamplesChecked}`);
