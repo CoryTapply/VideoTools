@@ -13,6 +13,9 @@ import { summarizeLatencies, type LatencyDistribution } from './arbitrary-frame-
 export interface WarmScrubReport {
   firstStopLatencyMs: number;
   incremental: LatencyDistribution;
+  /** How many of the incremental (non-first) stops had their frame arrive progressively, before the single trailing flush -- vs. only released by that final drain. */
+  incrementalArrivedProgressivelyCount: number;
+  incrementalTotalCount: number;
   raw: WarmScrubResult;
 }
 
@@ -36,10 +39,16 @@ export async function runWarmScrubLatency(
   worker.terminate();
 
   const firstStopLatencyMs = raw.latenciesMs[0] ?? 0;
-  const incrementalLatencies = raw.latenciesMs.slice(1);
-  const incrementalFrames = raw.frameCounts.slice(1);
+  // -1 means that target's frame never arrived at all (a genuine failure, not just "slow") --
+  // exclude those from the latency distribution so they don't corrupt percentile ordering, but
+  // still count them via errorCount (the worker already pushed a message per one into errors).
+  const incrementalIndices = raw.latenciesMs.map((_, i) => i).slice(1).filter((i) => raw.latenciesMs[i]! !== -1);
+  const incrementalLatencies = incrementalIndices.map((i) => raw.latenciesMs[i]!);
+  const incrementalFrames = incrementalIndices.map((i) => raw.frameCounts[i]!);
   const incremental = summarizeLatencies(incrementalLatencies, incrementalFrames);
   incremental.errorCount = raw.errors.length;
 
-  return { firstStopLatencyMs, incremental, raw };
+  const incrementalArrivedProgressivelyCount = incrementalIndices.filter((i) => raw.arrivedBeforeFinalFlush[i]).length;
+
+  return { firstStopLatencyMs, incremental, incrementalArrivedProgressivelyCount, incrementalTotalCount: incrementalIndices.length, raw };
 }

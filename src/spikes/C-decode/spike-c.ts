@@ -212,6 +212,7 @@ warmScrubBtn.addEventListener('click', () => {
       const report = await runWarmScrubLatency(currentFile, videoTrack, stepCount, 'prefer-hardware');
       wlog(`first stop (cold, restart-from-keyframe): ${report.firstStopLatencyMs.toFixed(0)}ms`);
       logDistribution('subsequent stops (warm, no restart)', report.incremental);
+      wlog(`  arrived progressively (before the single trailing flush): ${report.incrementalArrivedProgressivelyCount}/${report.incrementalTotalCount}`);
       if (report.raw.errors.length > 0) wlog(`  worker errors: ${JSON.stringify(report.raw.errors)}`);
       wlog(`\nframe counts per stop (samples decoded since previous stop): ${JSON.stringify(report.raw.frameCounts)}`);
     } catch (err) {
