@@ -6,6 +6,7 @@ import { checkCorrectness } from './mediabunny-check';
 import { runQueryBenchmarks } from './queries';
 import { benchTransferables, benchSharedArrayBuffer } from './worker-transfer';
 import { reportVfr } from './vfr-report';
+import { persistAndReload } from './opfs-persist';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -45,6 +46,10 @@ root.innerHTML = `
   <hr />
   <button id="vfrBtn" disabled>6. VFR report (video track)</button>
   <pre id="vfrLog"></pre>
+
+  <hr />
+  <button id="opfsBtn" disabled>7. OPFS persistence (write, read back, compare vs. rebuild)</button>
+  <pre id="opfsLog"></pre>
 `;
 
 const fileInput = root.querySelector<HTMLInputElement>('#file')!;
@@ -63,6 +68,8 @@ const workerBtn = root.querySelector<HTMLButtonElement>('#workerBtn')!;
 const workerLog = root.querySelector<HTMLPreElement>('#workerLog')!;
 const vfrBtn = root.querySelector<HTMLButtonElement>('#vfrBtn')!;
 const vfrLog = root.querySelector<HTMLPreElement>('#vfrLog')!;
+const opfsBtn = root.querySelector<HTMLButtonElement>('#opfsBtn')!;
+const opfsLog = root.querySelector<HTMLPreElement>('#opfsLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
@@ -82,6 +89,9 @@ const wlog = (msg: string): void => {
 const vlog = (msg: string): void => {
   vfrLog.textContent += `${msg}\n`;
 };
+const olog = (msg: string): void => {
+  opfsLog.textContent += `${msg}\n`;
+};
 
 let currentFile: File | undefined;
 let currentIndex: Mp4Index | undefined;
@@ -95,6 +105,7 @@ fileInput.addEventListener('change', () => {
   queryBtn.disabled = true;
   workerBtn.disabled = true;
   vfrBtn.disabled = true;
+  opfsBtn.disabled = true;
 });
 
 // --- 1. build index ---
@@ -115,6 +126,7 @@ buildIndexBtn.addEventListener('click', () => {
       queryBtn.disabled = false;
       workerBtn.disabled = false;
       vfrBtn.disabled = false;
+      opfsBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -317,4 +329,38 @@ vfrBtn.addEventListener('click', () => {
   } catch (err) {
     vlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
   }
+});
+
+// --- 7. OPFS persistence: write the video track's index to OPFS, read it back, and compare
+// against the cost of just rebuilding from the source file. Determines whether index caching
+// is worth building in M1. ---
+opfsBtn.addEventListener('click', () => {
+  void (async () => {
+    if (!currentFile || !currentIndex) return;
+    opfsBtn.disabled = true;
+    opfsLog.textContent = '';
+    try {
+      const videoTrack = currentIndex.tracks.find((t) => t.handlerType === 'vide');
+      if (!videoTrack) {
+        olog('no video track found');
+        return;
+      }
+      olog(`video track: ${videoTrack.sampleCount} samples`);
+
+      const persisted = await persistAndReload(videoTrack);
+      olog(`\nOPFS write: ${persisted.writeMs.toFixed(2)}ms for ${persisted.bytesWritten} bytes (${(persisted.bytesWritten / 1e6).toFixed(2)}MB)`);
+      olog(`OPFS read + deserialize: ${persisted.readMs.toFixed(2)}ms`);
+      olog(`round-trip byte-exact match against the in-memory index: ${persisted.roundTripCorrect}`);
+
+      const t0 = performance.now();
+      await buildMp4Index(currentFile);
+      const rebuildMs = performance.now() - t0;
+      olog(`\nrebuild from source file (fresh buildMp4Index call): ${rebuildMs.toFixed(2)}ms`);
+      olog(`OPFS read vs. rebuild: ${persisted.readMs < rebuildMs ? 'OPFS read is faster' : 'rebuilding is faster (or comparable)'} (${persisted.readMs.toFixed(2)}ms vs ${rebuildMs.toFixed(2)}ms)`);
+    } catch (err) {
+      olog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      opfsBtn.disabled = false;
+    }
+  })();
 });
