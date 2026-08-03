@@ -13,8 +13,8 @@ import type { CacheBuildRequest, CacheBuildResult, CacheSample } from './cache-b
 
 const TARGET_FPS = 2;
 const WINDOW_SECONDS = 300;
-const THUMB_WIDTH = 320;
-const THUMB_HEIGHT = 180;
+export const THUMB_WIDTH = 320;
+export const THUMB_HEIGHT = 180;
 const DRAG_HZ = 60;
 const DRAG_SECONDS = 5;
 

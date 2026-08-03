@@ -6,7 +6,7 @@ import { extractAvcDecoderConfig } from './avc-config';
 import { stripNonVclNals } from './nal-strip';
 import { runArbitraryFrameLatency, runVideoSeekBaseline, type LatencyDistribution } from './arbitrary-frame-latency';
 import { runWarmScrubLatency } from './warm-scrub-latency';
-import { buildScrubCache, simulateDrag, closeAllBitmaps, measureHeapAfterClose } from './cache-scrub';
+import { buildScrubCache, simulateDrag, closeAllBitmaps, measureHeapAfterClose, THUMB_WIDTH, THUMB_HEIGHT } from './cache-scrub';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -253,11 +253,19 @@ cacheScrubBtn.addEventListener('click', () => {
       clog(`window: ${stats.windowStartSec.toFixed(1)}s - ${stats.windowEndSec.toFixed(1)}s`);
       clog(`filled ${stats.filledSlotCount}/${stats.requestedSlotCount} slots, buildMs=${stats.buildMs.toFixed(0)}, framesDecodedTotal=${stats.framesDecodedTotal}`);
       if (stats.errors.length > 0) clog(`  errors: ${JSON.stringify(stats.errors)}`);
+      // performance.memory.usedJSHeapSize does NOT count ImageBitmap pixel storage (Chrome
+      // backs it with GPU/native memory outside the JS heap) -- a real run showed heap going
+      // DOWN by ~69MB while the cache was alive and staying perfectly flat across close(), which
+      // only makes sense if the metric simply isn't seeing these bitmaps at all. Report it
+      // anyway (for whatever it's worth) but lead with the theoretical raw-RGBA estimate, which
+      // is the only number here actually tied to the cache's real size.
+      const estimatedBitmapBytes = bitmaps.length * THUMB_WIDTH * THUMB_HEIGHT * 4;
+      clog(`estimated cache size (raw RGBA, not directly measured): ${bitmaps.length} x ${THUMB_WIDTH}x${THUMB_HEIGHT}x4 bytes = ~${(estimatedBitmapBytes / (1024 * 1024)).toFixed(1)}MB`);
       if (stats.heapBeforeBuildBytes !== null && stats.heapAfterBuildBytes !== null) {
         const heldMb = (stats.heapAfterBuildBytes - stats.heapBeforeBuildBytes) / (1024 * 1024);
-        clog(`heap before build: ${(stats.heapBeforeBuildBytes / (1024 * 1024)).toFixed(1)}MB, after: ${(stats.heapAfterBuildBytes / (1024 * 1024)).toFixed(1)}MB (held by cache: ~${heldMb.toFixed(1)}MB for ${bitmaps.length} bitmaps)`);
+        clog(`  (for reference only, likely NOT meaningful -- see comment above) JS heap before: ${(stats.heapBeforeBuildBytes / (1024 * 1024)).toFixed(1)}MB, after: ${(stats.heapAfterBuildBytes / (1024 * 1024)).toFixed(1)}MB, delta: ${heldMb.toFixed(1)}MB`);
       } else {
-        clog('performance.memory unavailable in this browser -- watch Activity Monitor manually');
+        clog('  performance.memory unavailable in this browser');
       }
 
       clog('\nsimulating a 60Hz drag sweeping the whole cached window for 5 seconds...');
