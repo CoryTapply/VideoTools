@@ -32,8 +32,20 @@ export interface CorrectnessReport {
   fullMetadataSamplesChecked: number;
   byteComparisonsChecked: number;
   keyframesChecked: number;
+  tracksSkippedForScale: Array<{ trackId: number; reason: string }>;
   elapsedMs: number;
 }
+
+/**
+ * Above this sample count, the full per-sample metadata walk is skipped in favor of relying on
+ * the random-sample check (which already validates timestamp/sync/size/content per sample).
+ * Found empirically: a real browser run against the 27GB fixture (1.44M samples across 7 tracks)
+ * drove memory usage very high and eventually failed with a generic network error, doing
+ * millions of individual awaited browser reads (the full metadata walk, PLUS -- see below -- an
+ * accidentally-unbounded keyframe walk). Node's FilePathSource didn't show this because raw
+ * fs.read syscalls are much cheaper per-call than browser File/Blob reads.
+ */
+const FULL_METADATA_WALK_SAMPLE_LIMIT = 20_000;
 
 /** Matches the subset of File's API this module needs -- satisfied by both a real browser File and a Node FileLike shim. */
 export interface ByteReader {
@@ -71,6 +83,7 @@ export async function checkCorrectness(
   let fullMetadataSamplesChecked = 0;
   let byteComparisonsChecked = 0;
   let keyframesChecked = 0;
+  const tracksSkippedForScale: Array<{ trackId: number; reason: string }> = [];
 
   for (const ourTrack of index.tracks) {
     const mbTrack = mbTracks.find((t) => t.id === ourTrack.trackId);
@@ -87,28 +100,35 @@ export async function checkCorrectness(
       reportMismatch(mismatches, 'sample-count', ourTrack.trackId, -1, 'sampleCount', ourTrack.sampleCount, stats.packetCount);
     }
 
-    // 2. full metadata walk: timestamp and sync (type) for every sample, in decode order
-    let i = 0;
-    for await (const packet of sink.packets(undefined, undefined, { metadataOnly: true })) {
-      if (i >= ourTrack.sampleCount) {
-        reportMismatch(mismatches, 'metadata-walk', ourTrack.trackId, i, 'extra-sample-in-theirs', undefined, packet.timestamp);
+    // 2. full metadata walk: timestamp and sync (type) for every sample, in decode order.
+    // Skipped above FULL_METADATA_WALK_SAMPLE_LIMIT -- see its doc comment. The random-sample
+    // check below still validates timestamp/sync/size/content for `randomSampleCount` samples
+    // per track regardless of track size.
+    if (ourTrack.sampleCount > FULL_METADATA_WALK_SAMPLE_LIMIT) {
+      tracksSkippedForScale.push({ trackId: ourTrack.trackId, reason: `${ourTrack.sampleCount} samples > ${FULL_METADATA_WALK_SAMPLE_LIMIT} full-walk limit` });
+    } else {
+      let i = 0;
+      for await (const packet of sink.packets(undefined, undefined, { metadataOnly: true })) {
+        if (i >= ourTrack.sampleCount) {
+          reportMismatch(mismatches, 'metadata-walk', ourTrack.trackId, i, 'extra-sample-in-theirs', undefined, packet.timestamp);
+          i += 1;
+          continue;
+        }
+        const oursTimestamp = localUnitsToPresentationSec(ourTrack, ourTrack.cts[i]!);
+        if (Math.abs(oursTimestamp - packet.timestamp) > TIME_EPS) {
+          reportMismatch(mismatches, 'metadata-walk', ourTrack.trackId, i, 'timestamp', oursTimestamp, packet.timestamp);
+        }
+        const oursSync = ourTrack.sync[i] === 1;
+        const theirsSync = packet.type === 'key';
+        if (oursSync !== theirsSync) {
+          reportMismatch(mismatches, 'metadata-walk', ourTrack.trackId, i, 'sync', oursSync, theirsSync);
+        }
+        fullMetadataSamplesChecked += 1;
         i += 1;
-        continue;
       }
-      const oursTimestamp = localUnitsToPresentationSec(ourTrack, ourTrack.cts[i]!);
-      if (Math.abs(oursTimestamp - packet.timestamp) > TIME_EPS) {
-        reportMismatch(mismatches, 'metadata-walk', ourTrack.trackId, i, 'timestamp', oursTimestamp, packet.timestamp);
+      if (i < ourTrack.sampleCount) {
+        reportMismatch(mismatches, 'metadata-walk', ourTrack.trackId, i, 'missing-samples-in-theirs', ourTrack.sampleCount, i);
       }
-      const oursSync = ourTrack.sync[i] === 1;
-      const theirsSync = packet.type === 'key';
-      if (oursSync !== theirsSync) {
-        reportMismatch(mismatches, 'metadata-walk', ourTrack.trackId, i, 'sync', oursSync, theirsSync);
-      }
-      fullMetadataSamplesChecked += 1;
-      i += 1;
-    }
-    if (i < ourTrack.sampleCount) {
-      reportMismatch(mismatches, 'metadata-walk', ourTrack.trackId, i, 'missing-samples-in-theirs', ourTrack.sampleCount, i);
     }
 
     // 3. random samples: byte-content comparison (proves offset+size correctness)
@@ -133,26 +153,35 @@ export async function checkCorrectness(
       byteComparisonsChecked += 1;
     }
 
-    // 4. full keyframe timestamp list
+    // 4. full keyframe timestamp list. Tracks with no real GOP structure (audio, or any track
+    // lacking an stss so every sample is trivially sync) have a "keyframe list" equal to their
+    // full sample list -- walking it is really the unbounded full-track walk in disguise (this
+    // is what actually drove memory sky-high in a real browser run against the 27GB fixture: 6
+    // audio tracks x ~198k samples each = ~1.19M getNextKeyPacket() calls). Skip those; a
+    // meaningful keyframe list only exists for tracks with genuinely sparse sync samples.
     const ourSyncIndices: number[] = [];
     for (let k = 0; k < ourTrack.sampleCount; k += 1) if (ourTrack.sync[k] === 1) ourSyncIndices.push(k);
-    let keyPacket = await sink.getFirstKeyPacket();
-    let kIdx = 0;
-    while (keyPacket) {
-      if (kIdx >= ourSyncIndices.length) {
-        reportMismatch(mismatches, 'keyframe-list', ourTrack.trackId, kIdx, 'extra-keyframe-in-theirs', undefined, keyPacket.timestamp);
-      } else {
-        const oursTs = localUnitsToPresentationSec(ourTrack, ourTrack.cts[ourSyncIndices[kIdx]!]!);
-        if (Math.abs(oursTs - keyPacket.timestamp) > TIME_EPS) {
-          reportMismatch(mismatches, 'keyframe-list', ourTrack.trackId, ourSyncIndices[kIdx]!, 'keyframe-timestamp', oursTs, keyPacket.timestamp);
+    if (ourSyncIndices.length === ourTrack.sampleCount) {
+      tracksSkippedForScale.push({ trackId: ourTrack.trackId, reason: 'every sample is sync (no real GOP structure) -- keyframe list is just the full sample list' });
+    } else {
+      let keyPacket = await sink.getFirstKeyPacket();
+      let kIdx = 0;
+      while (keyPacket) {
+        if (kIdx >= ourSyncIndices.length) {
+          reportMismatch(mismatches, 'keyframe-list', ourTrack.trackId, kIdx, 'extra-keyframe-in-theirs', undefined, keyPacket.timestamp);
+        } else {
+          const oursTs = localUnitsToPresentationSec(ourTrack, ourTrack.cts[ourSyncIndices[kIdx]!]!);
+          if (Math.abs(oursTs - keyPacket.timestamp) > TIME_EPS) {
+            reportMismatch(mismatches, 'keyframe-list', ourTrack.trackId, ourSyncIndices[kIdx]!, 'keyframe-timestamp', oursTs, keyPacket.timestamp);
+          }
         }
+        keyframesChecked += 1;
+        keyPacket = await sink.getNextKeyPacket(keyPacket);
+        kIdx += 1;
       }
-      keyframesChecked += 1;
-      keyPacket = await sink.getNextKeyPacket(keyPacket);
-      kIdx += 1;
-    }
-    if (kIdx < ourSyncIndices.length) {
-      reportMismatch(mismatches, 'keyframe-list', ourTrack.trackId, kIdx, 'missing-keyframes-in-theirs', ourSyncIndices.length, kIdx);
+      if (kIdx < ourSyncIndices.length) {
+        reportMismatch(mismatches, 'keyframe-list', ourTrack.trackId, kIdx, 'missing-keyframes-in-theirs', ourSyncIndices.length, kIdx);
+      }
     }
   }
 
@@ -162,6 +191,7 @@ export async function checkCorrectness(
     fullMetadataSamplesChecked,
     byteComparisonsChecked,
     keyframesChecked,
+    tracksSkippedForScale,
     elapsedMs: performance.now() - t0,
   };
 }

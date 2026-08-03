@@ -93,6 +93,9 @@ correctnessBtn.addEventListener('click', () => {
       clog(`full metadata samples checked: ${report.fullMetadataSamplesChecked}`);
       clog(`byte comparisons checked: ${report.byteComparisonsChecked}`);
       clog(`keyframes checked: ${report.keyframesChecked}`);
+      if (report.tracksSkippedForScale.length > 0) {
+        clog(`skipped for scale: ${JSON.stringify(report.tracksSkippedForScale)}`);
+      }
       clog(`MISMATCHES: ${report.mismatches.length}`);
       if (report.mismatches.length > 0) {
         clog(JSON.stringify(report.mismatches.slice(0, 50), null, 2));
