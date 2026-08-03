@@ -41,7 +41,13 @@ root.innerHTML = `
   <pre id="cacheScrubLog"></pre>
 
   <hr />
-  <label>keyframes to decode without closing: <input type="number" id="leakCount" value="100" /></label><br /><br />
+  <label>keyframes to decode without closing: <input type="number" id="leakCount" value="100" /></label>
+  <label>decode path:
+    <select id="leakHwAccel">
+      <option value="prefer-software">prefer-software (host memory, unambiguous to observe)</option>
+      <option value="prefer-hardware">prefer-hardware</option>
+    </select>
+  </label><br /><br />
   <button id="leakTestBtn" disabled>5. Leak test: decode N keyframes WITHOUT frame.close()</button>
   <pre id="leakTestLog"></pre>
 
@@ -68,6 +74,7 @@ const warmScrubLog = root.querySelector<HTMLPreElement>('#warmScrubLog')!;
 const cacheScrubBtn = root.querySelector<HTMLButtonElement>('#cacheScrubBtn')!;
 const cacheScrubLog = root.querySelector<HTMLPreElement>('#cacheScrubLog')!;
 const leakCountInput = root.querySelector<HTMLInputElement>('#leakCount')!;
+const leakHwAccelSelect = root.querySelector<HTMLSelectElement>('#leakHwAccel')!;
 const leakTestBtn = root.querySelector<HTMLButtonElement>('#leakTestBtn')!;
 const leakTestLog = root.querySelector<HTMLPreElement>('#leakTestLog')!;
 
@@ -313,8 +320,9 @@ leakTestBtn.addEventListener('click', () => {
     leakTestLog.textContent = '';
     try {
       const count = Number(leakCountInput.value) || 100;
-      kLog(`decoding ${count} keyframes without calling frame.close()...`);
-      const result = await runLeakTest(currentFile, videoTrack, count, 'prefer-hardware');
+      const hwAccel = leakHwAccelSelect.value as 'prefer-hardware' | 'prefer-software' | 'no-preference';
+      kLog(`decoding ${count} keyframes (${hwAccel}) without calling frame.close()...`);
+      const result = await runLeakTest(currentFile, videoTrack, count, hwAccel);
       kLog(`completed ${result.completedBeforeStall}/${result.requested} before stalling (${result.totalMs.toFixed(0)}ms)`);
       kLog(`exact error: ${result.exactError ?? `(none -- all ${result.requested} completed without failure)`}`);
     } catch (err) {
