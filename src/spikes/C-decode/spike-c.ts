@@ -8,6 +8,7 @@ import { runArbitraryFrameLatency, runVideoSeekBaseline, type LatencyDistributio
 import { runWarmScrubLatency } from './warm-scrub-latency';
 import { buildScrubCache, simulateDrag, closeAllBitmaps, measureHeapAfterClose, THUMB_WIDTH, THUMB_HEIGHT } from './cache-scrub';
 import { runLeakTest } from './leak-test';
+import { buildThumbnailAtlas } from './atlas';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -52,6 +53,10 @@ root.innerHTML = `
   <pre id="leakTestLog"></pre>
 
   <hr />
+  <button id="atlasBtn" disabled>6. Thumbnail atlas (10x10 WebP sprite, OPFS round-trip)</button>
+  <pre id="atlasLog"></pre>
+
+  <hr />
   <button id="mainThreadBtn" disabled>DIAGNOSTIC: decode 1 keyframe on the main thread (no Worker)</button>
   <pre id="mainThreadLog"></pre>
 `;
@@ -77,6 +82,8 @@ const leakCountInput = root.querySelector<HTMLInputElement>('#leakCount')!;
 const leakHwAccelSelect = root.querySelector<HTMLSelectElement>('#leakHwAccel')!;
 const leakTestBtn = root.querySelector<HTMLButtonElement>('#leakTestBtn')!;
 const leakTestLog = root.querySelector<HTMLPreElement>('#leakTestLog')!;
+const atlasBtn = root.querySelector<HTMLButtonElement>('#atlasBtn')!;
+const atlasLog = root.querySelector<HTMLPreElement>('#atlasLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
@@ -99,6 +106,9 @@ const clog = (msg: string): void => {
 const kLog = (msg: string): void => {
   leakTestLog.textContent += `${msg}\n`;
 };
+const aLog = (msg: string): void => {
+  atlasLog.textContent += `${msg}\n`;
+};
 
 let currentFile: File | undefined;
 let videoTrack: TrackIndex | undefined;
@@ -113,6 +123,7 @@ fileInput.addEventListener('change', () => {
   warmScrubBtn.disabled = true;
   cacheScrubBtn.disabled = true;
   leakTestBtn.disabled = true;
+  atlasBtn.disabled = true;
 });
 
 buildIndexBtn.addEventListener('click', () => {
@@ -136,6 +147,7 @@ buildIndexBtn.addEventListener('click', () => {
       warmScrubBtn.disabled = false;
       cacheScrubBtn.disabled = false;
       leakTestBtn.disabled = false;
+      atlasBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -329,6 +341,29 @@ leakTestBtn.addEventListener('click', () => {
       kLog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       leakTestBtn.disabled = false;
+    }
+  })();
+});
+
+// --- 6. thumbnail atlas: pack 100 decoded keyframe thumbnails into a 10x10 WebP sprite,
+// write it to OPFS, and time reading back + decoding a single thumbnail cropped from it. ---
+atlasBtn.addEventListener('click', () => {
+  void (async () => {
+    if (!currentFile || !videoTrack) return;
+    atlasBtn.disabled = true;
+    atlasLog.textContent = '';
+    try {
+      aLog('decoding 100 keyframes and packing into a 10x10 WebP atlas...');
+      const report = await buildThumbnailAtlas(currentFile, videoTrack, 'prefer-hardware');
+      aLog(`thumbnails: ${report.thumbnailCount}, decodeMs=${report.decodeMs.toFixed(0)}`);
+      aLog(`atlas: ${report.atlasBytes} bytes, encodeMs=${report.encodeMs.toFixed(1)}`);
+      aLog(`OPFS write: ${report.opfsWriteMs.toFixed(1)}ms`);
+      aLog(`OPFS read-back + decode of a single thumbnail: ${report.singleThumbReadAndDecodeMs.toFixed(2)}ms`);
+      if (report.errors.length > 0) aLog(`errors: ${JSON.stringify(report.errors)}`);
+    } catch (err) {
+      aLog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      atlasBtn.disabled = false;
     }
   })();
 });
