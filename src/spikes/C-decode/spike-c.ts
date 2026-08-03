@@ -41,7 +41,8 @@ root.innerHTML = `
   <pre id="cacheScrubLog"></pre>
 
   <hr />
-  <button id="leakTestBtn" disabled>5. Leak test: decode 100 keyframes WITHOUT frame.close()</button>
+  <label>keyframes to decode without closing: <input type="number" id="leakCount" value="100" /></label><br /><br />
+  <button id="leakTestBtn" disabled>5. Leak test: decode N keyframes WITHOUT frame.close()</button>
   <pre id="leakTestLog"></pre>
 
   <hr />
@@ -66,6 +67,7 @@ const warmScrubBtn = root.querySelector<HTMLButtonElement>('#warmScrubBtn')!;
 const warmScrubLog = root.querySelector<HTMLPreElement>('#warmScrubLog')!;
 const cacheScrubBtn = root.querySelector<HTMLButtonElement>('#cacheScrubBtn')!;
 const cacheScrubLog = root.querySelector<HTMLPreElement>('#cacheScrubLog')!;
+const leakCountInput = root.querySelector<HTMLInputElement>('#leakCount')!;
 const leakTestBtn = root.querySelector<HTMLButtonElement>('#leakTestBtn')!;
 const leakTestLog = root.querySelector<HTMLPreElement>('#leakTestLog')!;
 
@@ -310,10 +312,11 @@ leakTestBtn.addEventListener('click', () => {
     leakTestBtn.disabled = true;
     leakTestLog.textContent = '';
     try {
-      kLog('decoding 100 keyframes without calling frame.close()...');
-      const result = await runLeakTest(currentFile, videoTrack, 100, 'prefer-hardware');
+      const count = Number(leakCountInput.value) || 100;
+      kLog(`decoding ${count} keyframes without calling frame.close()...`);
+      const result = await runLeakTest(currentFile, videoTrack, count, 'prefer-hardware');
       kLog(`completed ${result.completedBeforeStall}/${result.requested} before stalling (${result.totalMs.toFixed(0)}ms)`);
-      kLog(`exact error: ${result.exactError ?? '(none -- all 100 completed without failure)'}`);
+      kLog(`exact error: ${result.exactError ?? `(none -- all ${result.requested} completed without failure)`}`);
     } catch (err) {
       kLog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
