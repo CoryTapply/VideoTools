@@ -3,6 +3,7 @@ import { BlobSource } from 'mediabunny';
 import { sampleMemoryDuring } from '../../measure/memory';
 import { buildMp4Index, type Mp4Index, type StageTimings } from '../A-remux/mp4-index';
 import { checkCorrectness } from './mediabunny-check';
+import { runQueryBenchmarks } from './queries';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -29,6 +30,11 @@ root.innerHTML = `
   <hr />
   <button id="scaleBtn" disabled>3. Scale test (stage timing, heap, disk bytes read)</button>
   <pre id="scaleLog"></pre>
+
+  <hr />
+  <label>iterations per query: <input type="number" id="queryIterations" value="10000" /></label><br /><br />
+  <button id="queryBtn" disabled>4. Query latency (binary search etc.)</button>
+  <pre id="queryLog"></pre>
 `;
 
 const fileInput = root.querySelector<HTMLInputElement>('#file')!;
@@ -40,6 +46,9 @@ const useStreamReaderInput = root.querySelector<HTMLInputElement>('#useStreamRea
 const correctnessLog = root.querySelector<HTMLPreElement>('#correctnessLog')!;
 const scaleBtn = root.querySelector<HTMLButtonElement>('#scaleBtn')!;
 const scaleLog = root.querySelector<HTMLPreElement>('#scaleLog')!;
+const queryIterationsInput = root.querySelector<HTMLInputElement>('#queryIterations')!;
+const queryBtn = root.querySelector<HTMLButtonElement>('#queryBtn')!;
+const queryLog = root.querySelector<HTMLPreElement>('#queryLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
@@ -49,6 +58,9 @@ const clog = (msg: string): void => {
 };
 const slog = (msg: string): void => {
   scaleLog.textContent += `${msg}\n`;
+};
+const qlog = (msg: string): void => {
+  queryLog.textContent += `${msg}\n`;
 };
 
 let currentFile: File | undefined;
@@ -60,6 +72,7 @@ fileInput.addEventListener('change', () => {
   buildIndexBtn.disabled = !currentFile;
   correctnessBtn.disabled = true;
   scaleBtn.disabled = true;
+  queryBtn.disabled = true;
 });
 
 // --- 1. build index ---
@@ -77,6 +90,7 @@ buildIndexBtn.addEventListener('click', () => {
       }
       correctnessBtn.disabled = false;
       scaleBtn.disabled = false;
+      queryBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -189,6 +203,40 @@ scaleBtn.addEventListener('click', () => {
       slog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       scaleBtn.disabled = false;
+    }
+  })();
+});
+
+// --- 4. query latency: binary search (frame-at-timestamp, nearest sync sample), O(1)
+// frame-stepping and byte-range lookups. Run against the video track (the interesting case --
+// it has real B-frame reordering, confirmed on the 27GB fixture: cts is NOT monotonic in decode
+// order, so binary search needs the presentation-order index queries.ts builds). Fail condition
+// per spec: any query above ~1 microsecond -- these need to run inside a pointermove handler.
+queryBtn.addEventListener('click', () => {
+  void (async () => {
+    if (!currentIndex) return;
+    queryBtn.disabled = true;
+    queryLog.textContent = '';
+    try {
+      const videoTrack = currentIndex.tracks.find((t) => t.handlerType === 'vide');
+      if (!videoTrack) {
+        qlog('no video track found');
+        return;
+      }
+      const iterations = Number(queryIterationsInput.value) || 10_000;
+      const nonMonotonic = videoTrack.cts.slice(0, 20).some((c, i) => i > 0 && c < videoTrack.cts[i - 1]!);
+      qlog(`video track: ${videoTrack.sampleCount} samples, cts non-monotonic in first 20 decode-order samples: ${nonMonotonic}`);
+
+      const { queryIndexBuildMs, results } = runQueryBenchmarks(videoTrack, iterations);
+      qlog(`query index build (one-time, not part of per-query cost): ${queryIndexBuildMs.toFixed(2)}ms`);
+      for (const r of results) {
+        const status = r.nsPerOp > 1000 ? 'FAIL (>1us)' : 'ok';
+        qlog(`  ${r.name}: ${r.nsPerOp.toFixed(1)}ns/op over ${r.iterations} iterations (${status})`);
+      }
+    } catch (err) {
+      qlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      queryBtn.disabled = false;
     }
   })();
 });
