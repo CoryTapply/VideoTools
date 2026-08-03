@@ -6,6 +6,7 @@ import { extractAvcDecoderConfig } from './avc-config';
 import { stripNonVclNals } from './nal-strip';
 import { runArbitraryFrameLatency, runVideoSeekBaseline, type LatencyDistribution } from './arbitrary-frame-latency';
 import { runWarmScrubLatency } from './warm-scrub-latency';
+import { buildScrubCache, simulateDrag, closeAllBitmaps, measureHeapAfterClose } from './cache-scrub';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -35,6 +36,10 @@ root.innerHTML = `
   <pre id="warmScrubLog"></pre>
 
   <hr />
+  <button id="cacheScrubBtn" disabled>4. Cache-backed scrub simulation (2fps cache, 60Hz drag) -- THE SHIP CANDIDATE</button>
+  <pre id="cacheScrubLog"></pre>
+
+  <hr />
   <button id="mainThreadBtn" disabled>DIAGNOSTIC: decode 1 keyframe on the main thread (no Worker)</button>
   <pre id="mainThreadLog"></pre>
 `;
@@ -54,6 +59,8 @@ const latencyLog = root.querySelector<HTMLPreElement>('#latencyLog')!;
 const warmStepCountInput = root.querySelector<HTMLInputElement>('#warmStepCount')!;
 const warmScrubBtn = root.querySelector<HTMLButtonElement>('#warmScrubBtn')!;
 const warmScrubLog = root.querySelector<HTMLPreElement>('#warmScrubLog')!;
+const cacheScrubBtn = root.querySelector<HTMLButtonElement>('#cacheScrubBtn')!;
+const cacheScrubLog = root.querySelector<HTMLPreElement>('#cacheScrubLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
@@ -70,6 +77,9 @@ const llog = (msg: string): void => {
 const wlog = (msg: string): void => {
   warmScrubLog.textContent += `${msg}\n`;
 };
+const clog = (msg: string): void => {
+  cacheScrubLog.textContent += `${msg}\n`;
+};
 
 let currentFile: File | undefined;
 let videoTrack: TrackIndex | undefined;
@@ -82,6 +92,7 @@ fileInput.addEventListener('change', () => {
   mainThreadBtn.disabled = true;
   latencyBtn.disabled = true;
   warmScrubBtn.disabled = true;
+  cacheScrubBtn.disabled = true;
 });
 
 buildIndexBtn.addEventListener('click', () => {
@@ -103,6 +114,7 @@ buildIndexBtn.addEventListener('click', () => {
       mainThreadBtn.disabled = false;
       latencyBtn.disabled = false;
       warmScrubBtn.disabled = false;
+      cacheScrubBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -221,6 +233,51 @@ warmScrubBtn.addEventListener('click', () => {
       wlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       warmScrubBtn.disabled = false;
+    }
+  })();
+});
+
+// --- 4. cache-backed scrub simulation: pre-decode a sparse 2fps cache across a 5-minute
+// window, then simulate a fast drag sweeping the whole window at 60Hz for 5 seconds, serving
+// every request from the cache instead of decoding on demand. Sidesteps the cold-start /
+// warm-decoder problem entirely -- this is the fallback architecture if items 2/3b show
+// on-demand decode isn't fast enough (which they did). ---
+cacheScrubBtn.addEventListener('click', () => {
+  void (async () => {
+    if (!currentFile || !videoTrack) return;
+    cacheScrubBtn.disabled = true;
+    cacheScrubLog.textContent = '';
+    try {
+      clog('building 2fps cache across a 5-minute window...');
+      const { stats, bitmaps } = await buildScrubCache(currentFile, videoTrack, 'prefer-hardware');
+      clog(`window: ${stats.windowStartSec.toFixed(1)}s - ${stats.windowEndSec.toFixed(1)}s`);
+      clog(`filled ${stats.filledSlotCount}/${stats.requestedSlotCount} slots, buildMs=${stats.buildMs.toFixed(0)}, framesDecodedTotal=${stats.framesDecodedTotal}`);
+      if (stats.errors.length > 0) clog(`  errors: ${JSON.stringify(stats.errors)}`);
+      if (stats.heapBeforeBuildBytes !== null && stats.heapAfterBuildBytes !== null) {
+        const heldMb = (stats.heapAfterBuildBytes - stats.heapBeforeBuildBytes) / (1024 * 1024);
+        clog(`heap before build: ${(stats.heapBeforeBuildBytes / (1024 * 1024)).toFixed(1)}MB, after: ${(stats.heapAfterBuildBytes / (1024 * 1024)).toFixed(1)}MB (held by cache: ~${heldMb.toFixed(1)}MB for ${bitmaps.length} bitmaps)`);
+      } else {
+        clog('performance.memory unavailable in this browser -- watch Activity Monitor manually');
+      }
+
+      clog('\nsimulating a 60Hz drag sweeping the whole cached window for 5 seconds...');
+      const drag = simulateDrag(bitmaps);
+      clog(`${drag.iterations} iterations: p50=${drag.p50Ms.toFixed(2)}ms p95=${drag.p95Ms.toFixed(2)}ms max=${drag.maxMs.toFixed(2)}ms (total ${drag.totalMs.toFixed(0)}ms)`);
+      clog(`hits=${drag.hitCount} misses=${drag.missCount} -- 60Hz (16.67ms budget) sustainable: ${drag.sustainable60Hz ? 'YES' : 'NO'}`);
+
+      clog('\nclosing all cached bitmaps...');
+      closeAllBitmaps(bitmaps);
+      const closeStats = await measureHeapAfterClose(stats.heapBeforeBuildBytes);
+      if (closeStats.heapAfterCloseBytes !== null && closeStats.heapAfterGcDelayBytes !== null) {
+        clog(`heap right after close: ${(closeStats.heapAfterCloseBytes / (1024 * 1024)).toFixed(1)}MB, after 500ms: ${(closeStats.heapAfterGcDelayBytes / (1024 * 1024)).toFixed(1)}MB`);
+        clog(`returned to baseline (within 20%): ${closeStats.heapReturnedToBaseline ? 'YES' : 'NO'}`);
+      } else {
+        clog('performance.memory unavailable -- check Activity Monitor to confirm the heap drops after closing');
+      }
+    } catch (err) {
+      clog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      cacheScrubBtn.disabled = false;
     }
   })();
 });
