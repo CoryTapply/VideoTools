@@ -63,6 +63,7 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
   let decodeMs = 0;
   let downscaleMs = 0;
   let completed = 0;
+  let loggedFirstChunk = false; // `completed === 0` isn't right for this: with batching, several targets submit before `completed` ever increments
 
   // Bug fixed here: the error() callback used to only log to `errors`, never reject the
   // pending frame's promise -- so a single decode error left `await framePromise` hanging
@@ -133,7 +134,10 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
         // stall this decoder when it was already configured with the same parameter sets via
         // `description`. Strip them, keeping only the actual VCL slice data.
         const { result: bytes, nalTypesSeen, stripped } = stripNonVclNals(rawBytes);
-        if (completed === 0) errors.push(`first chunk NAL types seen: [${nalTypesSeen.join(', ')}], stripped=${stripped}, resulting size=${bytes.byteLength} (was ${rawBytes.byteLength})`);
+        if (!loggedFirstChunk) {
+          loggedFirstChunk = true;
+          errors.push(`first chunk NAL types seen: [${nalTypesSeen.join(', ')}], stripped=${stripped}, resulting size=${bytes.byteLength} (was ${rawBytes.byteLength})`);
+        }
 
         const chunk = new EncodedVideoChunk({ type: 'key', timestamp: target.timestampUs, data: bytes });
         const framePromise = new Promise<VideoFrame>((resolve, reject) => pending.push({ resolve, reject }));
