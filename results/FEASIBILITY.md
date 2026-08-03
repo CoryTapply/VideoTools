@@ -18,7 +18,9 @@ against the raw transcript rather than backfilled from memory.
 | Index build time (27GB, 1,442,030 samples / 7 tracks) | 107.1ms | ≤5s | **PASS** (47x margin) |
 | Index retained bytes (27GB, all tracks) | 41.82MB (41,818,870 B) | ≤150MB | **PASS** |
 | Extrapolated 8hr/60fps (~1.7M samples) retained/build | ~49MB / ~114ms | ≤400MB / — | **PASS** (extrapolated) |
-| Remux export throughput (settled, 4MB coalesced R+W) | 91.1–92.0 MB/s | ≥100MB/s | **FAIL** (~8–9% short) |
+| Remux export throughput, 1.1–1.3GB near-start range (5 runs) | 91.1–92.0 MB/s | ≥100MB/s | **FAIL** (~8–9% short) |
+| Remux export throughput, 166MB last-frame range | 18.77 MB/s | ≥100MB/s | **FAIL** (fixed overhead dominates at this size) |
+| Remux export throughput, 10.39GB mid-file range (2 runs) | 134.9–163.0 MB/s | ≥100MB/s | **PASS** (35–63% margin) |
 | Export JS heap growth (5 real runs, 1MB/4MB/16MB windows) | peak growth 2.0–13.7MB, returns to baseline after close | ≤100MB growth | **PASS** (7–50x margin) |
 | Abort-mid-export result (real run, 1620s mid-file range) | target left as real, unlocked, 0-byte file — never truncated | no truncated/locked file | **PASS** |
 | Keyframe decode rate, 27GB, sequential | 42.2–42.5/sec | ≥50/sec | **FAIL** |
@@ -48,10 +50,18 @@ structurally-correct output (frame count matches the ffmpeg reference within a 1
 boundary tolerance, clean multi-track A/V sync, zero decode errors, confirmed via
 `scripts/compare-remux.sh`). But:
 
-- Export throughput settled at **91.1–92.0 MB/s**, which is *below* the spec's own
-  ~100MB/s bar by ~8–9%, even after fixing two real bottlenecks (per-sample reads at
-  37.0MB/s, then per-sample writes at 56.6MB/s, both fixed via 4MB window coalescing).
-  16MB windows plateaued with no further gain over 4MB — the ceiling isn't buffer size.
+- Export throughput **scales with export size, and is not a flat number.** The original
+  1.1–1.3GB near-start test range settled at 91.1–92.0 MB/s (below the ~100MB/s bar by
+  ~8–9%) after fixing two real bottlenecks (per-sample reads at 37.0MB/s, then
+  per-sample writes at 56.6MB/s, both fixed via 4MB window coalescing; 16MB windows
+  plateaued with no further gain). But a real 10.39GB mid-file export — much closer to
+  this project's actual target use case (trimming 20GB+ files) — hit **134.9–163.0
+  MB/s**, comfortably clearing the bar. A tiny 166MB last-frame clip, conversely, only
+  managed 18.77 MB/s, suggesting fixed per-export overhead dominates at small sizes and
+  amortizes away as export size grows. Net: **the 100MB/s bar is met for realistic
+  multi-GB exports**; only small-output trims are throughput-constrained, which matters
+  less for this product's actual use case but still affects progress-estimate accuracy
+  for short trims.
 - JS heap growth during export was measured across 5 real runs (peak growth 2.0–13.7MB,
   always returning to baseline after close): a clean pass with 7–50x margin against the
   ~100MB fail bar.
@@ -120,12 +130,19 @@ thumbnail atlas both completed with real, actionable findings.
   frames (up to ~234) on this footage, which is the direct cost driver behind both the
   latency numbers and the decision to snap to keyframes rather than decode arbitrary
   frames on the fly.
-- **Faststart output in one pass is affordable time-wise** (pass-1 moov build measured
-  at 17–29ms on real export ranges) but throughput is the open question: 91–92MB/s
-  settled, short of the spec's 100MB/s bar by ~8–9%. Both tested window sizes above 4MB
-  plateaued, so the next lever is probably overlapping read and write (pipelining)
-  rather than bigger buffers — worth a focused pass in M1 if 100MB/s matters for
-  user-facing export-time promises.
+- **Faststart output in one pass is affordable, both time- and throughput-wise, for
+  realistic multi-GB exports.** Pass-1 (moov build) time scales with the number of
+  samples in the selection, not a flat constant: ~24ms for a tiny 8,774-sample
+  selection (166MB output) up to ~1.4–1.6s for a 552,830-sample selection (10.39GB
+  output) — still a small fraction of total export time even at the largest tested
+  scale. Throughput scales with export size too: the 1.1–1.3GB near-start range settled
+  at 91.1–92.0MB/s (~8–9% short of the spec's 100MB/s bar), but the 10.39GB mid-file
+  export hit 134.9–163.0MB/s, comfortably clearing it. Only small-output trims
+  (166MB last-frame clip: 18.77MB/s) are meaningfully throughput-constrained, which
+  matters for progress-estimate accuracy on short trims but not for this product's
+  primary use case (trimming large files). If closing the small-export gap matters,
+  overlapping read and write (pipelining) is the next lever — both tested window sizes
+  above 4MB plateaued, so it isn't bigger buffers.
 
 ## 4. Constants for M1
 
@@ -145,9 +162,12 @@ thumbnail atlas both completed with real, actionable findings.
   this cache (18,210 frames actually decoded to fill 600 slots — a ~30:1 decode-to-keep
   ratio inherent to needing every intervening frame, not a bug). This must happen
   progressively / in the background, never as a blocking operation before first scrub.
-- **Expected export throughput for progress estimation: ~91–92MB/s** — use this measured
-  number, not the original 100MB/s target, for user-facing time estimates until the
-  pipelining work above closes the gap.
+- **Expected export throughput for progress estimation scales with export size.**
+  Use ~135–163MB/s for multi-GB exports (10.39GB real test), ~91–92MB/s for ~1GB-class
+  exports, and expect meaningfully worse (~19MB/s observed) for very small (<200MB)
+  trims — a flat single number will misestimate progress at one end of the range or the
+  other. If a single conservative number is needed, ~90MB/s is safe for anything above
+  ~1GB.
 - **Frame lifecycle discipline is entirely the caller's responsibility.** WebCodecs
   provides no backpressure or safety net for forgotten `frame.close()` calls (confirmed:
   linear ~11–13MB/frame growth with zero thrown errors up to 800 unclosed 4K frames /
@@ -167,19 +187,25 @@ thumbnail atlas both completed with real, actionable findings.
   truncated with partial content, matching (with one correction: the target isn't
   literally absent, since `showSaveFilePicker` already reserved that directory entry)
   the code's original transactional-write hypothesis.
-- **Spike A: incomplete confirmation of the "3 export ranges" requirement** (near-start,
-  mid-file, ending at the very last frame). ffprobe/ffmpeg structural comparison passed
-  cleanly for the range(s) that were tested, but I don't have confirmation all three —
-  especially the last-frame truncation edge case — were exercised.
+- **Spike A: the "3 export ranges" requirement is now 2/3 confirmed.** Near-start
+  (0-210s window, 5 real runs) and last-frame (in=4200s, out requested past the true
+  file end at 99,999,999s — correctly clamped to the actual last frame at 4225.75s)
+  both pass ffprobe/ffmpeg structural comparison cleanly: the last-frame range matched
+  the ffmpeg reference's video frame count exactly (1544 = 1544) and decoded with zero
+  errors. Mid-file (in=1200s, out=2820s) exported successfully (10.39GB, 162.97MB/s,
+  8.76MB heap growth) but its ffprobe/ffmpeg structural comparison is still pending a
+  re-export under a distinct filename (the first successful mid-file export was
+  overwritten by the last-frame export before it could be inspected).
 - **Spike A: literal human playback confirmation in VLC and QuickTime** (not just
-  Chrome/ffprobe) was flagged mid-session as still needing a human with the actual
-  browser/file, with no later confirmation found that it happened.
-- **Spike A: the write-side 64-bit `largesize` path** (output `mdat` > 4.29GB) was
-  implemented per the spec's explicit instruction, but the evidenced test export ranges
-  were all under ~1.1GB. No confirmation this path was deliberately exercised with a
-  real >4.29GB export — only that the read-side equivalent (parsing the 27GB source's
-  own `moov`) was. Matters specifically because a long 4K export can plausibly exceed
-  4.29GB; should be tested deliberately before launch, not carried as an assumption.
+  Chrome/ffprobe) — the last-frame export was confirmed to "play perfectly" by the user,
+  though it's not stated whether that check was in VLC/QuickTime specifically or just
+  the browser. Mid-file playback confirmation is still pending re-export.
+- ~~Spike A: the write-side 64-bit `largesize` path was never deliberately exercised
+  with a real >4.29GB export~~ — **CLOSED**: confirmed via the 1200-2820s mid-file
+  export (10,393,802,406 bytes / 10.39GB). Directly inspected the output file's `mdat`
+  box header: `size32=1` (the largesize marker) with `size64=10,388,027,510`, and
+  `ftyp(32) + moov(5,774,864) + mdat(10,388,027,510) = 10,393,802,406` matches the file
+  size on disk exactly. The write-side path works correctly on a real >4.29GB export.
 - **Spike C: the cache-backed scrub memory footprint** (item 3's "report the memory held
   by 600 cached ImageBitmaps") could only be estimated theoretically (~131.8MB raw
   RGBA), not measured — `performance.memory.usedJSHeapSize` does not count
@@ -198,8 +224,10 @@ thumbnail atlas both completed with real, actionable findings.
 - **All measurements come from one machine** (M1 Max, fast NVMe SSD, per the
   carried-forward M0 context) running Chrome. Numbers most likely to degrade on slower
   storage or weaker hardware:
-  - **Remux export throughput (91–92MB/s)** — directly disk-I/O-bound, would scale down
-    roughly with storage read/write bandwidth on a slower drive.
+  - **Remux export throughput (91–163MB/s depending on export size)** — directly
+    disk-I/O-bound, would scale down roughly with storage read/write bandwidth on a
+    slower drive; the size-dependence itself (small exports underperform) may also
+    shift on different storage.
   - **Cache build time (27.1s for a 600-frame/5-min window)** — bound by decode
     throughput. Software decode was ~4x slower than hardware in this session's own
     measurements (9.8–9.9/sec vs. 42.2–42.5/sec on the 27GB file), so a machine without
