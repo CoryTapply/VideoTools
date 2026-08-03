@@ -55,6 +55,24 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
   // FOREVER (a real 4+ minute hang was observed, not just slowness). Per the WebCodecs spec,
   // once error() fires the decoder is closed and nothing pending will ever get output, so
   // reject everything currently queued, not just the one that failed.
+  const config: VideoDecoderConfig = {
+    codec: decoderConfig.codec,
+    codedWidth: decoderConfig.codedWidth,
+    codedHeight: decoderConfig.codedHeight,
+    description: decoderConfig.description,
+    hardwareAcceleration,
+  };
+  // Diagnostic: ask the browser directly whether it accepts this exact config, BEFORE any
+  // decode-queue complexity, since a real 4+ minute silent stall (fixed to a 10s timeout, but
+  // still failing identically on frame 0 in both hardware and software modes) points at
+  // something wrong with the config or the first chunk's data rather than decoder scheduling.
+  try {
+    const support = await VideoDecoder.isConfigSupported(config);
+    errors.push(`isConfigSupported: supported=${support.supported}, config=${JSON.stringify(support.config)}`);
+  } catch (err) {
+    errors.push(`isConfigSupported threw: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   let pending: Array<{ resolve: (frame: VideoFrame) => void; reject: (err: Error) => void }> = [];
   const decoder = new VideoDecoder({
     output(frame) {
@@ -63,19 +81,13 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
       else frame.close(); // shouldn't happen; don't leak if it does
     },
     error(err) {
-      errors.push(String(err));
+      errors.push(`decoder error: ${String(err)}`);
       const failed = pending;
       pending = [];
       for (const entry of failed) entry.reject(err instanceof Error ? err : new Error(String(err)));
     },
   });
-  decoder.configure({
-    codec: decoderConfig.codec,
-    codedWidth: decoderConfig.codedWidth,
-    codedHeight: decoderConfig.codedHeight,
-    description: decoderConfig.description,
-    hardwareAcceleration,
-  });
+  decoder.configure(config);
 
   const t0 = performance.now();
 
@@ -91,13 +103,23 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
       const chunk = new EncodedVideoChunk({ type: 'key', timestamp: target.timestampUs, data: bytes });
       const framePromise = new Promise<VideoFrame>((resolve, reject) => pending.push({ resolve, reject }));
       decoder.decode(chunk);
+      const stateAfterDecode = decoder.state;
+      const queueSizeAfterDecode = decoder.decodeQueueSize;
       // Hard safety net: even if error() never fires (a truly silent stall, not just a
       // reported error), don't hang forever -- surface it as a clear timeout instead. This is
       // what should have caught the real 4+ minute hang instead of leaving it silent.
       const timeoutMs = 10_000;
       let timeoutHandle: ReturnType<typeof setTimeout>;
       const timeout = new Promise<VideoFrame>((_, reject) => {
-        timeoutHandle = setTimeout(() => reject(new Error(`decode timed out after ${timeoutMs}ms (offset=${target.offset}, size=${target.size})`)), timeoutMs);
+        timeoutHandle = setTimeout(() => {
+          reject(
+            new Error(
+              `decode timed out after ${timeoutMs}ms (offset=${target.offset}, size=${target.size}, ` +
+                `decoder.state right after decode()=${stateAfterDecode}, decodeQueueSize right after=${queueSizeAfterDecode}, ` +
+                `decoder.state now=${decoder.state}, decodeQueueSize now=${decoder.decodeQueueSize})`,
+            ),
+          );
+        }, timeoutMs);
       });
       let frame: VideoFrame;
       try {
