@@ -207,14 +207,16 @@ warmScrubBtn.addEventListener('click', () => {
     warmScrubLog.textContent = '';
     try {
       const stepCount = Number(warmStepCountInput.value) || 30;
-      wlog(`simulating ${stepCount} forward scrub stops with a single warm decoder`);
 
-      const report = await runWarmScrubLatency(currentFile, videoTrack, stepCount, 'prefer-hardware');
-      wlog(`first stop (cold, restart-from-keyframe): ${report.firstStopLatencyMs.toFixed(0)}ms`);
-      logDistribution('subsequent stops (warm, no restart)', report.incremental);
-      wlog(`  arrived progressively (before the single trailing flush): ${report.incrementalArrivedProgressivelyCount}/${report.incrementalTotalCount}`);
-      if (report.raw.errors.length > 0) wlog(`  worker errors: ${JSON.stringify(report.raw.errors)}`);
-      wlog(`\nframe counts per stop (samples decoded since previous stop): ${JSON.stringify(report.raw.frameCounts)}`);
+      for (const hwAccel of ['prefer-hardware', 'prefer-software'] as const) {
+        wlog(`\n=== ${hwAccel}: simulating ${stepCount} forward scrub stops with a single warm decoder ===`);
+        const report = await runWarmScrubLatency(currentFile, videoTrack, stepCount, hwAccel);
+        wlog(`first stop (cold, restart-from-keyframe): ${report.firstStopLatencyMs.toFixed(0)}ms`);
+        logDistribution('subsequent stops (warm, no restart)', report.incremental);
+        wlog(`  arrived progressively (before the single trailing flush): ${report.incrementalArrivedProgressivelyCount}/${report.incrementalTotalCount}`);
+        if (report.raw.errors.length > 0) wlog(`  worker errors: ${JSON.stringify(report.raw.errors)}`);
+        wlog(`  frame counts per stop (samples decoded since previous stop): ${JSON.stringify(report.raw.frameCounts)}`);
+      }
     } catch (err) {
       wlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
