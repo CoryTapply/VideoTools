@@ -76,10 +76,9 @@ originally flagged against this spike has since closed with real data:
 - The write-side 64-bit `largesize` path is confirmed correct on a real >4.29GB export:
   the 10.39GB mid-file output's `mdat` box header was directly inspected (`size32=1`,
   `size64=10,388,027,510`), and `ftyp+moov+mdat` sums to the exact file size on disk.
-- 2 of the 3 required export ranges (near-start, last-frame) have a full ffprobe/ffmpeg
-  structural comparison; the 3rd (mid-file) exported reproducibly, played correctly in
-  all 3 players, and had its `mdat` header directly verified — only the redundant
-  automated frame-count-vs-reference check was still finishing at the time of writing.
+- All 3 required export ranges (near-start, mid-file, last-frame) have a full
+  ffprobe/ffmpeg structural comparison passing, plus (mid-file) reproducible exports,
+  confirmed playback in all 3 players, and a directly-verified `mdat` header.
 
 ### Spike B — index at scale: **GO**
 
@@ -194,17 +193,17 @@ thumbnail atlas both completed with real, actionable findings.
   truncated with partial content, matching (with one correction: the target isn't
   literally absent, since `showSaveFilePicker` already reserved that directory entry)
   the code's original transactional-write hypothesis.
-- **Spike A: the "3 export ranges" requirement is 2/3 confirmed via ffprobe/ffmpeg,
-  with the 3rd (mid-file) re-exported and its structural comparison in progress.**
-  Near-start (0-210s window, 5 real runs) and last-frame (in=4200s, out requested past
-  the true file end at 99,999,999s — correctly clamped to the actual last frame at
-  4225.75s) both pass cleanly: the last-frame range matched the ffmpeg reference's
-  video frame count exactly (1544 = 1544) and decoded with zero errors. Mid-file
-  (in=1200s, out=2820s, 10.39GB) exported successfully twice (reproducible: 162.97MB/s
-  and 134.94MB/s across two runs, 8.76-8.88MB heap growth) and its output file's `mdat`
-  header was directly verified to use the 64-bit largesize form correctly (see below);
-  its ffprobe/ffmpeg structural comparison was still running (full frame-count decode
-  on a 27-minute 4K clip is slow) as of this writing.
+- ~~Spike A: the "3 export ranges" requirement was only 2/3 confirmed via
+  ffprobe/ffmpeg~~ — **CLOSED**: all three now have a full structural comparison
+  passing. Near-start (0-210s window, 5 real runs): 1-frame boundary tolerance, clean.
+  Last-frame (in=4200s, out requested past the true file end at 99,999,999s — correctly
+  clamped to the actual last frame at 4225.75s): frame count matched the ffmpeg
+  reference exactly (1544 = 1544), zero decode errors. Mid-file (in=1200s, out=2820s,
+  10.39GB, exported reproducibly twice at 162.97MB/s and 134.94MB/s): frame count
+  97,202 vs. the ffmpeg reference's 97,201 — the same 1-frame boundary tolerance seen
+  everywhere else in this project — and `ffmpeg -f null -` confirms zero decode errors.
+  Its output file's `mdat` header was also directly verified to use the 64-bit
+  largesize form correctly (see below).
 - ~~Spike A: literal human playback confirmation in VLC and QuickTime~~ — **CLOSED**:
   both the last-frame and mid-file exports were confirmed by the user to play correctly
   in VLC, QuickTime Player, and Chrome.
@@ -245,10 +244,8 @@ thumbnail atlas both completed with real, actionable findings.
   - **Index build time (107.1ms) and query latency (tens-to-hundreds of ns/op)** are
     CPU/memory-bound rather than disk-bound and should be comparatively
     storage-independent, though a slower CPU would still scale these up somewhat.
-- **Launch-blocker assessment:** every gap originally flagged here is now closed or
-  effectively closed. Heap growth, abort behavior, VLC/QuickTime/Chrome playback, and
-  the write-side >4.29GB `largesize` path are all confirmed fine with real data. Two of
-  three required export ranges have a full ffprobe/ffmpeg structural comparison; the
-  third (mid-file) exported and played correctly and its `mdat` header was directly
-  verified, with only the automated structural comparison still finishing at the time
-  of writing. Nothing here remains a plausible launch blocker for Spike A.
+- **Launch-blocker assessment:** every gap originally flagged here is now fully closed.
+  Heap growth, abort behavior, VLC/QuickTime/Chrome playback, the write-side >4.29GB
+  `largesize` path, and all 3 required export ranges (each with a passing
+  ffprobe/ffmpeg structural comparison) are confirmed fine with real data. Nothing here
+  remains a plausible launch blocker for Spike A.
