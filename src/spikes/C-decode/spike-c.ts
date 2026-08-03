@@ -108,6 +108,15 @@ throughputBtn.addEventListener('click', () => {
 
       const coalesced = await runKeyframeThroughput(currentFile, videoTrack, targets, 'prefer-hardware', 4 * 1024 * 1024);
       logResult('\nprefer-hardware, 4MB-window coalesced reads', coalesced);
+
+      // Batched/pipelined: submit several decode() calls before a single flush() drains them,
+      // instead of flushing after every individual decode (full serialization). Tests whether
+      // the decoder can work on independent keyframes concurrently for real throughput gains,
+      // since sequential (batchSize=1) landed just under the spec's ~50/sec bar.
+      for (const batchSize of [4, 8, 16]) {
+        const batched = await runKeyframeThroughput(currentFile, videoTrack, targets, 'prefer-hardware', undefined, batchSize);
+        logResult(`\nprefer-hardware, batchSize=${batchSize}`, batched);
+      }
     } catch (err) {
       tlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {

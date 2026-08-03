@@ -28,6 +28,18 @@ export interface KeyframeThroughputRequest {
   hardwareAcceleration: 'prefer-hardware' | 'prefer-software' | 'no-preference';
   /** If set, each read is widened to at least this many bytes (starting at the target's offset) instead of reading exactly target.size, to test whether rounder/bigger reads change per-call I/O overhead. */
   coalesceWindowBytes?: number;
+  /**
+   * Number of decode() calls submitted before a single flush() drains the batch, instead of
+   * flushing after every individual decode (default 1 -- fully serialized, matches the spec's
+   * literal step-by-step description). flush() is REQUIRED at least once per batch: this
+   * decoder implementation does not emit output for a queued decode() otherwise (confirmed via
+   * a from-scratch main-thread test -- a single decode() with no flush() hung indefinitely,
+   * no output(), no error(), despite a config independently confirmed valid via
+   * isConfigSupported). A batchSize > 1 tests whether letting the decoder work on several
+   * independent keyframes concurrently before forcing drainage improves real throughput over
+   * full per-frame serialization.
+   */
+  batchSize?: number;
 }
 
 export interface KeyframeThroughputResult {
@@ -45,7 +57,7 @@ self.onmessage = (e: MessageEvent<KeyframeThroughputRequest>) => {
 };
 
 async function run(req: KeyframeThroughputRequest): Promise<void> {
-  const { file, decoderConfig, targets, hardwareAcceleration, coalesceWindowBytes } = req;
+  const { file, decoderConfig, targets, hardwareAcceleration, coalesceWindowBytes, batchSize = 1 } = req;
   const errors: string[] = [];
   let readMs = 0;
   let decodeMs = 0;
@@ -103,68 +115,65 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
   const t0 = performance.now();
 
   try {
-    for (const target of targets) {
-      const rt0 = performance.now();
-      const readEnd = coalesceWindowBytes ? Math.max(target.offset + target.size, target.offset + coalesceWindowBytes) : target.offset + target.size;
-      const raw = await file.slice(target.offset, readEnd).arrayBuffer();
-      const rawBytes = coalesceWindowBytes ? new Uint8Array(raw, 0, target.size) : new Uint8Array(raw);
-      readMs += performance.now() - rt0;
+    for (let batchStart = 0; batchStart < targets.length; batchStart += batchSize) {
+      const batch = targets.slice(batchStart, batchStart + batchSize);
+      const framePromises: Promise<VideoFrame>[] = [];
 
-      // Real finding: this file's keyframes carry in-band SPS/PPS/SEI NAL units ahead of the
-      // IDR slice (confirmed by manually parsing sample 0's raw bytes), which appears to stall
-      // Chrome's VideoDecoder when it was already configured with the same parameter sets via
-      // `description`. Strip them, keeping only the actual VCL slice data.
-      const { result: bytes, nalTypesSeen, stripped } = stripNonVclNals(rawBytes);
-      if (completed === 0) errors.push(`first chunk NAL types seen: [${nalTypesSeen.join(', ')}], stripped=${stripped}, resulting size=${bytes.byteLength} (was ${rawBytes.byteLength})`);
+      // Submit every decode() in the batch WITHOUT waiting for individual output, so the
+      // decoder can work on them concurrently if it's able to -- only flush() once per batch.
+      for (const target of batch) {
+        const rt0 = performance.now();
+        const readEnd = coalesceWindowBytes ? Math.max(target.offset + target.size, target.offset + coalesceWindowBytes) : target.offset + target.size;
+        const raw = await file.slice(target.offset, readEnd).arrayBuffer();
+        const rawBytes = coalesceWindowBytes ? new Uint8Array(raw, 0, target.size) : new Uint8Array(raw);
+        readMs += performance.now() - rt0;
 
+        // Real finding: this file's keyframes carry in-band SPS/PPS/SEI NAL units ahead of the
+        // IDR slice (confirmed by manually parsing sample 0's raw bytes), which appears to
+        // stall this decoder when it was already configured with the same parameter sets via
+        // `description`. Strip them, keeping only the actual VCL slice data.
+        const { result: bytes, nalTypesSeen, stripped } = stripNonVclNals(rawBytes);
+        if (completed === 0) errors.push(`first chunk NAL types seen: [${nalTypesSeen.join(', ')}], stripped=${stripped}, resulting size=${bytes.byteLength} (was ${rawBytes.byteLength})`);
+
+        const chunk = new EncodedVideoChunk({ type: 'key', timestamp: target.timestampUs, data: bytes });
+        const framePromise = new Promise<VideoFrame>((resolve, reject) => pending.push({ resolve, reject }));
+        framePromises.push(framePromise);
+        decoder.decode(chunk);
+      }
+
+      // Real finding: this VideoDecoder implementation does not emit output for queued
+      // decode() calls until flush() explicitly forces drainage -- confirmed via a
+      // from-scratch main-thread test where a single decode() with no flush() hung
+      // indefinitely (no output(), no error()) despite a config independently confirmed valid
+      // by isConfigSupported. flush() is required at least once per batch.
       const dt0 = performance.now();
-      const chunk = new EncodedVideoChunk({ type: 'key', timestamp: target.timestampUs, data: bytes });
-      const framePromise = new Promise<VideoFrame>((resolve, reject) => pending.push({ resolve, reject }));
-      decoder.decode(chunk);
-      // Real finding (confirmed via a from-scratch main-thread diagnostic, not just this worker):
-      // this VideoDecoder implementation does not emit output for a queued decode() until
-      // flush() explicitly forces drainage -- a single decode() with no flush() hung
-      // indefinitely (no output(), no error()) even with a config independently confirmed valid
-      // by isConfigSupported. Since every keyframe here is fully independent (no benefit to
-      // cross-frame pipelining for this measurement), flushing after each decode is the correct
-      // fix, not just a workaround.
-      void decoder.flush();
-      const stateAfterDecode = decoder.state;
-      const queueSizeAfterDecode = decoder.decodeQueueSize;
-      // Hard safety net: even if error() never fires (a truly silent stall, not just a
-      // reported error), don't hang forever -- surface it as a clear timeout instead. This is
-      // what should have caught the real 4+ minute hang instead of leaving it silent.
-      const timeoutMs = 10_000;
+      const timeoutMs = 10_000 * batch.length;
       let timeoutHandle: ReturnType<typeof setTimeout>;
-      const timeout = new Promise<VideoFrame>((_, reject) => {
+      const timeout = new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {
-          reject(
-            new Error(
-              `decode timed out after ${timeoutMs}ms (offset=${target.offset}, size=${target.size}, ` +
-                `decoder.state right after decode()=${stateAfterDecode}, decodeQueueSize right after=${queueSizeAfterDecode}, ` +
-                `decoder.state now=${decoder.state}, decodeQueueSize now=${decoder.decodeQueueSize})`,
-            ),
-          );
+          reject(new Error(`batch flush timed out after ${timeoutMs}ms (batchStart=${batchStart}, batchSize=${batch.length}, decoder.state=${decoder.state}, decodeQueueSize=${decoder.decodeQueueSize})`));
         }, timeoutMs);
       });
-      let frame: VideoFrame;
       try {
-        frame = await Promise.race([framePromise, timeout]);
+        await Promise.race([decoder.flush(), timeout]);
       } finally {
         clearTimeout(timeoutHandle!);
       }
       decodeMs += performance.now() - dt0;
 
-      const st0 = performance.now();
-      const bitmapPromise = createImageBitmap(frame, { resizeWidth: 160, resizeHeight: 90 });
-      frame.close();
-      const bitmap = await bitmapPromise;
-      bitmap.close();
-      downscaleMs += performance.now() - st0;
-
-      completed += 1;
+      // By the time flush() resolves, output() (or error(), already handled above) has fired
+      // for every chunk in the batch, so these awaits resolve immediately.
+      for (const framePromise of framePromises) {
+        const frame = await framePromise;
+        const st0 = performance.now();
+        const bitmapPromise = createImageBitmap(frame, { resizeWidth: 160, resizeHeight: 90 });
+        frame.close();
+        const bitmap = await bitmapPromise;
+        bitmap.close();
+        downscaleMs += performance.now() - st0;
+        completed += 1;
+      }
     }
-    await decoder.flush();
   } catch (err) {
     errors.push(err instanceof Error ? err.message : String(err));
   } finally {

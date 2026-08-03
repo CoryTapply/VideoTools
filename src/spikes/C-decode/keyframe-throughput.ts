@@ -57,10 +57,11 @@ export async function runKeyframeThroughput(
   targets: DecodeTarget[],
   hardwareAcceleration: 'prefer-hardware' | 'prefer-software' | 'no-preference',
   coalesceWindowBytes?: number,
+  batchSize?: number,
 ): Promise<KeyframeThroughputResult> {
   const decoderConfig = extractAvcDecoderConfig(track);
   const worker = new Worker(new URL('./decode-worker.ts', import.meta.url), { type: 'module' });
-  const request: KeyframeThroughputRequest = { file, decoderConfig, targets, hardwareAcceleration, coalesceWindowBytes };
+  const request: KeyframeThroughputRequest = { file, decoderConfig, targets, hardwareAcceleration, coalesceWindowBytes, batchSize };
   const result = await new Promise<KeyframeThroughputResult>((resolve, reject) => {
     worker.onmessage = (e: MessageEvent<KeyframeThroughputResult>) => resolve(e.data);
     worker.onerror = (e) => reject(new Error(e.message));
