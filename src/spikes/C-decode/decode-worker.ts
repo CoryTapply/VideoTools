@@ -66,9 +66,18 @@ async function run(req: KeyframeThroughputRequest): Promise<void> {
   // decode-queue complexity, since a real 4+ minute silent stall (fixed to a 10s timeout, but
   // still failing identically on frame 0 in both hardware and software modes) points at
   // something wrong with the config or the first chunk's data rather than decoder scheduling.
+  // NOTE: JSON.stringify on an ArrayBuffer/TypedArray-as-received-here can misleadingly print
+  // "{}" regardless of actual content (ArrayBuffer has no enumerable own properties for JSON to
+  // see) -- log byteLength explicitly instead of trusting a JSON dump of the config.
+  errors.push(
+    `description received by worker: byteLength=${decoderConfig.description.byteLength}, ` +
+      `first 8 bytes=${Array.from(decoderConfig.description.slice(0, 8))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join(' ')}`,
+  );
   try {
     const support = await VideoDecoder.isConfigSupported(config);
-    errors.push(`isConfigSupported: supported=${support.supported}, config=${JSON.stringify(support.config)}`);
+    errors.push(`isConfigSupported: supported=${support.supported}, description.byteLength=${support.config?.description?.byteLength}`);
   } catch (err) {
     errors.push(`isConfigSupported threw: ${err instanceof Error ? err.message : String(err)}`);
   }
