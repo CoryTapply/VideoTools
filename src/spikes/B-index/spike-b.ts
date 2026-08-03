@@ -17,9 +17,11 @@ root.innerHTML = `
 
   <hr />
   <label>random samples to byte-check per track: <input type="number" id="randomCount" value="1000" /></label><br />
-  <label><input type="checkbox" id="useStreamReader" checked />
-    BlobSource useStreamReader (uncheck to test the slower fallback path -- see notes if memory
-    balloons well after the operation visibly finishes)
+  <label><input type="checkbox" id="useStreamReader" />
+    BlobSource useStreamReader (OFF by default -- confirmed on the 27GB fixture in Chrome:
+    the default true path grows tab memory to 3.2GB immediately and 9GB ~30s after the
+    operation visibly finishes, vs. false's 600MB peak returning to baseline with nothing
+    delayed, AND ~28% faster. Check this box only to reproduce/compare against the bug.)
   </label><br /><br />
   <button id="correctnessBtn" disabled>2. Correctness cross-check vs mediabunny</button>
   <pre id="correctnessLog"></pre>
