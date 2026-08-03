@@ -153,6 +153,11 @@ mainThreadBtn.addEventListener('click', () => {
         });
         const chunk = new EncodedVideoChunk({ type: 'key', timestamp: target.timestampUs, data: bytes });
         decoder.decode(chunk);
+        // Hypothesis: some decoder implementations pipeline/batch internally and won't emit
+        // ANY output until flush() explicitly forces drainage -- worth testing directly, since
+        // every prior test only called flush() after the whole loop finished, never right after
+        // a single decode().
+        void decoder.flush().then(() => mlog('flush() resolved'));
         setTimeout(() => resolve(`TIMEOUT after 10000ms (decoder.state=${decoder.state}, decodeQueueSize=${decoder.decodeQueueSize})`), 10_000);
       });
       mlog(outcome);
