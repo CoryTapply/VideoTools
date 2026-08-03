@@ -5,6 +5,7 @@ import { buildMp4Index, type Mp4Index, type StageTimings } from '../A-remux/mp4-
 import { checkCorrectness } from './mediabunny-check';
 import { runQueryBenchmarks } from './queries';
 import { benchTransferables, benchSharedArrayBuffer } from './worker-transfer';
+import { reportVfr } from './vfr-report';
 
 const root = document.getElementById('app')!;
 root.innerHTML = `
@@ -40,6 +41,10 @@ root.innerHTML = `
   <hr />
   <button id="workerBtn" disabled>5. Worker transfer (transferables vs SharedArrayBuffer)</button>
   <pre id="workerLog"></pre>
+
+  <hr />
+  <button id="vfrBtn" disabled>6. VFR report (video track)</button>
+  <pre id="vfrLog"></pre>
 `;
 
 const fileInput = root.querySelector<HTMLInputElement>('#file')!;
@@ -56,6 +61,8 @@ const queryBtn = root.querySelector<HTMLButtonElement>('#queryBtn')!;
 const queryLog = root.querySelector<HTMLPreElement>('#queryLog')!;
 const workerBtn = root.querySelector<HTMLButtonElement>('#workerBtn')!;
 const workerLog = root.querySelector<HTMLPreElement>('#workerLog')!;
+const vfrBtn = root.querySelector<HTMLButtonElement>('#vfrBtn')!;
+const vfrLog = root.querySelector<HTMLPreElement>('#vfrLog')!;
 
 const ilog = (msg: string): void => {
   indexLog.textContent += `${msg}\n`;
@@ -72,6 +79,9 @@ const qlog = (msg: string): void => {
 const wlog = (msg: string): void => {
   workerLog.textContent += `${msg}\n`;
 };
+const vlog = (msg: string): void => {
+  vfrLog.textContent += `${msg}\n`;
+};
 
 let currentFile: File | undefined;
 let currentIndex: Mp4Index | undefined;
@@ -84,6 +94,7 @@ fileInput.addEventListener('change', () => {
   scaleBtn.disabled = true;
   queryBtn.disabled = true;
   workerBtn.disabled = true;
+  vfrBtn.disabled = true;
 });
 
 // --- 1. build index ---
@@ -103,6 +114,7 @@ buildIndexBtn.addEventListener('click', () => {
       scaleBtn.disabled = false;
       queryBtn.disabled = false;
       workerBtn.disabled = false;
+      vfrBtn.disabled = false;
     } catch (err) {
       ilog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -282,4 +294,27 @@ workerBtn.addEventListener('click', () => {
       workerBtn.disabled = false;
     }
   })();
+});
+
+// --- 6. VFR report: is it safe to assume a fixed frame rate? (spec: "no" for vfr-screen.mp4) ---
+vfrBtn.addEventListener('click', () => {
+  if (!currentIndex) return;
+  vfrLog.textContent = '';
+  try {
+    const videoTrack = currentIndex.tracks.find((t) => t.handlerType === 'vide');
+    if (!videoTrack) {
+      vlog('no video track found');
+      return;
+    }
+    const report = reportVfr(videoTrack);
+    vlog(`samples: ${report.sampleCount}`);
+    vlog(`constant duration: ${report.constant} (${report.distinctDurationCount} distinct durations seen)`);
+    vlog(`min/median/max duration: ${(report.minDurationSec * 1000).toFixed(2)}ms / ${(report.medianDurationSec * 1000).toFixed(2)}ms / ${(report.maxDurationSec * 1000).toFixed(2)}ms`);
+    vlog(`implied nominal fps (from most common duration): ${report.impliedNominalFps.toFixed(2)}`);
+    vlog(`true average fps (samples / total duration): ${report.averageFps.toFixed(2)}`);
+    const gapPct = (100 * Math.abs(report.impliedNominalFps - report.averageFps)) / report.impliedNominalFps;
+    vlog(`gap between naive nominal-fps assumption and reality: ${gapPct.toFixed(1)}%`);
+  } catch (err) {
+    vlog(`ERROR: ${err instanceof Error ? err.message : String(err)}`);
+  }
 });
