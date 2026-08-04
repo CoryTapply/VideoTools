@@ -25,6 +25,7 @@ export default defineConfig({
         spikeB: 'B-index.html',
         spikeC: 'C-decode.html',
         t0: 'T0-exportcost.html',
+        mediaIndex: 'media-index.html',
       },
     },
   },
