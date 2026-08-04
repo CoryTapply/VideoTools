@@ -176,9 +176,14 @@ export interface BuiltMoov {
   newDurationMovieUnits: number;
 }
 
-/** Pass 1: builds ftyp+moov entirely in memory. Touches only the index -- never reads mdat bytes. */
-export function buildMoov(index: Mp4Index, selection: SelectionResult, ftypBytes: Uint8Array): BuiltMoov {
-  const schedule = planWriteSchedule(selection.ranges);
+/**
+ * Pass 1 core: builds ftyp+moov entirely in memory from a pre-built `schedule`. Touches only the
+ * index -- never reads mdat bytes. Shared by `buildMoov` (per-track ~1s round-robin schedule) and
+ * `buildMoovMerged` (source-offset-order schedule, see the read-amplification fix below) so the
+ * box-building logic (stts/ctts/stsz/stss/stco/stsc) doesn't need to know or care which layout
+ * produced its schedule -- it only depends on `schedule`'s chunk grouping and write order.
+ */
+function buildMoovFromSchedule(index: Mp4Index, selection: SelectionResult, ftypBytes: Uint8Array, schedule: WriteChunk[]): BuiltMoov {
   // mdat's content starts right after ftyp + moov -- moov's size depends on this function's own
   // output, so we build moov TWICE: once to learn its size (using a placeholder mdat start of 0,
   // which affects nothing since stco offsets are relative to a mdatContentStart parameter we
@@ -236,6 +241,16 @@ export function buildMoov(index: Mp4Index, selection: SelectionResult, ftypBytes
     layout: trulyFinal.layout,
     newDurationMovieUnits,
   };
+}
+
+/** Pass 1, per-track ~1s round-robin schedule (original path, unchanged behavior). */
+export function buildMoov(index: Mp4Index, selection: SelectionResult, ftypBytes: Uint8Array): BuiltMoov {
+  return buildMoovFromSchedule(index, selection, ftypBytes, planWriteSchedule(selection.ranges));
+}
+
+/** Pass 1, source-offset-order schedule -- see `planMergedSchedule` / `forEachWindowMerged`. */
+export function buildMoovMerged(index: Mp4Index, selection: SelectionResult, ftypBytes: Uint8Array): BuiltMoov {
+  return buildMoovFromSchedule(index, selection, ftypBytes, planMergedSchedule(selection.ranges));
 }
 
 /** mdat's header only (size+type[+largesize]), sized to match `contentBytes`. */
@@ -307,6 +322,112 @@ export async function forEachWindowCoalesced(
       await onWindow(sampleCount === 1 ? parts[0]! : concatBytes(parts), sampleCount);
       i = j;
     }
+  }
+  return { windowReads, windowBytesRead };
+}
+
+// --- Read-amplification fix (T0-FOLLOWUP.md item 3). Confirmed cause: `forEachWindowCoalesced`
+// above windows each chunk SEPARATELY, and `planWriteSchedule` groups chunks per-track -- so for
+// an N-track fixture, each ~1s span of the source gets its own independent windowed read once per
+// track (7 tracks measured -> 6.5x amplification, near the 7x ceiling). But every track's samples
+// are already physically interleaved in the source at roughly the same offsets for a given time
+// span, and a track's own samples are visited in increasing sampleIdx order regardless of which
+// other tracks' samples sit between them in the file -- so walking ALL selected tracks' samples
+// together, sorted once by source offset, visits the exact same bytes exactly once, and happens to
+// yield samples in very close to the order you'd want to write them anyway. That means output
+// interleaving can simply follow source interleating instead of imposing the ~1s round-robin
+// grouping: a single sequential read maps straight to a single sequential write, no reordering
+// buffer needed at any export size -- `planMergedEntries` below is the only place all tracks'
+// samples are held at once, and it holds only offsets/sizes (typed-array-backed, not sample
+// bytes), not sample data.
+
+export interface MergedEntry {
+  track: TrackIndex;
+  /** decode-order sample index, within `track` */
+  sampleIdx: number;
+  offset: number;
+  size: number;
+}
+
+/** Flattens every selected range across every track into one list, sorted by source byte offset. This is the single source of truth for both the merged schedule (stco/stsc grouping, below) and the merged copy loop (forEachWindowMerged) -- both derive from this exact order, so moov's declared byte layout and the copy loop's actual write order can never disagree. */
+export function planMergedEntries(ranges: SampleRange[]): MergedEntry[] {
+  const entries: MergedEntry[] = [];
+  for (const range of ranges) {
+    const { track } = range;
+    for (let i = range.startIdx; i <= range.endIdx; i += 1) {
+      entries.push({ track, sampleIdx: i, offset: track.offset[i]!, size: track.size[i]! });
+    }
+  }
+  entries.sort((a, b) => a.offset - b.offset);
+  return entries;
+}
+
+/**
+ * Groups `planMergedEntries`' source-offset-sorted flat list into maximal same-track,
+ * contiguous-sampleIdx runs. Reuses the existing `WriteChunk` shape so `buildMoovFromSchedule`'s
+ * box-building (buildStts/buildStsz/buildStcoAndStsc/...) works completely unchanged -- it only
+ * ever consumes a `WriteChunk[]` and doesn't know or care whether the chunks came from a ~1s
+ * round-robin grouping or a source-offset merge. Runs are typically short (a handful of samples)
+ * since tracks interleave tightly in the source, which grows stco/stsc somewhat (more, smaller
+ * chunks) -- bounded by total sample count, negligible next to pass-1's existing per-sample cost.
+ */
+export function planMergedSchedule(ranges: SampleRange[]): WriteChunk[] {
+  const entries = planMergedEntries(ranges);
+  const schedule: WriteChunk[] = [];
+  for (const e of entries) {
+    const last = schedule[schedule.length - 1];
+    if (last && last.track === e.track && last.endIdx === e.sampleIdx - 1) {
+      last.endIdx = e.sampleIdx;
+    } else {
+      schedule.push({ track: e.track, startIdx: e.sampleIdx, endIdx: e.sampleIdx });
+    }
+  }
+  return schedule;
+}
+
+/**
+ * Merged single-pass copy: walks every selected track's samples together in source-offset order
+ * (via `planMergedEntries`), coalescing into `windowBytes` windows that may freely span multiple
+ * tracks, and invokes `onWindow` once per window with the needed bytes concatenated in that same
+ * order -- which is also the exact output write order `planMergedSchedule` assumed when it laid
+ * out stco/stsc, so no reordering happens anywhere in this path. Dropping tracks (e.g. exporting a
+ * single audio track) works with no special case: `ranges` simply has fewer/other tracks in it,
+ * and this still walks whatever's left in one pass.
+ */
+export async function forEachWindowMerged(
+  file: File,
+  ranges: SampleRange[],
+  windowBytes: number,
+  onWindow: (bytes: Uint8Array, sampleCount: number) => Promise<void>,
+): Promise<CoalescedReadStats> {
+  const entries = planMergedEntries(ranges);
+  let windowReads = 0;
+  let windowBytesRead = 0;
+  let i = 0;
+  while (i < entries.length) {
+    const windowStart = entries[i]!.offset;
+    let windowEnd = windowStart;
+    let j = i;
+    while (j < entries.length && entries[j]!.offset + entries[j]!.size - windowStart <= windowBytes) {
+      windowEnd = entries[j]!.offset + entries[j]!.size;
+      j += 1;
+    }
+    if (j === i) {
+      // a single sample bigger than the window -- read it directly, can't coalesce further
+      windowEnd = entries[i]!.offset + entries[i]!.size;
+      j = i + 1;
+    }
+    const windowBuf = new Uint8Array(await file.slice(windowStart, windowEnd).arrayBuffer());
+    windowReads += 1;
+    windowBytesRead += windowEnd - windowStart;
+    const sampleCount = j - i;
+    const parts: Uint8Array[] = [];
+    for (let k = i; k < j; k += 1) {
+      const relOffset = entries[k]!.offset - windowStart;
+      parts.push(windowBuf.subarray(relOffset, relOffset + entries[k]!.size));
+    }
+    await onWindow(sampleCount === 1 ? parts[0]! : concatBytes(parts), sampleCount);
+    i = j;
   }
   return { windowReads, windowBytesRead };
 }

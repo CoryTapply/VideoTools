@@ -19,8 +19,13 @@ backfilled from memory.
 - **Spike A (remux + streamed export): GO.** Every fail condition — throughput, export
   heap growth, abort behavior, the write-side 64-bit largesize path, all 3 required
   export ranges, playback in VLC/QuickTime/Chrome — is confirmed clean with real data.
-  Export throughput scales with export size and comfortably clears the 100MB/s bar for
-  this product's actual use case (multi-GB exports); only very small trims are slower.
+  **Correction (see `results/T0-EXPORT-COST.md` / `T0-FOLLOWUP.md`):** the throughput
+  table below was originally read as "scales with export size, small trims are slow."
+  A controlled follow-up diagnosis (3MB–4GB, 5 source positions, warm/cold cache) found
+  the opposite: throughput is flat at **~178MB/s** with a ~13ms fixed cost, comfortably
+  clearing the 100MB/s bar at every size. The one small-trim data point that looked slow
+  (166MB last-frame, 18.77MB/s) does not reproduce and is now attributed to transient
+  system load, not export size — see below and §5.
 - **Spike B (index at scale): GO, no caveats.** Zero correctness mismatches against an
   independent reference implementation. Every quantitative bar (build time, memory,
   query latency) clears with 3–47x margin.
@@ -43,9 +48,10 @@ backfilled from memory.
 | Index build time (27GB, 1,442,030 samples / 7 tracks) | 107.1ms | ≤5s | **PASS** (47x margin) |
 | Index retained bytes (27GB, all tracks) | 41.82MB (41,818,870 B) | ≤150MB | **PASS** |
 | Extrapolated 8hr/60fps (~1.7M samples) retained/build | ~49MB / ~114ms | ≤400MB / — | **PASS** (extrapolated) |
-| Remux export throughput, 1.1–1.3GB near-start range (5 runs) | 91.1–92.0 MB/s | ≥100MB/s | **FAIL** (~8–9% short) |
-| Remux export throughput, 166MB last-frame range | 18.77 MB/s | ≥100MB/s | **FAIL** (fixed overhead dominates at this size) |
+| Remux export throughput, 1.1–1.3GB near-start range (5 runs) | 91.1–92.0 MB/s | ≥100MB/s | **SUPERSEDED** — see below |
+| Remux export throughput, 166MB last-frame range | 18.77 MB/s | ≥100MB/s | **RETRACTED** — see below |
 | Remux export throughput, 10.39GB mid-file range (2 runs) | 134.9–163.0 MB/s | ≥100MB/s | **PASS** (35–63% margin) |
+| **Remux export throughput, controlled re-test (T0: 3MB–4GB, 5 positions)** | **~178MB/s flat, ~13ms fixed cost** | ≥100MB/s | **PASS** (78% margin, every size) |
 | Export JS heap growth (5 real runs, 1MB/4MB/16MB windows) | peak growth 2.0–13.7MB, returns to baseline after close | ≤100MB growth | **PASS** (7–50x margin) |
 | Abort-mid-export result (real run, 1620s mid-file range) | target left as real, unlocked, 0-byte file — never truncated | no truncated/locked file | **PASS** |
 | Keyframe decode rate, 27GB, sequential | 42.2–42.5/sec | ≥50/sec | **FAIL** |
@@ -76,18 +82,24 @@ last-frame range and within a 1-frame boundary tolerance elsewhere, clean multi-
 A/V sync, zero decode errors, confirmed via `scripts/compare-remux.sh`). Every gap
 originally flagged against this spike has since closed with real data:
 
-- Export throughput **scales with export size, and is not a flat number.** The original
-  1.1–1.3GB near-start test range settled at 91.1–92.0 MB/s (below the ~100MB/s bar by
-  ~8–9%) after fixing two real bottlenecks (per-sample reads at 37.0MB/s, then
-  per-sample writes at 56.6MB/s, both fixed via 4MB window coalescing; 16MB windows
-  plateaued with no further gain). But a real 10.39GB mid-file export — much closer to
-  this project's actual target use case (trimming 20GB+ files) — hit **134.9–163.0
-  MB/s**, comfortably clearing the bar. A tiny 166MB last-frame clip, conversely, only
-  managed 18.77 MB/s, suggesting fixed per-export overhead dominates at small sizes and
-  amortizes away as export size grows. Net: **the 100MB/s bar is met for realistic
-  multi-GB exports**; only small-output trims are throughput-constrained, which matters
-  less for this product's actual use case but still affects progress-estimate accuracy
-  for short trims.
+- **Retracted: export throughput does not scale with export size.** This spike's original
+  three-point read (91.1–92.0MB/s near-start, 18.77MB/s on a tiny 166MB last-frame clip,
+  134.9–163.0MB/s on a 10.39GB mid-file export) was interpreted as "throughput scales
+  with size, small exports pay a fixed toll." A dedicated follow-up diagnosis
+  (`results/T0-EXPORT-COST.md`, `results/T0-FOLLOWUP.md`) deliberately decoupled size,
+  source position, and cache state — the three things those three original points varied
+  on simultaneously — and found none of them drives a meaningful difference: throughput
+  is flat at **~178MB/s with a ~13ms fixed cost**, holding from 3MB to 4GB and across all
+  5 source positions tested (R² effectively 1). The per-sample-read/write history (37.0
+  → 56.6 → 91.1MB/s via 4MB coalescing) is real and still the correct account of *that*
+  optimization. What's retracted is the "small exports are throughput-constrained"
+  conclusion drawn from the 166MB/18.77MB/s point: that number does not reproduce (a
+  controlled re-test of the identical byte range got 176.6MB/s, the fastest of 5
+  positions tried), and is now attributed to transient system load — that run started
+  ~11 minutes after two other exports moved a combined 12GB+ through the same pipeline —
+  not to output size. Full analysis in `T0-FOLLOWUP.md` item 1. **Net: the 100MB/s bar
+  is met at every size, not just multi-GB exports**, and progress estimation should use
+  T0's flat-rate model (§4), not a size-dependent one.
 - JS heap growth during export was measured across 5 real runs (peak growth 2.0–13.7MB,
   always returning to baseline after close): a clean pass with 7–50x margin against the
   ~100MB fail bar.
@@ -161,19 +173,24 @@ thumbnail atlas both completed with real, actionable findings.
   frames (up to ~234) on this footage, which is the direct cost driver behind both the
   latency numbers and the decision to snap to keyframes rather than decode arbitrary
   frames on the fly.
-- **Faststart output in one pass is affordable, both time- and throughput-wise, for
-  realistic multi-GB exports.** Pass-1 (moov build) time scales with the number of
-  samples in the selection, not a flat constant: ~24ms for a tiny 8,774-sample
-  selection (166MB output) up to ~1.4–1.6s for a 552,830-sample selection (10.39GB
-  output) — still a small fraction of total export time even at the largest tested
-  scale. Throughput scales with export size too: the 1.1–1.3GB near-start range settled
-  at 91.1–92.0MB/s (~8–9% short of the spec's 100MB/s bar), but the 10.39GB mid-file
-  export hit 134.9–163.0MB/s, comfortably clearing it. Only small-output trims
-  (166MB last-frame clip: 18.77MB/s) are meaningfully throughput-constrained, which
-  matters for progress-estimate accuracy on short trims but not for this product's
-  primary use case (trimming large files). If closing the small-export gap matters,
-  overlapping read and write (pipelining) is the next lever — both tested window sizes
-  above 4MB plateaued, so it isn't bigger buffers.
+- **Faststart output in one pass is affordable at every tested size, not just large
+  exports.** Pass-1 (moov build) time scales with sample count, not a flat constant
+  (~0.5ms at 3MB up to ~674ms at 4GB in the T0 re-test — still under 3% of total time
+  even at the largest size). Throughput is **flat, not size-dependent**: ~178MB/s with a
+  ~13ms fixed cost, holding from 3MB to 4GB (see the retraction note in §2 and
+  `T0-EXPORT-COST.md`) — comfortably clearing the spec's 100MB/s bar everywhere, small
+  trims included. **Fixed since (`T0-FOLLOWUP.md` item 3):** the copy loop originally read
+  ~6.5x more bytes than it wrote on this 7-track fixture — a per-track-pass read pattern,
+  each track independently re-reading the same physically-interleaved source region. A
+  merged single-pass copy loop (source-offset order across all tracks, output
+  interleaving follows source interleaving, no reordering buffer) cuts that to 1.00x and
+  total export time by 1.2–1.9x depending on size, with no correctness regression
+  (re-validated against the same bar as the original Spike A validation) and no unbounded
+  memory growth. This is now the exported functions `buildMoovMerged` /
+  `forEachWindowMerged` in `remux-write.ts`, additive alongside the original
+  `buildMoov`/`forEachWindowCoalesced` (untouched, still what Spike A's own UI calls).
+  Pipelining reads and writes on top of this is still the next lever if more is needed
+  (both tested window sizes above 4MB plateaued, so it isn't bigger buffers either way).
 
 ## 4. Constants for M1
 
@@ -193,12 +210,20 @@ thumbnail atlas both completed with real, actionable findings.
   this cache (18,210 frames actually decoded to fill 600 slots — a ~30:1 decode-to-keep
   ratio inherent to needing every intervening frame, not a bug). This must happen
   progressively / in the background, never as a blocking operation before first scrub.
-- **Expected export throughput for progress estimation scales with export size.**
-  Use ~135–163MB/s for multi-GB exports (10.39GB real test), ~91–92MB/s for ~1GB-class
-  exports, and expect meaningfully worse (~19MB/s observed) for very small (<200MB)
-  trims — a flat single number will misestimate progress at one end of the range or the
-  other. If a single conservative number is needed, ~90MB/s is safe for anything above
-  ~1GB.
+- **Expected export throughput for progress estimation: flat, not size-dependent.**
+  Superseding this section's earlier size-scaled guidance (see the retraction in §2):
+  `total_ms ≈ 13.2 + size_MB / 178.5`, holding from 3MB to 4GB and across all 5 source
+  positions tested (R² effectively 1; see `results/T0-EXPORT-COST.md` §2). For a
+  cold-cache-conservative estimate, multiply by ~1.12. `close()` itself is a real,
+  separate, proportional-to-size phase (~25% of total, ~734MB/s) that runs strictly
+  after all bytes are copied — the progress UI needs an explicit finalizing phase for
+  exports above ~500MB (below that it's imperceptible), not a bar that reads 100% before
+  the file is actually safely committed. Full model and per-size finalizing-phase
+  durations in `T0-EXPORT-COST.md` §8–9. **Superseded for `copy` specifically** by the
+  merged copy loop (`T0-FOLLOWUP.md` item 3c): `copy` is now 1.7–3x faster depending on
+  size (a clean single-line refit wasn't done — see that section for the measured
+  before/after table). `close` is unaffected by that change and its part of the model
+  above still holds as-is.
 - **Frame lifecycle discipline is entirely the caller's responsibility.** WebCodecs
   provides no backpressure or safety net for forgotten `frame.close()` calls (confirmed:
   linear ~11–13MB/frame growth with zero thrown errors up to 800 unclosed 4K frames /
@@ -235,10 +260,11 @@ for the full detail on each. What's still genuinely open:
 - **All measurements come from one machine** (M1 Max, fast NVMe SSD, per the
   carried-forward M0 context) running Chrome. Numbers most likely to degrade on slower
   storage or weaker hardware:
-  - **Remux export throughput (91–163MB/s depending on export size)** — directly
-    disk-I/O-bound, would scale down roughly with storage read/write bandwidth on a
-    slower drive; the size-dependence itself (small exports underperform) may also
-    shift on different storage.
+  - **Remux export throughput (~178MB/s flat, per the T0 re-test — not size-dependent,
+    see the §2 retraction)** — directly disk-I/O-bound, would scale down roughly with
+    storage read/write bandwidth on a slower drive. T0 also found cold-vs-warm OS page
+    cache is only a ~10-15% effect on this NVMe machine; that gap may be larger on
+    slower storage and is worth re-checking if a target device differs significantly.
   - **Cache build time (27.1s for a 600-frame/5-min window)** — bound by decode
     throughput. Software decode was ~4x slower than hardware in this session's own
     measurements (9.8–9.9/sec vs. 42.2–42.5/sec on the 27GB file), so a machine without

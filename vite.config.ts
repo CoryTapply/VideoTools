@@ -24,6 +24,7 @@ export default defineConfig({
         spikeA: 'A-remux.html',
         spikeB: 'B-index.html',
         spikeC: 'C-decode.html',
+        t0: 'T0-exportcost.html',
       },
     },
   },
