@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "mediabunny": "^1.52.2",
     "typescript": "~6.0.2",
     "vite": "^8.2.0"
   }

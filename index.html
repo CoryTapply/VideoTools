@@ -16,5 +16,15 @@
       <li><a href="/spike3-seek-preview.html">spike3: seek preview</a> -- random seek + frame capture latency</li>
       <li><a href="/spike4-remux-trim.html">spike4: remux trim</a> -- byte-range cut cost, no re-encode</li>
     </ul>
+    <p>M0.5 -- see <code>prompts/m0.5-spike-prompts.md</code>:</p>
+    <ul>
+      <li><a href="/A-remux.html">spike A: remux + streamed export</a> -- real trim, sample table rewrite, faststart</li>
+      <li><a href="/B-index.html">spike B: sample index at scale</a> -- full per-sample index, correctness + scale</li>
+      <li><a href="/C-decode.html">spike C: WebCodecs scrub + thumbnails</a> -- arbitrary-frame latency vs &lt;video&gt;</li>
+    </ul>
+    <p>M1 -- see <code>prompts/task-0-export-cost-prompt.md</code>:</p>
+    <ul>
+      <li><a href="/T0-exportcost.html">T0: locate the fixed export cost</a> -- six-stage export timing breakdown</li>
+    </ul>
   </body>
 </html>
