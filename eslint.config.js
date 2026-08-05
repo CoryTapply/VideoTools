@@ -22,7 +22,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/media/index/**/*.ts'],
+    files: ['src/media/index/**/*.ts', 'src/media/playback/**/*.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',

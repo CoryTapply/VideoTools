@@ -12,9 +12,100 @@ import { computeFingerprint } from './fingerprint';
 import { readIndexCache, writeIndexCache } from './opfs-cache';
 import { FileByteSource } from './sources/file-byte-source';
 import type { TrackIndex } from './track-index';
+import { IndexWorkerClient } from './worker-client';
 
 function trackRetainedBytes(t: TrackIndex): number {
   return t.pts.byteLength + t.dts.byteLength + t.offset.byteLength + t.size.byteLength + t.isSync.byteLength;
+}
+
+/** Picks up to `count` random decode-order sample indices per track, deterministic-ish spread across the track. */
+function sampleRandomIndices(sampleCount: number, count: number): number[] {
+  const n = Math.min(count, sampleCount);
+  const out: number[] = [];
+  for (let i = 0; i < n; i += 1) out.push(Math.floor((i / n) * sampleCount) + Math.floor(Math.random() * Math.max(1, Math.floor(sampleCount / n))));
+  return out.map((i) => Math.min(i, sampleCount - 1));
+}
+
+/** Spot-checks a few hundred random samples per track for equality between a main-thread and worker-built TrackIndex. */
+function spotCheckTracksMatch(mainTracks: TrackIndex[], workerTracks: TrackIndex[], log: (msg: string) => void): boolean {
+  if (mainTracks.length !== workerTracks.length) {
+    log(`worker-path MISMATCH: track count ${String(mainTracks.length)} (main) vs ${String(workerTracks.length)} (worker)`);
+    return false;
+  }
+  let allMatch = true;
+  for (const mainTrack of mainTracks) {
+    const workerTrack = workerTracks.find((t) => t.trackId === mainTrack.trackId);
+    if (!workerTrack || workerTrack.sampleCount !== mainTrack.sampleCount) {
+      log(`worker-path MISMATCH: track ${String(mainTrack.trackId)} missing or sampleCount differs`);
+      allMatch = false;
+      continue;
+    }
+    const indices = sampleRandomIndices(mainTrack.sampleCount, 300);
+    let mismatches = 0;
+    for (const i of indices) {
+      if (mainTrack.pts[i] !== workerTrack.pts[i] || mainTrack.dts[i] !== workerTrack.dts[i] || mainTrack.offset[i] !== workerTrack.offset[i] || mainTrack.size[i] !== workerTrack.size[i] || mainTrack.isSync[i] !== workerTrack.isSync[i]) {
+        mismatches += 1;
+      }
+    }
+    if (mismatches > 0) {
+      log(`worker-path MISMATCH: track ${String(mainTrack.trackId)}, ${String(mismatches)}/${String(indices.length)} spot-checked samples differ`);
+      allMatch = false;
+    } else {
+      log(`worker-path OK: track ${String(mainTrack.trackId)}, ${String(indices.length)} spot-checked samples match`);
+    }
+  }
+  return allMatch;
+}
+
+/**
+ * Part 0b: runs the index worker path (src/media/index/worker.ts via IndexWorkerClient) against
+ * the same file already indexed on the main thread. Records which branch (SharedArrayBuffer under
+ * crossOriginIsolated, or a copied ArrayBuffer transferable otherwise -- see worker.ts's
+ * toTransferBuffer) was actually taken, times the 'transferring' phase specifically (not just total
+ * worker time), spot-checks samples against the main-thread build, and confirms two concurrent
+ * readers both complete correctly under the SAB path. Run this page once via `npm run dev` and once
+ * via `npm run dev:coi` to exercise both branches.
+ */
+async function checkWorkerPath(file: File, mainTracks: TrackIndex[], log: (msg: string) => void): Promise<Record<string, unknown>> {
+  log(`worker-path: crossOriginIsolated=${String(crossOriginIsolated)} (expect SharedArrayBuffer branch only when true)`);
+
+  const client = new IndexWorkerClient();
+  let transferStartMs = 0;
+  const t0 = performance.now();
+  const result = await client.index(file, (phase) => {
+    if (phase === 'transferring') transferStartMs = performance.now();
+  });
+  const totalMs = performance.now() - t0;
+  const transferMs = transferStartMs > 0 ? performance.now() - transferStartMs : -1;
+  client.terminate();
+
+  if (!result.ok) {
+    log(`worker-path: index build failed: ${result.error.kind}`);
+    return { workerPathOk: false, workerError: result.error };
+  }
+
+  log(`worker-path: total=${totalMs.toFixed(1)}ms, transfer=${transferMs.toFixed(1)}ms, tracks=${String(result.tracks.length)}`);
+  const spotCheckOk = spotCheckTracksMatch(mainTracks, result.tracks, log);
+
+  // Two simultaneous readers: issue two concurrent .index() calls against the same File and
+  // confirm both complete with matching results -- the configuration task 3 (thumbnails) and task 5
+  // (export) need later.
+  log('worker-path: issuing two concurrent readers...');
+  const clientA = new IndexWorkerClient();
+  const clientB = new IndexWorkerClient();
+  const [resultA, resultB] = await Promise.all([clientA.index(file), clientB.index(file)]);
+  clientA.terminate();
+  clientB.terminate();
+  const concurrentOk = resultA.ok && resultB.ok && spotCheckTracksMatch(mainTracks, resultA.tracks, () => undefined) && spotCheckTracksMatch(mainTracks, resultB.tracks, () => undefined);
+  log(`worker-path: two concurrent readers both completed correctly: ${String(concurrentOk)}`);
+
+  return {
+    workerPathOk: spotCheckOk,
+    workerTotalMs: totalMs,
+    workerTransferMs: transferMs,
+    workerCrossOriginIsolated: crossOriginIsolated,
+    workerConcurrentReadersOk: concurrentOk,
+  };
 }
 
 function cacheKeyFor(fp: { size: number; lastModified: number; headHash: number; tailHash: number }): string {
@@ -77,6 +168,9 @@ mountSpikeHarness(root, 'media/index harness', 'Production parser (src/media/ind
 
   log(`cache write=${writeResult.kind} (${writeMs.toFixed(1)}ms), read=${readResult?.kind ?? 'n/a'} (${readMs.toFixed(1)}ms), roundTripCorrect=${String(roundTripCorrect)}`);
 
+  log('checking worker path (Part 0b)...');
+  const workerMetrics = await checkWorkerPath(file, result.tracks, log);
+
   return {
     metrics: {
       buildMs: result.buildMs,
@@ -90,7 +184,8 @@ mountSpikeHarness(root, 'media/index harness', 'Production parser (src/media/ind
       cacheReadResult: readResult?.kind,
       cacheReadMs: readMs,
       roundTripCorrect,
+      ...workerMetrics,
     },
-    notes: `build ${result.buildMs.toFixed(1)}ms / retained ${(retainedBytes / 1e6).toFixed(2)}MB / cache write ${writeMs.toFixed(1)}ms / read ${readMs.toFixed(1)}ms / roundTrip ${String(roundTripCorrect)}`,
+    notes: `build ${result.buildMs.toFixed(1)}ms / retained ${(retainedBytes / 1e6).toFixed(2)}MB / cache write ${writeMs.toFixed(1)}ms / read ${readMs.toFixed(1)}ms / roundTrip ${String(roundTripCorrect)} / workerPathOk ${String(workerMetrics.workerPathOk)}`,
   };
 });
