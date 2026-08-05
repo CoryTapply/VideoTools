@@ -110,10 +110,16 @@ async function runEditListCheck(file: File, log: (msg: string) => void): Promise
       await seekAndSettle(video, targetSec, log);
       const { mediaTime } = await waitForFrame(video);
 
-      // What SampleIndex reports for this nominal time: frameAtTime (raw ticks in), then
-      // timeOfSample for that frame, read two ways -- raw division, and edit-adjusted.
-      const rawTargetTicks = secondsToTicks(targetSec, videoTrack.timescale);
-      const n = index.frameAtTime(videoTrack.trackId, rawTargetTicks);
+      // Find the sample via the PRESENTATION-native lookup (frameAtPresentationTime), which
+      // correctly adds editOffsetTicks before searching raw ticks -- using the raw frameAtTime
+      // directly with a presentation-time input is exactly the bug this whole check exists to
+      // catch, and breaks outright at target=0 whenever editOffsetTicks > 0 (the track's raw pts
+      // array starts at raw tick editOffsetTicks, not 0, so frameAtTime(trackId, 0) legitimately
+      // finds nothing and returns -1). Once we have the right sample, read ITS raw pts back two
+      // ways for comparison: raw division (what a naive caller using the wrong method would get)
+      // and edit-adjusted (what this should match).
+      const targetPresentationTicks = secondsToTicks(targetSec, videoTrack.timescale);
+      const n = index.frameAtPresentationTime(videoTrack.trackId, targetPresentationTicks);
       const sampleRawTicks = n >= 0 ? index.timeOfSample(videoTrack.trackId, n) : NaN;
       const rawTickSec = ticksToSeconds(sampleRawTicks, videoTrack.timescale);
       const adjustedSec = localTicksToPresentationSeconds(sampleRawTicks, videoTrack.timescale, videoTrack.editOffsetTicks);
