@@ -41,12 +41,22 @@ function waitForEvent(target: EventTarget, type: string): Promise<void> {
   });
 }
 
-function waitForFrame(video: HTMLVideoElement): Promise<{ mediaTime: number; presentedFrames: number }> {
-  return new Promise((resolve) => {
-    video.requestVideoFrameCallback((_now, metadata) => {
+async function waitForFrame(video: HTMLVideoElement, log: (msg: string) => void): Promise<{ mediaTime: number; presentedFrames: number }> {
+  let handle: number | undefined;
+  const framePromise = new Promise<{ mediaTime: number; presentedFrames: number }>((resolve) => {
+    handle = video.requestVideoFrameCallback((_now, metadata) => {
       resolve({ mediaTime: metadata.mediaTime, presentedFrames: metadata.presentedFrames });
     });
   });
+  const timeoutPromise = new Promise<'timeout'>((resolve) => setTimeout(() => { resolve('timeout'); }, 10_000));
+
+  const result = await Promise.race([framePromise, timeoutPromise]);
+  if (result === 'timeout') {
+    log('  WARNING: requestVideoFrameCallback did not fire within 10s -- falling back to video.currentTime directly');
+    if (handle !== undefined) video.cancelVideoFrameCallback(handle);
+    return { mediaTime: video.currentTime, presentedFrames: -1 };
+  }
+  return result;
 }
 
 /**
@@ -101,7 +111,15 @@ async function runEditListCheck(file: File, log: (msg: string) => void): Promise
   const video = document.createElement('video');
   video.muted = true;
   video.src = url;
-  video.style.display = 'none';
+  // NOT display:none -- some browsers stop compositing new frames for a display:none element,
+  // which means requestVideoFrameCallback never fires again after the first one (discovered by
+  // running this against a real file: the first row worked off the initial decoded frame, then
+  // every subsequent seek hung forever waiting on a frame callback that was never coming).
+  // Positioned off-screen instead, so it keeps actively rendering while staying invisible.
+  video.style.position = 'fixed';
+  video.style.top = '-9999px';
+  video.style.width = '2px';
+  video.style.height = '2px';
   document.body.appendChild(video);
 
   try {
@@ -113,7 +131,7 @@ async function runEditListCheck(file: File, log: (msg: string) => void): Promise
 
     for (const targetSec of targets) {
       await seekAndSettle(video, targetSec, log);
-      const { mediaTime } = await waitForFrame(video);
+      const { mediaTime } = await waitForFrame(video, log);
 
       // Find the sample via the PRESENTATION-native lookup (frameAtPresentationTime), which
       // correctly adds editOffsetTicks before searching raw ticks -- using the raw frameAtTime
