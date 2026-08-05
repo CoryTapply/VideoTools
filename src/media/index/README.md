@@ -73,6 +73,48 @@ which includes the extremely common AAC-priming-delay pattern -- produces a
 real, frequent case (see `differential-mediabunny.test.ts`: the project's own tiny committed
 fixture has one), not an edge case to special-case away.
 
+### Presentation time vs. media time (M1 Task 2, Part 1)
+
+Every method on `SampleIndex` described so far (`frameAtTime`, `timeOfSample`,
+`nearestSyncAtOrBefore`, ...) operates on **raw, un-adjusted local ticks** -- exactly what's stored
+in `TrackIndex.pts`/`dts`. `<video>.currentTime` and `requestVideoFrameCallback`'s reported
+`mediaTime`, by contrast, honor edit lists (the same edit-adjusted convention documented above for
+mediabunny's `packet.timestamp`). Calling a raw-tick method with a naive `secondsToTicks(userSeconds)`
+-- without adding back `editOffsetTicks` -- silently offsets every seek, keyframe tick, and frame
+step by the priming delay: consistently, silently, and by an amount (tens of ms) small enough to
+look like a rounding bug for months.
+
+`SampleIndex` therefore also exposes a parallel, presentation-time-native surface --
+`frameAtPresentationTime`, `presentationTimeOfSample`, `nearestSyncAtOrBeforePresentation`,
+`nextSyncPresentation`, `prevSyncPresentation`, `keyframePresentationTimes` (all in `query.ts`) --
+each a thin wrapper that applies `editOffsetTicks` at this boundary. **Playback code must call
+these `*Presentation*` methods, never a raw method with `editOffsetTicks` added or subtracted by
+hand at the call site.** `TrackIndex.pts`/`dts` themselves are never changed to store adjusted
+values -- the remux/export path needs raw media time to reproduce or adjust the `elst` box on
+output, so both representations are retained, under unmistakable names.
+
+**Empirical status: CONFIRMED**, against the real 27GB OBS fixture (7 tracks,
+`editOffsetTicks=1440` on the video track, `timescale=90000`) via `src/media/playback/harness.ts`
+(`playback.html`), across 8 target points spanning the file (0s, 2s, four spread across the
+middle, one near the end, one exactly at a keyframe boundary): `requestVideoFrameCallback`'s
+reported `mediaTime` agreed with the *presentation*-time (edit-adjusted) methods above to
+**Δ=0.0000s at every single point** (`maxDeviationFromMean=0.0000s`), and diverged from the
+raw-tick methods by a constant **-0.0160s** at every point -- exactly `editOffsetTicks / timescale`
+(`1440 / 90000 = 0.016`). This is the strongest form of the result: not just "constant" within a
+tolerance, but exactly constant and exactly equal to the predicted offset, with zero variance
+across widely-spread points including a keyframe boundary.
+
+Two real bugs were found and fixed while getting a clean run out of the verification harness
+itself (not in `SampleIndex`/`query.ts`, which needed no changes): (1) browsers don't fire
+`'seeked'` when `currentTime` is assigned a value it's already at, which hung the harness on its
+first (0s) target; (2) a paused video presents exactly one new frame per seek, so
+`requestVideoFrameCallback` must be armed *before* issuing the seek -- registering it only after
+`'seeked'` fires frequently misses that single frame and hangs waiting for a "next" one that never
+comes. See `src/media/playback/harness.ts`'s `seekAndCaptureFrame` for both fixes. The same latent
+issue as (1) was also found and fixed in `NativeVideoEngine.issueSeek()` itself (a real caller
+seeking to the current position would have stalled the whole seek-coalescing pipeline forever) --
+see that file and its test suite.
+
 ## The OPFS cache schema and its versioning contract
 
 `opfs-cache.ts` serializes a parsed index to a single binary blob per file (keyed by
@@ -133,3 +175,17 @@ The manual browser harness (`harness.ts` + `media-index.html`, run via `npm run 
 `npm run dev:coi`) is where the 27GB real fixture, real OPFS, and real build-time/retained-bytes
 numbers get exercised -- none of those exist in Node. This follows the same convention as every
 spike page under `src/spikes/`: run by hand, not part of CI.
+
+## Known build-time delta (spike vs. production), and its explanation
+
+The production parser builds the 27GB fixture's index in 164.7ms; the spike parser it replaces
+(`src/spikes/A-remux/mp4-index.ts`) does the same file in 107.1ms, same browser (Chrome). Both are
+comfortably under the 250ms budget, so this was never urgent, but this project has twice fitted a
+confident story to an unexplained perf delta and been wrong (see git history around Spike A's
+export-cost investigation) -- so the delta gets measured, not assumed.
+
+**This still needs an actual profiler run** (Chrome DevTools Performance panel, on
+`media-index.html`, comparing against the equivalent spike page) to attribute the ~57.6ms
+difference to a specific cause rather than a guess at "production has more validation/error-path
+checks." Whoever runs this: record the top few self-time frames from both profiles here, replacing
+this paragraph with the actual finding.

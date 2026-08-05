@@ -43,6 +43,8 @@ interface TrackQueryIndex {
   readonly presentationOrder: Uint32Array;
   /** decode-order sync-sample indices, sorted ascending by pts */
   readonly syncPresentationOrder: Uint32Array;
+  /** presentationOrder's inverse: presentationRankOf[decodeIndex] = presentation-order rank. */
+  readonly presentationRankOf: Uint32Array;
 }
 
 function buildTrackQueryIndex(track: TrackIndex): TrackQueryIndex {
@@ -53,7 +55,11 @@ function buildTrackQueryIndex(track: TrackIndex): TrackQueryIndex {
   for (let i = 0; i < track.sampleCount; i += 1) if (track.isSync[i] === 1) syncOrder.push(i);
   syncOrder.sort((a, b) => track.pts[a] - track.pts[b]);
 
-  return { track, presentationOrder: Uint32Array.from(order), syncPresentationOrder: Uint32Array.from(syncOrder) };
+  const presentationOrder = Uint32Array.from(order);
+  const presentationRankOf = new Uint32Array(track.sampleCount);
+  for (let rank = 0; rank < presentationOrder.length; rank += 1) presentationRankOf[presentationOrder[rank]] = rank;
+
+  return { track, presentationOrder, syncPresentationOrder: Uint32Array.from(syncOrder), presentationRankOf };
 }
 
 /** Largest-pts-at-or-before binary search over a presentation-order array. Returns the DECODE-order sample index, or -1. */
@@ -205,5 +211,88 @@ export class SampleIndex {
       if (idx > last) last = idx;
     }
     return { first, last };
+  }
+
+  /**
+   * Every track in this index, in construction order. Added for callers (e.g. the playback
+   * engine) that need to enumerate tracks or read a track's own metadata (codec, kind,
+   * editOffsetTicks, ...) rather than query a single trackId they already know.
+   */
+  tracks(): readonly TrackIndex[] {
+    return Array.from(this.byTrackId.values(), (qi) => qi.track);
+  }
+
+  /** Number of samples (decode-order) in this track. */
+  sampleCount(trackId: number): number {
+    return this.require(trackId).track.sampleCount;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Presentation-time-native queries. `frameAtTime`/`timeOfSample`/`nearestSyncAtOrBefore`/etc.
+  // above all operate on RAW local (track-timescale) ticks -- see track-index.ts's `pts` doc
+  // comment and time.ts. The methods below apply the track's `editOffsetTicks` at this boundary
+  // so callers (playback code, never `TrackIndex.pts` producers/consumers like the remux path)
+  // never have to add/subtract `editOffsetTicks` by hand at a call site -- see
+  // src/media/index/README.md's "Edit lists" section for why that matters and what was verified.
+  // Every method name below carries "Presentation" so it is never ambiguous which time base a
+  // call site is in.
+  // ---------------------------------------------------------------------------------------------
+
+  /** Decode-order sample number whose PRESENTATION time is the largest at or before `presentationTicks`. -1 if none. */
+  frameAtPresentationTime(trackId: number, presentationTicks: number): number {
+    const editOffsetTicks = this.require(trackId).track.editOffsetTicks;
+    return this.frameAtTime(trackId, presentationTicks + editOffsetTicks);
+  }
+
+  /** PRESENTATION time (edit-adjusted, ticks) of decode-order sample `n`. */
+  presentationTimeOfSample(trackId: number, n: number): number {
+    const track = this.require(trackId).track;
+    return track.pts[n] - track.editOffsetTicks;
+  }
+
+  /** Decode-order sync-sample number with the largest PRESENTATION time at or before `presentationTicks`. -1 if none. */
+  nearestSyncAtOrBeforePresentation(trackId: number, presentationTicks: number): number {
+    const editOffsetTicks = this.require(trackId).track.editOffsetTicks;
+    return this.nearestSyncAtOrBefore(trackId, presentationTicks + editOffsetTicks);
+  }
+
+  /** Decode-order sync-sample number with the smallest PRESENTATION time strictly after `presentationTicks`. -1 if none. */
+  nextSyncPresentation(trackId: number, presentationTicks: number): number {
+    const editOffsetTicks = this.require(trackId).track.editOffsetTicks;
+    return this.nextSync(trackId, presentationTicks + editOffsetTicks);
+  }
+
+  /** Decode-order sync-sample number with the largest PRESENTATION time strictly before `presentationTicks`. -1 if none. */
+  prevSyncPresentation(trackId: number, presentationTicks: number): number {
+    const editOffsetTicks = this.require(trackId).track.editOffsetTicks;
+    return this.prevSync(trackId, presentationTicks + editOffsetTicks);
+  }
+
+  /** All sync-sample PRESENTATION times (edit-adjusted, ticks), ascending. */
+  keyframePresentationTimes(trackId: number): Float64Array {
+    const editOffsetTicks = this.require(trackId).track.editOffsetTicks;
+    const raw = this.keyframeTimes(trackId);
+    const out = new Float64Array(raw.length);
+    for (let i = 0; i < raw.length; i += 1) out[i] = raw[i] - editOffsetTicks;
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Presentation-ORDER rank <-> decode-order sample index. Needed for frame stepping: "step
+  // forward N frames" means walking N positions in presentation order, never `n + delta` on a
+  // decode-order index -- see this file's §7 header comment for why decode order and presentation
+  // order diverge once a track has B-frames.
+  // ---------------------------------------------------------------------------------------------
+
+  /** Presentation-order rank (0-based) of decode-order sample `n`. */
+  presentationRank(trackId: number, n: number): number {
+    return this.require(trackId).presentationRankOf[n];
+  }
+
+  /** Decode-order sample number at presentation-order rank `r`. -1 if `r` is out of [0, sampleCount). */
+  sampleAtPresentationRank(trackId: number, r: number): number {
+    const qi = this.require(trackId);
+    if (r < 0 || r >= qi.presentationOrder.length) return -1;
+    return qi.presentationOrder[r];
   }
 }
