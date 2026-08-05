@@ -58,12 +58,17 @@ function waitForFrame(video: HTMLVideoElement): Promise<{ mediaTime: number; pre
  */
 async function seekAndSettle(video: HTMLVideoElement, targetSec: number, log: (msg: string) => void): Promise<void> {
   const EPSILON_SEC = 0.001;
-  if (Math.abs(video.currentTime - targetSec) < EPSILON_SEC) return;
+  if (Math.abs(video.currentTime - targetSec) < EPSILON_SEC) {
+    log(`  (seek to ${targetSec.toFixed(3)}s skipped -- already there)`);
+    return;
+  }
 
+  log(`  seeking to ${targetSec.toFixed(3)}s...`);
+  const t0 = performance.now();
   const seeked = waitForEvent(video, 'seeked');
   video.currentTime = targetSec;
   const timedOut = await Promise.race([seeked.then(() => false), new Promise<boolean>((resolve) => setTimeout(() => { resolve(true); }, 10_000))]);
-  if (timedOut) log(`WARNING: seek to ${targetSec.toFixed(3)}s did not fire 'seeked' within 10s -- proceeding anyway`);
+  log(`  seek settled after ${(performance.now() - t0).toFixed(0)}ms${timedOut ? ' -- TIMED OUT, proceeding anyway without a seeked event' : ''}`);
 }
 
 /** Picks >=8 target seconds per the task's spec: 0, a few seconds in, four across the middle, one near the end, one exactly at a keyframe boundary. */
