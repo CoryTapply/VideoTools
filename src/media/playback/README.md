@@ -38,16 +38,15 @@ time**; `TrackIndex.pts`/`dts` remain raw media time underneath (needed for the
 remux/export path to reproduce or adjust the `elst` box on output), and the two are
 never confused because every presentation-time method's name says so.
 
-The expected empirical result (based on `time.ts`'s `localTicksToPresentationSeconds`
-already existing specifically to match mediabunny's edit-adjusted convention) is that
-`<video>.currentTime`/`requestVideoFrameCallback().mediaTime` agree with these
-presentation-time methods by construction, and diverge from the raw-tick methods by
-exactly `editOffsetTicks`. **This has not yet been confirmed against a real `<video>`
-element in this environment** (no browser was available to run the check) -- see
+**Confirmed** against the real 27GB OBS fixture via `harness.ts` (`playback.html`):
+`<video>.currentTime`/`requestVideoFrameCallback().mediaTime` agreed with these
+presentation-time methods to Δ=0.0000s at all 8 tested points (spanning the file,
+including a keyframe boundary), and diverged from the raw-tick methods by a constant
+`-0.016s` -- exactly `editOffsetTicks / timescale` for this file. See
 `src/media/index/README.md`'s "Presentation time vs. media time" section for the full
-status and exactly what running `harness.ts` (`playback.html`, Part 1's empirical
-check) would confirm or refute. Do not treat the current code as verified against real
-`<video>` behavior until that harness has actually been run.
+numbers and the two harness bugs (a no-op seek not firing `'seeked'`, and
+`requestVideoFrameCallback` needing to be armed before the seek, not after) found and
+fixed while getting a clean run.
 
 ## The state machine
 

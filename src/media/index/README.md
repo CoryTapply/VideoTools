@@ -93,19 +93,27 @@ hand at the call site.** `TrackIndex.pts`/`dts` themselves are never changed to 
 values -- the remux/export path needs raw media time to reproduce or adjust the `elst` box on
 output, so both representations are retained, under unmistakable names.
 
-**Empirical status:** the expected result -- based on `time.ts`'s `localTicksToPresentationSeconds`
-already existing specifically to match mediabunny's edit-adjusted `packet.timestamp` convention --
-is that a real `<video>` element's `currentTime`/`requestVideoFrameCallback().mediaTime` agrees with
-the *presentation*-time (edit-adjusted) methods above by a constant offset, and diverges from the
-raw-tick methods by exactly `editOffsetTicks`. This has **not yet been confirmed against a real
-`<video>` element** in this environment (no browser available to run it) -- `presentation-time.test.ts`
-only checks that the index's own adjustment arithmetic is internally self-consistent, which is a
-necessary but not sufficient check. Run `src/media/playback/harness.ts` (via `npm run dev`,
-`playback.html`) against a real fixture with an edit list (e.g. the 27GB OBS fixture) to get the
-actual delta table, and replace this paragraph with the confirmed finding. If the delta turns out
-to vary rather than being constant, stop and treat it as a bug in the index or edit-list
-interpretation, per that harness's own logged warning -- do not build further on an unconfirmed
-assumption.
+**Empirical status: CONFIRMED**, against the real 27GB OBS fixture (7 tracks,
+`editOffsetTicks=1440` on the video track, `timescale=90000`) via `src/media/playback/harness.ts`
+(`playback.html`), across 8 target points spanning the file (0s, 2s, four spread across the
+middle, one near the end, one exactly at a keyframe boundary): `requestVideoFrameCallback`'s
+reported `mediaTime` agreed with the *presentation*-time (edit-adjusted) methods above to
+**Δ=0.0000s at every single point** (`maxDeviationFromMean=0.0000s`), and diverged from the
+raw-tick methods by a constant **-0.0160s** at every point -- exactly `editOffsetTicks / timescale`
+(`1440 / 90000 = 0.016`). This is the strongest form of the result: not just "constant" within a
+tolerance, but exactly constant and exactly equal to the predicted offset, with zero variance
+across widely-spread points including a keyframe boundary.
+
+Two real bugs were found and fixed while getting a clean run out of the verification harness
+itself (not in `SampleIndex`/`query.ts`, which needed no changes): (1) browsers don't fire
+`'seeked'` when `currentTime` is assigned a value it's already at, which hung the harness on its
+first (0s) target; (2) a paused video presents exactly one new frame per seek, so
+`requestVideoFrameCallback` must be armed *before* issuing the seek -- registering it only after
+`'seeked'` fires frequently misses that single frame and hangs waiting for a "next" one that never
+comes. See `src/media/playback/harness.ts`'s `seekAndCaptureFrame` for both fixes. The same latent
+issue as (1) was also found and fixed in `NativeVideoEngine.issueSeek()` itself (a real caller
+seeking to the current position would have stalled the whole seek-coalescing pipeline forever) --
+see that file and its test suite.
 
 ## The OPFS cache schema and its versioning contract
 
