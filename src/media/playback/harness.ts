@@ -41,44 +41,48 @@ function waitForEvent(target: EventTarget, type: string): Promise<void> {
   });
 }
 
-async function waitForFrame(video: HTMLVideoElement, log: (msg: string) => void): Promise<{ mediaTime: number; presentedFrames: number }> {
+/**
+ * Seeks to `targetSec` and captures the frame the browser actually presents in response, via
+ * requestVideoFrameCallback. Two real-world gotchas, both found by running this against the real
+ * 27GB fixture rather than assumed:
+ *
+ * 1. Browsers do NOT fire 'seeked' when `currentTime` is assigned a value it's already at (e.g.
+ *    seeking to 0 on a freshly-loaded video, which is already sitting at 0) -- awaiting 'seeked'
+ *    unconditionally hangs forever on exactly that case, which is the first target this harness
+ *    tries. Skipped when already within epsilon of the target.
+ * 2. A PAUSED video presents exactly one new frame per seek. If the rVFC callback is registered
+ *    only AFTER 'seeked' has already fired, that single frame-presentation event has frequently
+ *    already happened and is missed -- the callback then waits for a "next frame" that never
+ *    comes on a paused element, timing out every time. The callback must be armed BEFORE the
+ *    seek is issued (or before the epsilon-skip check, for the already-there case), not after.
+ */
+async function seekAndCaptureFrame(video: HTMLVideoElement, targetSec: number, log: (msg: string) => void): Promise<{ mediaTime: number; presentedFrames: number }> {
   let handle: number | undefined;
   const framePromise = new Promise<{ mediaTime: number; presentedFrames: number }>((resolve) => {
     handle = video.requestVideoFrameCallback((_now, metadata) => {
       resolve({ mediaTime: metadata.mediaTime, presentedFrames: metadata.presentedFrames });
     });
   });
-  const timeoutPromise = new Promise<'timeout'>((resolve) => setTimeout(() => { resolve('timeout'); }, 10_000));
 
-  const result = await Promise.race([framePromise, timeoutPromise]);
-  if (result === 'timeout') {
-    log('  WARNING: requestVideoFrameCallback did not fire within 10s -- falling back to video.currentTime directly');
-    if (handle !== undefined) video.cancelVideoFrameCallback(handle);
-    return { mediaTime: video.currentTime, presentedFrames: -1 };
-  }
-  return result;
-}
-
-/**
- * Seeks to `targetSec` and waits for it to settle. Browsers do NOT fire 'seeked' when
- * `currentTime` is assigned a value it's already at (e.g. seeking to 0 on a freshly-loaded video,
- * which is already sitting at 0) -- awaiting 'seeked' unconditionally hangs forever on exactly
- * that case, which is the first target this harness tries. Skip the wait when already close
- * enough; otherwise wait, with a generous timeout so a genuine stall is reported, not silent.
- */
-async function seekAndSettle(video: HTMLVideoElement, targetSec: number, log: (msg: string) => void): Promise<void> {
   const EPSILON_SEC = 0.001;
   if (Math.abs(video.currentTime - targetSec) < EPSILON_SEC) {
     log(`  (seek to ${targetSec.toFixed(3)}s skipped -- already there)`);
-    return;
+  } else {
+    log(`  seeking to ${targetSec.toFixed(3)}s...`);
+    const t0 = performance.now();
+    const seeked = waitForEvent(video, 'seeked');
+    video.currentTime = targetSec;
+    const seekTimedOut = await Promise.race([seeked.then(() => false), new Promise<boolean>((resolve) => setTimeout(() => { resolve(true); }, 10_000))]);
+    log(`  seek settled after ${(performance.now() - t0).toFixed(0)}ms${seekTimedOut ? ' -- TIMED OUT, proceeding anyway without a seeked event' : ''}`);
   }
 
-  log(`  seeking to ${targetSec.toFixed(3)}s...`);
-  const t0 = performance.now();
-  const seeked = waitForEvent(video, 'seeked');
-  video.currentTime = targetSec;
-  const timedOut = await Promise.race([seeked.then(() => false), new Promise<boolean>((resolve) => setTimeout(() => { resolve(true); }, 10_000))]);
-  log(`  seek settled after ${(performance.now() - t0).toFixed(0)}ms${timedOut ? ' -- TIMED OUT, proceeding anyway without a seeked event' : ''}`);
+  const frameTimedOut = await Promise.race([framePromise.then(() => false), new Promise<boolean>((resolve) => setTimeout(() => { resolve(true); }, 10_000))]);
+  if (frameTimedOut) {
+    log('  WARNING: requestVideoFrameCallback did not fire within 10s of the seek -- falling back to video.currentTime directly');
+    if (handle !== undefined) video.cancelVideoFrameCallback(handle);
+    return { mediaTime: video.currentTime, presentedFrames: -1 };
+  }
+  return framePromise;
 }
 
 /** Picks >=8 target seconds per the task's spec: 0, a few seconds in, four across the middle, one near the end, one exactly at a keyframe boundary. */
@@ -130,8 +134,7 @@ async function runEditListCheck(file: File, log: (msg: string) => void): Promise
     const rows: EditListDeltaRow[] = [];
 
     for (const targetSec of targets) {
-      await seekAndSettle(video, targetSec, log);
-      const { mediaTime } = await waitForFrame(video, log);
+      const { mediaTime } = await seekAndCaptureFrame(video, targetSec, log);
 
       // Find the sample via the PRESENTATION-native lookup (frameAtPresentationTime), which
       // correctly adds editOffsetTicks before searching raw ticks -- using the raw frameAtTime
