@@ -40,6 +40,9 @@ import type { Result } from './result';
 import { MEDIA_ERR_DECODE } from './VideoElementLike';
 import type { VideoElementLike } from './VideoElementLike';
 
+/** Well below any real frame duration (16ms+ even at 60fps) -- just enough to treat a seek target as "already there." */
+const SEEK_EPSILON_SEC = 0.0005;
+
 type SeekMode = 'accurate' | 'scrub';
 
 interface SeekRequest {
@@ -259,6 +262,18 @@ export class NativeVideoEngine implements PlaybackEngine {
 
     const track = this.requireVideoTrack();
     const seconds = ticksToSeconds(target.time, track.timescale);
+
+    // Browsers do not reliably fire 'seeked' when currentTime is assigned a value it's already
+    // at (e.g. seeking to 0 right after load, when the element is already sitting at 0) --
+    // discovered via a real hang in the Part 1 harness script. Since issueSeek() is only ever
+    // re-entered from handleSeeked() (on 'seeked'), waiting for an event that never fires would
+    // stall the entire seek pipeline forever, not just this one call. Detect the no-op case and
+    // settle on a microtask instead of relying on the event.
+    if (Math.abs(this.video.currentTime - seconds) < SEEK_EPSILON_SEC) {
+      queueMicrotask(this.handleSeeked);
+      return;
+    }
+
     if (target.mode === 'scrub' && typeof this.video.fastSeek === 'function') {
       this.video.fastSeek(seconds);
     } else {

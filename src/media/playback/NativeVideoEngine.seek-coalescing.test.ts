@@ -78,6 +78,17 @@ describe('seek coalescing: convergence', () => {
     expect(engine.state).toBe('ready');
   });
 
+  it('seeking to the position already there settles immediately, without relying on a seeked event (browsers do not always fire it for a no-op currentTime assignment)', async () => {
+    // Discovered via a real hang in the Part 1 browser harness: seeking to 0 right after load,
+    // when the video is already sitting at 0, never fired 'seeked' in Chrome -- and since
+    // issueSeek() is only re-entered from the 'seeked' handler, that stalled the entire seek
+    // pipeline forever, not just the one call.
+    const { engine, video } = await loadedEngine({ seekLatencyMs: 10 });
+    video.neverResolveNextSeek(); // if the engine relied on 'seeked' firing here, this would hang forever
+    await engine.seek(0, 'accurate'); // target (0 ticks) equals the video's current position (0)
+    expect(engine.state).toBe('ready');
+  });
+
   it('a never-resolving seek does not cause a double-issue, and the engine stays in seeking', async () => {
     const { engine, video } = await loadedEngine({ seekLatencyMs: 10 });
     const currentTimeSetter = vi.spyOn(video, 'currentTime', 'set');

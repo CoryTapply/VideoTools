@@ -49,6 +49,23 @@ function waitForFrame(video: HTMLVideoElement): Promise<{ mediaTime: number; pre
   });
 }
 
+/**
+ * Seeks to `targetSec` and waits for it to settle. Browsers do NOT fire 'seeked' when
+ * `currentTime` is assigned a value it's already at (e.g. seeking to 0 on a freshly-loaded video,
+ * which is already sitting at 0) -- awaiting 'seeked' unconditionally hangs forever on exactly
+ * that case, which is the first target this harness tries. Skip the wait when already close
+ * enough; otherwise wait, with a generous timeout so a genuine stall is reported, not silent.
+ */
+async function seekAndSettle(video: HTMLVideoElement, targetSec: number, log: (msg: string) => void): Promise<void> {
+  const EPSILON_SEC = 0.001;
+  if (Math.abs(video.currentTime - targetSec) < EPSILON_SEC) return;
+
+  const seeked = waitForEvent(video, 'seeked');
+  video.currentTime = targetSec;
+  const timedOut = await Promise.race([seeked.then(() => false), new Promise<boolean>((resolve) => setTimeout(() => { resolve(true); }, 10_000))]);
+  if (timedOut) log(`WARNING: seek to ${targetSec.toFixed(3)}s did not fire 'seeked' within 10s -- proceeding anyway`);
+}
+
 /** Picks >=8 target seconds per the task's spec: 0, a few seconds in, four across the middle, one near the end, one exactly at a keyframe boundary. */
 function pickTargetSeconds(durationSec: number, keyframePresentationSec: number[]): number[] {
   const targets = [
@@ -90,9 +107,7 @@ async function runEditListCheck(file: File, log: (msg: string) => void): Promise
     const rows: EditListDeltaRow[] = [];
 
     for (const targetSec of targets) {
-      const seekedPromise = waitForEvent(video, 'seeked');
-      video.currentTime = targetSec;
-      await seekedPromise;
+      await seekAndSettle(video, targetSec, log);
       const { mediaTime } = await waitForFrame(video);
 
       // What SampleIndex reports for this nominal time: frameAtTime (raw ticks in), then
