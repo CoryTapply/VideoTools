@@ -1,0 +1,125 @@
+{
+  "spike": "playback-engine-harness-part7",
+  "machine": "local",
+  "browser": "Chrome",
+  "browserVersion": "151.0.0.0",
+  "fixture": "27gb.mp4",
+  "metrics": {
+    "seekLatencyMs": {
+      "p50": 281.60000002384186,
+      "p95": 369.39999997615814,
+      "p99": 371.0999999642372,
+      "max": 371.0999999642372
+    },
+    "seekLatenciesRawMs": [
+      26,
+      54,
+      56.80000001192093,
+      67.30000001192093,
+      85.60000002384186,
+      106.5,
+      120.90000003576279,
+      133.10000002384186,
+      165.19999998807907,
+      176.5999999642372,
+      179.20000004768372,
+      184.80000001192093,
+      239.89999997615814,
+      246.4000000357628,
+      263.10000002384186,
+      281.60000002384186,
+      281.69999998807907,
+      296.80000001192093,
+      305.5999999642372,
+      313.19999998807907,
+      321.69999998807907,
+      325.39999997615814,
+      330.39999997615814,
+      345.5,
+      348.80000001192093,
+      360.30000001192093,
+      360.89999997615814,
+      365,
+      369.39999997615814,
+      371.0999999642372
+    ],
+    "convergencePass": 20,
+    "convergenceFail": 0,
+    "stepAccuracyPass": 20,
+    "stepAccuracyFail": 0,
+    "rvfcDrift": {
+      "maxDriftSec": 0.028347999999823514,
+      "meanDriftSec": 0.01219464999999218,
+      "samples": 60
+    },
+    "editListDeltaRows": [
+      {
+        "targetSec": 0,
+        "rvfcMediaTimeSec": 0,
+        "rawTickSec": 0.016,
+        "adjustedSec": 0,
+        "deltaRawSec": -0.016,
+        "deltaAdjustedSec": 0
+      },
+      {
+        "targetSec": 2,
+        "rvfcMediaTimeSec": 2,
+        "rawTickSec": 2.016,
+        "adjustedSec": 2,
+        "deltaRawSec": -0.016000000000000014,
+        "deltaAdjustedSec": 0
+      },
+      {
+        "targetSec": 1056.433,
+        "rvfcMediaTimeSec": 1056.433,
+        "rawTickSec": 1056.449,
+        "adjustedSec": 1056.433,
+        "deltaRawSec": -0.016000000000076398,
+        "deltaAdjustedSec": 0
+      },
+      {
+        "targetSec": 1690.2928000000002,
+        "rvfcMediaTimeSec": 1690.2928,
+        "rawTickSec": 1690.299,
+        "adjustedSec": 1690.283,
+        "deltaRawSec": -0.006200000000035288,
+        "deltaAdjustedSec": 0.00980000000004111
+      },
+      {
+        "targetSec": 2324.1526000000003,
+        "rvfcMediaTimeSec": 2324.1526,
+        "rawTickSec": 2324.166,
+        "adjustedSec": 2324.15,
+        "deltaRawSec": -0.013400000000274304,
+        "deltaAdjustedSec": 0.002599999999802094
+      },
+      {
+        "targetSec": 2958.0123999999996,
+        "rvfcMediaTimeSec": 2958.012399,
+        "rawTickSec": 2958.016,
+        "adjustedSec": 2958,
+        "deltaRawSec": -0.003600999999889609,
+        "deltaAdjustedSec": 0.012399000000186788
+      },
+      {
+        "targetSec": 4224.732,
+        "rvfcMediaTimeSec": 4224.732,
+        "rawTickSec": 4224.733,
+        "adjustedSec": 4224.717,
+        "deltaRawSec": -0.0010000000002037268,
+        "deltaAdjustedSec": 0.015000000000327418
+      },
+      {
+        "targetSec": 2112.5,
+        "rvfcMediaTimeSec": 2112.5,
+        "rawTickSec": 2112.516,
+        "adjustedSec": 2112.5,
+        "deltaRawSec": -0.016000000000076398,
+        "deltaAdjustedSec": 0
+      }
+    ],
+    "editListDeltaConstant": true
+  },
+  "timestamp": "2026-08-05T18:49:28.842Z",
+  "notes": "seek p50=281.6ms / convergence 20/20 / step 20/20 / drift max=0.0283s"
+}

@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html,body{margin:0;padding:0;background:#0E0E0F;}
+  *{box-sizing:border-box;}
+  a{color:#4C8DF6;text-decoration:none}
+  a:hover{color:#84B2FA}
+  ::selection{background:#4C8DF6;color:#0E0E0F}
+  @keyframes om-flash{0%{opacity:.9}100%{opacity:0}}
+  @keyframes om-rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes om-fade{from{opacity:0}to{opacity:1}}
+</style>
+</helmet>
+<div style="position:relative;width:100%;height:100vh;display:flex;flex-direction:column;background:#0E0E0F;color:#E8E8E6;font-family:'IBM Plex Sans',system-ui,sans-serif;font-size:13px;overflow:hidden;user-select:none;font-variant-numeric:tabular-nums;">
+
+  <sc-if value="{{ showChrome }}" hint-placeholder-val="{{ true }}">
+    <div style="height:40px;flex:0 0 40px;display:flex;align-items:center;gap:10px;padding:0 10px;border-bottom:1px solid #2E2E32;background:#0E0E0F;">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <div style="width:8px;height:8px;border-radius:2px;background:#5DCAA5;flex:0 0 auto;"></div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ fileName }}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;background:#232326;border:1px solid #2E2E32;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9A9A96;white-space:nowrap;">{{ fileChip }}</div>
+      <sc-if value="{{ isDegraded }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;gap:8px;height:24px;padding:0 8px;border-radius:6px;background:rgba(239,159,39,.10);border:1px solid rgba(239,159,39,.35);font-size:12px;color:#EF9F27;white-space:nowrap;">
+          <span>Reconnect file — access to this file was lost</span>
+          <button style="height:18px;padding:0 8px;border-radius:4px;border:1px solid rgba(239,159,39,.5);background:transparent;color:#EF9F27;font:500 11px 'IBM Plex Sans',sans-serif;cursor:pointer;" style-hover="background:rgba(239,159,39,.16)">Reconnect</button>
+        </div>
+      </sc-if>
+      <div style="flex:1"></div>
+      <button onClick="{{ openFile }}" style="height:28px;padding:0 12px;border-radius:6px;border:1px solid #2E2E32;background:#1A1A1C;color:#E8E8E6;font:500 12.5px 'IBM Plex Sans',sans-serif;cursor:pointer;" style-hover="background:#232326">Open</button>
+      <button onClick="{{ startExport }}" style="height:28px;padding:0 12px;border-radius:6px;border:1px solid #4C8DF6;background:#4C8DF6;color:#0B1220;font:600 12.5px 'IBM Plex Sans',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px;" style-hover="background:#5E99F7">
+        <span>Export clip</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.6;">⌘E</span>
+      </button>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isDegraded }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:0 0 22px;display:flex;align-items:center;justify-content:flex-end;padding:0 12px;border-bottom:1px solid #2E2E32;background:#0E0E0F;font-size:11.5px;color:#6B6B68;">Saves via download — capped at 2 GB in this browser</div>
+  </sc-if>
+
+  <div style="flex:1;min-height:0;display:flex;position:relative;">
+    <div style="flex:1;min-width:0;position:relative;display:flex;align-items:center;justify-content:center;padding:8px;background:#0B0B0C;">
+
+      <sc-if value="{{ hasFile }}" hint-placeholder-val="{{ true }}">
+        <div style="position:relative;aspect-ratio:16/9;max-width:100%;max-height:100%;width:100%;background:#000;border:1px solid #1A1A1C;overflow:hidden;">
+          <div style="position:absolute;inset:0;background-image:repeating-linear-gradient(115deg,#131418 0 14px,#0F1013 14px 28px);"></div>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11.5px;letter-spacing:.08em;color:#3A3A3E;">{{ stageLabel }}</div>
+          <div style="position:absolute;left:10px;bottom:8px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6B6B68;display:flex;gap:12px;">
+            <span>{{ frameLabel }}</span><span>{{ timecode }}</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ true }}">
+        <div onClick="{{ openFile }}" style="width:min(520px,80%);padding:40px 32px;border:1px dashed #2E2E32;border-radius:8px;background:#111113;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;" style-hover="border-color:#4C8DF6;background:#131317">
+          <div style="width:34px;height:34px;border-radius:6px;border:1px solid #2E2E32;background:#1A1A1C;display:flex;align-items:center;justify-content:center;">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#9A9A96" stroke-width="1.3"><rect x="1.5" y="3.5" width="13" height="9" rx="1.5"></rect><path d="M6.5 6.4v3.2L9.8 8z"></path></svg>
+          </div>
+          <div style="font-size:14px;">Drop an MP4 or MOV file, or open one</div>
+          <div style="font-size:12px;color:#6B6B68;text-align:center;text-wrap:pretty;">Files stay on your machine. 20 GB and up is fine.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isUnsupported }}" hint-placeholder-val="{{ true }}">
+        <div style="width:min(560px,86%);padding:26px 28px;border:1px solid #2E2E32;border-radius:8px;background:#1A1A1C;display:flex;flex-direction:column;gap:10px;">
+          <div style="font-size:14px;">This file's codec can't be previewed in your browser, but it can still be trimmed.</div>
+          <div style="font-size:12.5px;color:#9A9A96;text-wrap:pretty;">The container index, keyframe map and waveform all read normally — set in and out on the timeline and export with stream copy. Preview needs a browser build with HEVC decode.</div>
+          <div style="display:flex;gap:16px;margin-top:4px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#6B6B68;">
+            <span>hevc / Main 10</span><span>3840 × 2160</span><span>59.94 fps</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isExporting }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;left:14px;right:14px;top:14px;height:34px;display:flex;align-items:center;gap:12px;padding:0 12px;border-radius:8px;background:rgba(19,19,21,.92);border:1px solid #2E2E32;box-shadow:0 10px 26px rgba(0,0,0,.5);z-index:30;">
+          <div style="position:relative;flex:1;height:4px;border-radius:2px;background:#232326;overflow:hidden;">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:{{ exportPct }}%;background:#4C8DF6;border-radius:2px;"></div>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#9A9A96;white-space:nowrap;">{{ exportLine }}</div>
+          <button onClick="{{ cancelExport }}" style="height:22px;padding:0 8px;border-radius:5px;border:1px solid #2E2E32;background:#1A1A1C;color:#9A9A96;font:500 11.5px 'IBM Plex Sans',sans-serif;cursor:pointer;" style-hover="color:#E8E8E6;background:#232326">Cancel</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showExportToast }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;right:14px;bottom:14px;width:320px;padding:12px 14px;border-radius:8px;background:#1A1A1C;border:1px solid #2E2E32;display:flex;flex-direction:column;gap:8px;animation:om-rise .18s ease-out;">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;"><span style="width:7px;height:7px;border-radius:50%;background:#5DCAA5;"></span><span>Clip exported — 2 m 02 s</span></div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6B6B68;word-break:break-all;">{{ outPath }}</div>
+          <div style="display:flex;gap:8px;">
+            <button style="height:24px;padding:0 10px;border-radius:5px;border:1px solid #2E2E32;background:#232326;color:#E8E8E6;font:500 11.5px 'IBM Plex Sans',sans-serif;cursor:pointer;" style-hover="background:#2A2A2E">Show in folder</button>
+            <button onClick="{{ dismissToast }}" style="height:24px;padding:0 10px;border-radius:5px;border:1px solid #2E2E32;background:transparent;color:#9A9A96;font:500 11.5px 'IBM Plex Sans',sans-serif;cursor:pointer;" style-hover="color:#E8E8E6">Trim another range</button>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ pinnedPanel }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:0 0 258px;border-left:1px solid #2E2E32;background:#1A1A1C;display:flex;flex-direction:column;min-height:0;">
+        <div style="height:28px;flex:0 0 28px;display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 10px;border-bottom:1px solid #2E2E32;">
+          <span style="font-size:11.5px;letter-spacing:.04em;color:#9A9A96;text-transform:uppercase;">{{ pinnedTitle }}</span>
+          <button onClick="{{ unpin }}" title="Unpin" style="width:18px;height:18px;border:0;background:transparent;color:#4C8DF6;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6" cy="4.5" r="2.4"></circle><path d="M6 7v4"></path></svg>
+          </button>
+        </div>
+        <div style="flex:1;min-height:0;overflow:auto;padding:8px 10px 10px;display:flex;flex-direction:column;gap:5px;">
+          <sc-for list="{{ pinnedRows }}" as="row" hint-placeholder-count="7">
+            <div style="display:flex;justify-content:space-between;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;">
+              <span style="color:#6B6B68;white-space:nowrap;">{{ row.k }}</span>
+              <span style="color:{{ row.color }};text-align:right;">{{ row.v }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ pinnedTracks }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:3px;order:-1;margin-bottom:8px;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:4px;border-bottom:1px solid #2E2E32;">
+                <span style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#6B6B68;">Tracks</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6B6B68;">{{ pinnedTrackCount }}</span>
+              </div>
+              <sc-for list="{{ pinnedTracks }}" as="tr" hint-placeholder-count="7">
+                <div onClick="{{ tr.onClick }}" style="display:flex;align-items:center;gap:7px;padding:3px 4px;border-radius:4px;background:{{ tr.bg }};cursor:{{ tr.cursor }};" style-hover="background:#232326">
+                  <div style="width:11px;height:11px;flex:0 0 11px;border-radius:3px;border:1px solid {{ tr.boxBorder }};background:{{ tr.boxBg }};display:flex;align-items:center;justify-content:center;">
+                    <sc-if value="{{ tr.on }}" hint-placeholder-val="{{ true }}">
+                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#0B1220" stroke-width="1.6"><path d="M1.4 4.2L3.1 6 6.6 2.3"></path></svg>
+                    </sc-if>
+                  </div>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ tr.idColor }};width:22px;flex:0 0 22px;">{{ tr.id }}</span>
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+                    <span style="font-size:11.5px;color:{{ tr.nameColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ tr.name }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6B6B68;white-space:nowrap;">{{ tr.meta }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showChrome }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:0 0 34px;width:34px;border-left:1px solid #2E2E32;background:#0E0E0F;display:flex;flex-direction:column;align-items:center;gap:2px;padding-top:6px;">
+        <sc-for list="{{ railButtons }}" as="b" hint-placeholder-count="4">
+          <button onClick="{{ b.onClick }}" onMouseEnter="{{ b.onEnter }}" onMouseLeave="{{ b.onLeave }}" title="{{ b.title }}" style="width:26px;height:26px;border-radius:6px;border:1px solid {{ b.border }};background:{{ b.bg }};color:{{ b.color }};display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;" style-hover="color:#E8E8E6">
+            <span dangerouslySetInnerHTML="{{ b.icon }}"></span>
+          </button>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ floatPanel }}" hint-placeholder-val="{{ true }}">
+      <div onMouseEnter="{{ holdPanel }}" onMouseLeave="{{ releasePanel }}" style="position:absolute;top:8px;right:42px;width:250px;max-height:calc(100% - 16px);overflow:auto;border-radius:8px;background:#1A1A1C;border:1px solid #2E2E32;box-shadow:0 12px 32px rgba(0,0,0,.55);z-index:40;animation:om-fade .12s ease-out;">
+        <div style="height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 6px 0 10px;border-bottom:1px solid #2E2E32;position:sticky;top:0;background:#1A1A1C;">
+          <span style="font-size:11.5px;letter-spacing:.04em;color:#9A9A96;text-transform:uppercase;">{{ panelTitle }}</span>
+          <button onClick="{{ pinPanel }}" title="Pin panel" style="width:20px;height:20px;border:0;background:transparent;color:#6B6B68;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;" style-hover="color:#E8E8E6">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="6" cy="4.5" r="2.4"></circle><path d="M6 7v4"></path></svg>
+          </button>
+        </div>
+        <div style="padding:8px 10px 10px;display:flex;flex-direction:column;gap:5px;">
+          <sc-for list="{{ panelRows }}" as="row" hint-placeholder-count="7">
+            <div style="display:flex;justify-content:space-between;gap:10px;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;">
+              <span style="color:#6B6B68;white-space:nowrap;">{{ row.k }}</span>
+              <span style="color:{{ row.color }};text-align:right;">{{ row.v }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ panelTracks }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:3px;order:-1;margin-bottom:8px;">
+              <div style="display:flex;align-items:baseline;justify-content:space-between;padding-bottom:4px;border-bottom:1px solid #2E2E32;">
+                <span style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#6B6B68;">Tracks</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6B6B68;">{{ panelTrackCount }}</span>
+              </div>
+              <sc-for list="{{ panelTracks }}" as="tr" hint-placeholder-count="7">
+                <div onClick="{{ tr.onClick }}" style="display:flex;align-items:center;gap:7px;padding:3px 4px;border-radius:4px;background:{{ tr.bg }};cursor:{{ tr.cursor }};" style-hover="background:#232326">
+                  <div style="width:11px;height:11px;flex:0 0 11px;border-radius:3px;border:1px solid {{ tr.boxBorder }};background:{{ tr.boxBg }};display:flex;align-items:center;justify-content:center;">
+                    <sc-if value="{{ tr.on }}" hint-placeholder-val="{{ true }}">
+                      <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#0B1220" stroke-width="1.6"><path d="M1.4 4.2L3.1 6 6.6 2.3"></path></svg>
+                    </sc-if>
+                  </div>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:{{ tr.idColor }};width:22px;flex:0 0 22px;">{{ tr.id }}</span>
+                  <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+                    <span style="font-size:11.5px;color:{{ tr.nameColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ tr.name }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6B6B68;white-space:nowrap;">{{ tr.meta }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="flex:0 0 36px;height:36px;display:flex;align-items:center;gap:14px;padding:0 10px;border-top:1px solid #2E2E32;border-bottom:1px solid #2E2E32;background:#0E0E0F;">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:500;letter-spacing:.02em;min-width:118px;">{{ timecode }}</div>
+    <div style="display:flex;align-items:center;gap:2px;">
+      <sc-for list="{{ transportButtons }}" as="b" hint-placeholder-count="5">
+        <button onClick="{{ b.onClick }}" title="{{ b.title }}" style="width:30px;height:26px;border-radius:6px;border:1px solid transparent;background:{{ b.bg }};color:{{ b.color }};display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;" style-hover="background:#232326;color:#E8E8E6">
+          <span dangerouslySetInnerHTML="{{ b.icon }}"></span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;font-family:'IBM Plex Mono',monospace;font-size:12px;">
+      <div style="display:flex;gap:6px;align-items:baseline;"><span style="color:#6B6B68;font-family:'IBM Plex Sans',sans-serif;font-size:11px;">in</span><span style="color:#4C8DF6;">{{ inTc }}</span></div>
+      <div style="display:flex;gap:6px;align-items:baseline;"><span style="color:#6B6B68;font-family:'IBM Plex Sans',sans-serif;font-size:11px;">out</span><span style="color:#4C8DF6;">{{ outTc }}</span></div>
+      <div style="display:flex;gap:6px;align-items:baseline;"><span style="color:#6B6B68;font-family:'IBM Plex Sans',sans-serif;font-size:11px;">dur</span><span style="color:#E8E8E6;">{{ durTc }}</span></div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span style="font-size:11px;color:#6B6B68;">trim</span>
+      <div style="display:flex;padding:2px;border-radius:6px;background:#1A1A1C;border:1px solid #2E2E32;">
+        <button onClick="{{ setCopy }}" style="height:22px;padding:0 10px;border-radius:4px;border:0;background:{{ copyBg }};color:{{ copyColor }};font:500 11.5px 'IBM Plex Sans',sans-serif;cursor:pointer;">copy</button>
+        <button onClick="{{ setExact }}" disabled="{{ exactDisabled }}" title="{{ exactTitle }}" style="height:22px;padding:0 10px;border-radius:4px;border:0;background:{{ exactBg }};color:{{ exactColor }};font:500 11.5px 'IBM Plex Sans',sans-serif;cursor:{{ exactCursor }};opacity:{{ exactOpacity }};">exact</button>
+      </div>
+    </div>
+  </div>
+
+  <div onMouseDown="{{ startSplitter }}" style="flex:0 0 5px;height:5px;cursor:row-resize;background:#0E0E0F;display:flex;align-items:center;justify-content:center;" style-hover="background:#16161A">
+    <div style="width:44px;height:1px;background:#2E2E32;"></div>
+  </div>
+
+  <div ref="{{ setTlRef }}" onMouseDown="{{ onTimelineDown }}" style="position:relative;flex:0 0 {{ timelineH }}px;height:{{ timelineH }}px;overflow:hidden;background:#0E0E0F;display:flex;flex-direction:column;">
+
+    <div style="position:relative;flex:0 0 22px;height:22px;border-bottom:1px solid #232326;overflow:hidden;cursor:text;">
+      <sc-for list="{{ ticks }}" as="tk" hint-placeholder-count="10">
+        <div style="position:absolute;top:0;bottom:0;left:{{ tk.left }};width:1px;background:{{ tk.color }};height:{{ tk.h }};"></div>
+      </sc-for>
+      <sc-for list="{{ tickLabels }}" as="lb" hint-placeholder-count="8">
+        <div style="position:absolute;top:3px;left:{{ lb.left }};transform:translateX(4px);font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6B6B68;white-space:nowrap;">{{ lb.text }}</div>
+      </sc-for>
+      <sc-if value="{{ isIndexing }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;left:0;bottom:0;height:2px;width:{{ indexPct }}%;background:#4C8DF6;"></div>
+      </sc-if>
+    </div>
+
+    <div title="Keyframes — cuts in copy mode land here" style="position:relative;flex:0 0 15px;height:15px;background:#121215;border-bottom:1px solid #232326;overflow:hidden;">
+      <div style="position:absolute;inset:0;background-image:{{ kfBand }};opacity:{{ kfBandOpacity }};"></div>
+      <sc-for list="{{ keyframeTicks }}" as="k" hint-placeholder-count="0">
+        <div style="position:absolute;top:{{ k.top }};bottom:0;left:{{ k.left }};width:1px;background:{{ k.color }};"></div>
+      </sc-for>
+    </div>
+
+    <div style="position:relative;flex:1;min-height:0;display:flex;flex-direction:column;">
+      <div style="position:relative;flex:1;min-height:60px;overflow:hidden;background:#141416;">
+        <sc-for list="{{ thumbs }}" as="th" hint-placeholder-count="14">
+          <div style="position:absolute;top:0;bottom:0;left:{{ th.left }};width:{{ th.width }};background:{{ th.bg }};box-shadow:inset -1px 0 0 rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.05);"></div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ showWaveform }}" hint-placeholder-val="{{ true }}">
+        <div style="position:relative;flex:0 0 26px;height:26px;background:#0F0F11;border-top:1px solid #232326;overflow:hidden;">
+          <sc-for list="{{ wave }}" as="w" hint-placeholder-count="60">
+            <div style="position:absolute;left:{{ w.left }};top:50%;transform:translateY(-50%);width:2px;height:{{ w.h }};background:{{ w.color }};border-radius:1px;"></div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <div style="position:absolute;top:0;bottom:0;left:0;width:{{ dimLeftW }};background:rgba(10,10,11,.72);pointer-events:none;"></div>
+      <div style="position:absolute;top:0;bottom:0;left:{{ dimRightL }};right:0;background:rgba(10,10,11,.72);pointer-events:none;"></div>
+      <div style="position:absolute;top:0;bottom:0;left:{{ inLeft }};width:{{ regionW }};border-top:1.5px solid rgba(76,141,246,.55);border-bottom:1.5px solid rgba(76,141,246,.55);pointer-events:none;"></div>
+
+      <div onMouseDown="{{ dragIn }}" style="position:absolute;top:0;bottom:0;left:{{ inLeft }};width:32px;transform:translateX(-16px);background:transparent;cursor:ew-resize;">
+        <div style="position:absolute;top:0;bottom:0;left:12px;width:8px;background:{{ inHandleBg }};border-radius:2px;"></div>
+        <div style="position:absolute;left:16px;top:50%;transform:translate(-50%,-50%);width:2px;height:14px;background:rgba(11,18,32,.55);border-radius:1px;"></div>
+      </div>
+      <div onMouseDown="{{ dragOut }}" style="position:absolute;top:0;bottom:0;left:{{ outLeft }};width:32px;transform:translateX(-16px);background:transparent;cursor:ew-resize;">
+        <div style="position:absolute;top:0;bottom:0;left:12px;width:8px;background:{{ outHandleBg }};border-radius:2px;"></div>
+        <div style="position:absolute;left:16px;top:50%;transform:translate(-50%,-50%);width:2px;height:14px;background:rgba(11,18,32,.55);border-radius:1px;"></div>
+      </div>
+
+      <sc-if value="{{ isIndexing }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute;inset:0;background:repeating-linear-gradient(90deg,#151517 0 10px,#121214 10px 20px);pointer-events:none;"></div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ dragLabel }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;top:26px;left:{{ dragLabelLeft }};transform:translateX(-50%);padding:2px 6px;border-radius:4px;background:#4C8DF6;color:#0B1220;font-family:'IBM Plex Mono',monospace;font-size:11px;z-index:20;white-space:nowrap;">{{ dragLabel }}</div>
+    </sc-if>
+    <sc-if value="{{ snapFlashLeft }}" hint-placeholder-val="{{ true }}">
+      <div style="position:absolute;top:22px;bottom:0;left:{{ snapFlashLeft }};width:2px;background:#5DCAA5;animation:om-flash .45s ease-out forwards;pointer-events:none;z-index:19;"></div>
+    </sc-if>
+
+    <div style="position:absolute;top:0;bottom:0;left:{{ playLeft }};width:1.5px;background:#E2574F;pointer-events:none;z-index:22;">
+      <div style="position:absolute;top:0;left:50%;transform:translateX(-50%);width:11px;height:11px;background:#E2574F;border-radius:0 0 3px 3px;"></div>
+    </div>
+  </div>
+
+  <sc-if value="{{ showChrome }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:0 0 30px;height:30px;display:flex;align-items:center;gap:16px;padding:0 10px;border-top:1px solid #2E2E32;background:#0E0E0F;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6B6B68;">
+      <span>{{ zoomLabel }}</span>
+      <span>{{ thumbLabel }}</span>
+      <span>{{ indexLabel }}</span>
+      <div style="flex:1"></div>
+      <sc-if value="{{ notice }}" hint-placeholder-val="{{ true }}">
+        <div onMouseEnter="{{ enterNotice }}" onMouseLeave="{{ leaveNotice }}" style="position:relative;display:flex;align-items:center;gap:8px;height:24px;padding:0 9px;border-radius:6px;background:rgba(239,159,39,.14);border:1px solid rgba(239,159,39,.45);color:#EF9F27;cursor:default;">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6 1.6L11 10.4H1z"></path><path d="M6 4.9v2.4"></path></svg>
+          <span style="font-family:'IBM Plex Sans',sans-serif;font-size:12px;">{{ noticeLabel }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500;color:#FFB84D;">{{ noticeDelta }}</span>
+          <sc-if value="{{ noticeOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="position:absolute;right:-1px;bottom:30px;width:262px;padding:11px;border-radius:8px;background:#1A1A1C;border:1px solid #2E2E32;box-shadow:0 12px 32px rgba(0,0,0,.55);display:flex;flex-direction:column;gap:9px;color:#E8E8E6;font-family:'IBM Plex Sans',sans-serif;font-size:12px;z-index:60;">
+              <div style="color:#9A9A96;text-wrap:pretty;line-height:1.45;">Stream copy can only cut on a keyframe, so the in point moved back to {{ snappedTc }}.</div>
+              <div style="display:flex;gap:8px;">
+                <sc-if value="{{ exactAvailable }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ keepExact }}" style="flex:1;height:24px;border-radius:5px;border:1px solid #2E2E32;background:#232326;color:#E8E8E6;font:500 11.5px 'IBM Plex Sans',sans-serif;cursor:pointer;" style-hover="background:#2A2A2E">Keep exact frame</button>
+                </sc-if>
+                <button onClick="{{ dismissNotice }}" style="height:24px;padding:0 10px;border-radius:5px;border:1px solid #2E2E32;background:transparent;color:#9A9A96;font:500 11.5px 'IBM Plex Sans',sans-serif;cursor:pointer;" style-hover="color:#E8E8E6">Dismiss</button>
+              </div>
+              <sc-if value="{{ exactAvailable }}" hint-placeholder-val="{{ true }}">
+                <div style="color:#6B6B68;font-size:11px;">Re-encodes ~4 s at the head of the clip.</div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ shortcutsOpen }}" hint-placeholder-val="{{ true }}">
+    <div onClick="{{ closeShortcuts }}" style="position:absolute;inset:0;background:rgba(8,8,9,.72);z-index:80;display:flex;align-items:center;justify-content:center;animation:om-fade .12s ease-out;">
+      <div style="width:min(680px,88%);border-radius:8px;background:#1A1A1C;border:1px solid #2E2E32;padding:18px 20px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">
+          <span style="font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#9A9A96;">Keyboard</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6B6B68;">Esc to close</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 28px;">
+          <sc-for list="{{ keyRows }}" as="r" hint-placeholder-count="16">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px solid #232326;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#E8E8E6;">{{ r.k }}</span>
+              <span style="font-size:12px;color:#9A9A96;">{{ r.v }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;screen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ready&quot;,&quot;empty&quot;,&quot;indexing&quot;,&quot;exporting&quot;,&quot;unsupported&quot;,&quot;degraded&quot;],&quot;default&quot;:&quot;ready&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;State&quot;},&quot;waveform&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Milestones&quot;},&quot;exactAvailable&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Milestones&quot;},&quot;trimMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;copy&quot;,&quot;exact&quot;],&quot;default&quot;:&quot;copy&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;snapping&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;},&quot;timelineHeight&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:236,&quot;min&quot;:150,&quot;max&quot;:520,&quot;unit&quot;:&quot;px&quot;,&quot;section&quot;:&quot;Layout&quot;}}">
+const FPS = 60, DUR = 862401 / 60, GOP = 4.2;
+const STEPS = [1/60, 2/60, 5/60, 10/60, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1800, 3600];
+const p2 = n => String(Math.floor(n)).padStart(2, '0');
+function tc(s) {
+  s = Math.max(0, Math.min(DUR, s));
+  const f = Math.round(s * FPS);
+  return p2(f / FPS / 3600) + ':' + p2((f / FPS / 60) % 60) + ':' + p2((f / FPS) % 60) + ':' + p2(f % FPS);
+}
+function tcShort(s, step) {
+  const f = Math.round(s * FPS);
+  if (step >= 60) return p2(f / FPS / 3600) + ':' + p2((f / FPS / 60) % 60);
+  if (step >= 1) return p2(f / FPS / 3600) + ':' + p2((f / FPS / 60) % 60) + ':' + p2((f / FPS) % 60);
+  return p2((f / FPS / 60) % 60) + ':' + p2((f / FPS) % 60) + ':' + p2(f % FPS);
+}
+const noise = i => {
+  const v = Math.sin(i * 0.53) * 0.45 + Math.sin(i * 0.117 + 1.3) * 0.32 + Math.sin(i * 2.9) * 0.23;
+  return Math.min(1, Math.abs(v) + 0.06);
+};
+const svg = b => ({ __html: b });
+const ICON = {
+  info: svg('<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v4"/><circle cx="8" cy="4.9" r=".55" fill="currentColor" stroke="none"/></svg>'),
+  gear: svg('<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/><circle cx="5.5" cy="4.5" r="1.5" fill="#1A1A1C"/><circle cx="10" cy="8" r="1.5" fill="#1A1A1C"/><circle cx="6.5" cy="11.5" r="1.5" fill="#1A1A1C"/></svg>'),
+  queue: svg('<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="3" width="12" height="3.2" rx="1"/><rect x="2" y="9.8" width="12" height="3.2" rx="1"/></svg>'),
+  keys: svg('<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><path d="M5 9.6h6"/><circle cx="4.6" cy="6.8" r=".5" fill="currentColor" stroke="none"/><circle cx="8" cy="6.8" r=".5" fill="currentColor" stroke="none"/><circle cx="11.4" cy="6.8" r=".5" fill="currentColor" stroke="none"/></svg>')
+};
+const T_ICON = {
+  prevKf: svg('<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M6 5.5v9"/><path d="M14.5 5.5L8.5 10l6 4.5z" fill="currentColor" stroke-linejoin="round"/></svg>'),
+  stepB: svg('<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M12.5 5.5L7 10l5.5 4.5z" fill="currentColor" stroke-linejoin="round"/></svg>'),
+  play: svg('<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><path d="M6.5 4.5l9 5.5-9 5.5z"/></svg>'),
+  pause: svg('<svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor"><rect x="6" y="5" width="3" height="10" rx="1"/><rect x="11" y="5" width="3" height="10" rx="1"/></svg>'),
+  stepF: svg('<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M7.5 5.5L13 10l-5.5 4.5z" fill="currentColor" stroke-linejoin="round"/></svg>'),
+  nextKf: svg('<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M14 5.5v9"/><path d="M5.5 5.5L11.5 10l-6 4.5z" fill="currentColor" stroke-linejoin="round"/></svg>')
+};
+const SRC_DUR = '4:00:00';
+const TRACKS = [
+  { id: 'V1', name: 'Screen Capture', meta: 'h264 · 2560×1440 · 60.00 fps · ' + SRC_DUR, kind: 'video', locked: true },
+  { id: 'A1', name: 'Mic — NT-USB', meta: 'aac · eng · mono · 48 kHz · ' + SRC_DUR, kind: 'audio' },
+  { id: 'A2', name: 'Desktop Audio', meta: 'aac · eng · stereo · 48 kHz · ' + SRC_DUR, kind: 'audio' },
+  { id: 'A3', name: 'Game Capture', meta: 'aac · eng · stereo · 48 kHz · ' + SRC_DUR, kind: 'audio' },
+  { id: 'A4', name: 'Voice Chat', meta: 'aac · eng · stereo · 48 kHz · 3:58:12', kind: 'audio' },
+  { id: 'A5', name: 'Browser Media', meta: 'aac · und · stereo · 48 kHz · ' + SRC_DUR, kind: 'audio' },
+  { id: 'A6', name: 'Alerts', meta: 'aac · und · stereo · 44.1 kHz · ' + SRC_DUR, kind: 'audio' }
+];
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      screen: props.screen || 'ready',
+      t: 6724.517, tin: 6690, tout: 6812,
+      viewStart: 6620, viewSpan: 320,
+      playing: false, tlW: 1600,
+      timelineH: props.timelineHeight || 236,
+      panel: null, pinned: null, panelHold: false,
+      trimMode: props.exactAvailable === false ? 'copy' : (props.trimMode || 'copy'),
+      shortcuts: false,
+      notice: { delta: -4.17, at: 6690 },
+      noticeOpen: false,
+      exportPct: 0, toast: false,
+      drag: null, snapFlash: null, thumbPct: 68, indexPct: 74,
+      sel: { V1: true, A1: true, A2: false, A3: false, A4: false, A5: false, A6: false }
+    };
+  }
+  componentDidMount() {
+    window.addEventListener('keydown', this.onKey);
+    this.ro = new ResizeObserver(() => {
+      if (this.tl) this.setState({ tlW: this.tl.getBoundingClientRect().width });
+    });
+    if (this.tl) { this.ro.observe(this.tl); this.setState({ tlW: this.tl.getBoundingClientRect().width }); }
+    this.raf = requestAnimationFrame(this.tick);
+  }
+  componentDidUpdate(prev) {
+    if (prev.screen !== this.props.screen && this.props.screen && this.props.screen !== this.state.screen) {
+      clearInterval(this.expTimer);
+      this.setState({ screen: this.props.screen, toast: false, exportPct: this.props.screen === 'exporting' ? 46 : 0 });
+    }
+    if (prev.trimMode !== this.props.trimMode && this.props.trimMode && this.props.trimMode !== this.state.trimMode) {
+      this.setState({ trimMode: this.props.trimMode });
+    }
+  }
+  componentWillUnmount() {
+    window.removeEventListener('keydown', this.onKey);
+    if (this.tl) this.tl.removeEventListener('wheel', this.onWheel);
+    if (this.ro) this.ro.disconnect();
+    cancelAnimationFrame(this.raf);
+    clearInterval(this.expTimer);
+  }
+  setTlRef = el => {
+    if (el === this.tl) return;
+    if (this.tl) this.tl.removeEventListener('wheel', this.onWheel);
+    this.tl = el;
+    if (el) el.addEventListener('wheel', this.onWheel, { passive: false });
+  };
+  tick = () => {
+    this.raf = requestAnimationFrame(this.tick);
+    if (!this.state.playing) return;
+    const now = performance.now();
+    const dt = this.last ? (now - this.last) / 1000 : 0;
+    this.last = now;
+    this.setState(s => ({ t: Math.min(DUR, s.t + dt) }));
+  };
+  get exactOK() { return this.props.exactAvailable !== false; }
+
+  /* ---- geometry ---- */
+  x2t = clientX => {
+    const r = this.tl.getBoundingClientRect();
+    const { viewStart, viewSpan } = this.state;
+    return Math.max(0, Math.min(DUR, viewStart + (clientX - r.left) / r.width * viewSpan));
+  };
+  pct = t => ((t - this.state.viewStart) / this.state.viewSpan * 100).toFixed(4) + '%';
+  snap = (t, ignore) => {
+    if (this.props.snapping === false) return { t, hit: null };
+    const tol = this.state.viewSpan / this.state.tlW * 8;
+    const cands = [Math.round(t / GOP) * GOP, this.state.t, 0, DUR];
+    if (ignore !== 'in') cands.push(this.state.tin);
+    if (ignore !== 'out') cands.push(this.state.tout);
+    let best = null, bd = tol;
+    cands.forEach(c => { const d = Math.abs(c - t); if (d < bd) { bd = d; best = c; } });
+    return best === null ? { t, hit: null } : { t: best, hit: best };
+  };
+  flash = t => {
+    this.setState({ snapFlash: t });
+    clearTimeout(this._fl);
+    this._fl = setTimeout(() => this.setState({ snapFlash: null }), 460);
+  };
+
+  /* ---- pointer ---- */
+  onWheel = e => {
+    e.preventDefault();
+    const { viewStart, viewSpan } = this.state;
+    if (e.ctrlKey || e.metaKey) {
+      const r = this.tl.getBoundingClientRect();
+      const anchor = viewStart + (e.clientX - r.left) / r.width * viewSpan;
+      const minSpan = r.width / 40 / FPS;
+      const next = Math.max(minSpan, Math.min(DUR, viewSpan * Math.pow(1.0025, e.deltaY)));
+      let vs = anchor - (anchor - viewStart) * (next / viewSpan);
+      vs = Math.max(0, Math.min(DUR - next, vs));
+      this.setState({ viewStart: vs, viewSpan: next });
+    } else {
+      const d = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) / this.state.tlW * viewSpan;
+      this.setState({ viewStart: Math.max(0, Math.min(DUR - viewSpan, viewStart + d)) });
+    }
+  };
+  onTimelineDown = e => {
+    if (this.state.screen === 'empty' || this.state.screen === 'indexing') return;
+    this.setState({ t: this.x2t(e.clientX), panel: null });
+    const mv = ev => this.setState({ t: this.x2t(ev.clientX) });
+    const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); };
+    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+  };
+  handleDrag = which => e => {
+    e.stopPropagation(); e.preventDefault();
+    if (this.state.screen === 'indexing' || this.state.screen === 'empty') return;
+    this.setState({ drag: which, panel: null });
+    const mv = ev => {
+      let t = this.x2t(ev.clientX);
+      if (!ev.altKey) {
+        const s = this.snap(t, which);
+        if (s.hit !== null && s.t !== t) this.flash(s.t);
+        t = s.t;
+      }
+      if (which === 'in') this.setState(st => ({ tin: Math.min(t, st.tout - 0.2) }));
+      else this.setState(st => ({ tout: Math.max(t, st.tin + 0.2) }));
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up);
+      this.setState(st => {
+        const next = { drag: null };
+        if (st.trimMode === 'copy') {
+          const raw = which === 'in' ? st.tin : st.tout;
+          const kf = which === 'in' ? Math.floor(raw / GOP) * GOP : Math.ceil(raw / GOP) * GOP;
+          if (Math.abs(kf - raw) > 0.001) {
+            next[which === 'in' ? 'tin' : 'tout'] = kf;
+            next.notice = { delta: +(kf - raw).toFixed(2), at: kf, which };
+            this.flash(kf);
+          }
+        }
+        return next;
+      });
+    };
+    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+  };
+  dragIn = this.handleDrag('in');
+  dragOut = this.handleDrag('out');
+  startSplitter = e => {
+    e.preventDefault();
+    const y0 = e.clientY, h0 = this.state.timelineH;
+    const mv = ev => this.setState({ timelineH: Math.max(150, Math.min(window.innerHeight * 0.55, h0 - (ev.clientY - y0))) });
+    const up = () => { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); };
+    window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
+  };
+
+  /* ---- commands ---- */
+  zoomBy = f => this.setState(s => {
+    const minSpan = s.tlW / 40 / FPS;
+    const next = Math.max(minSpan, Math.min(DUR, s.viewSpan * f));
+    return { viewSpan: next, viewStart: Math.max(0, Math.min(DUR - next, s.t - next / 2)) };
+  });
+  seek = d => this.setState(s => ({ t: Math.max(0, Math.min(DUR, s.t + d)) }));
+  toKf = dir => this.setState(s => ({ t: Math.max(0, Math.min(DUR, (dir > 0 ? Math.floor(s.t / GOP) + 1 : Math.ceil(s.t / GOP) - 1) * GOP)) }));
+  togglePlay = () => { this.last = performance.now(); this.setState(s => ({ playing: !s.playing })); };
+  setCopy = () => this.setState({ trimMode: 'copy' });
+  setExact = () => { if (this.exactOK) this.setState({ trimMode: 'exact', notice: null }); };
+  keepExact = () => this.setState(s => ({ trimMode: 'exact', notice: null, noticeOpen: false, tin: s.notice ? +(s.notice.at - s.notice.delta).toFixed(3) : s.tin }));
+  dismissNotice = () => this.setState({ notice: null, noticeOpen: false });
+  enterNotice = () => this.setState({ noticeOpen: true });
+  leaveNotice = () => this.setState({ noticeOpen: false });
+  openFile = () => this.setState({ screen: 'ready', toast: false });
+  toggleTrack = id => () => this.setState(s => {
+    const tr = TRACKS.find(x => x.id === id);
+    if (!tr || tr.locked) return {};
+    return { sel: Object.assign({}, s.sel, { [id]: !s.sel[id] }) };
+  });
+  startExport = () => {
+    if (this.state.screen === 'empty') return;
+    clearInterval(this.expTimer);
+    this.setState({ screen: 'exporting', exportPct: 0, toast: false });
+    this.expTimer = setInterval(() => this.setState(s => {
+      const p = s.exportPct + 3.5;
+      if (p >= 100) { clearInterval(this.expTimer); return { exportPct: 100, screen: 'ready', toast: true }; }
+      return { exportPct: p };
+    }), 160);
+  };
+  cancelExport = () => { clearInterval(this.expTimer); this.setState({ screen: 'ready', exportPct: 0 }); };
+  dismissToast = () => this.setState({ toast: false });
+  closeShortcuts = () => this.setState({ shortcuts: false });
+  pinPanel = () => this.setState(s => ({ pinned: s.panel, panel: null }));
+  unpin = () => this.setState({ pinned: null });
+  holdPanel = () => { clearTimeout(this._ph); this.setState({ panelHold: true }); };
+  releasePanel = () => { this._ph = setTimeout(() => this.setState({ panelHold: false, panel: null }), 220); };
+
+  onKey = e => {
+    const k = e.key;
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && k.toLowerCase() === 'e') { e.preventDefault(); this.startExport(); return; }
+    if (mod) return;
+    const frame = 1 / FPS;
+    const map = {
+      ' ': () => this.togglePlay(), k: () => this.togglePlay(),
+      j: () => this.seek(-2), l: () => this.seek(2),
+      ArrowLeft: () => this.seek(e.shiftKey ? -1 : -frame),
+      ArrowRight: () => this.seek(e.shiftKey ? 1 : frame),
+      ArrowUp: () => this.toKf(-1), ArrowDown: () => this.toKf(1),
+      i: () => e.shiftKey ? this.setState(s => ({ t: s.tin })) : (e.altKey ? this.setState({ tin: 0 }) : this.setState(s => ({ tin: Math.min(s.t, s.tout - 0.2) }))),
+      o: () => e.shiftKey ? this.setState(s => ({ t: s.tout })) : (e.altKey ? this.setState({ tout: DUR }) : this.setState(s => ({ tout: Math.max(s.t, s.tin + 0.2) }))),
+      '+': () => this.zoomBy(0.6), '=': () => this.zoomBy(0.6), '-': () => this.zoomBy(1.7),
+      z: () => e.shiftKey && this.setState({ viewStart: 0, viewSpan: DUR }),
+      Home: () => this.setState({ t: 0 }), End: () => this.setState({ t: DUR }),
+      f: () => this.setState(s => ({ full: !s.full, panel: null })),
+      '?': () => this.setState(s => ({ shortcuts: !s.shortcuts })),
+      Escape: () => this.setState({ shortcuts: false, panel: null, full: false, noticeOpen: false })
+    };
+    const fn = map[k] || map[k.toLowerCase()];
+    if (fn) { e.preventDefault(); fn(); }
+  };
+
+  trackRows(mode) {
+    const s = this.state;
+    return TRACKS.map(t => {
+      const on = mode === 'source' ? true : !!s.sel[t.id];
+      const interactive = mode === 'export' && !t.locked;
+      return {
+        id: t.id, name: t.name, meta: t.meta, on: mode === 'source' ? false : on,
+        onClick: interactive ? this.toggleTrack(t.id) : undefined,
+        cursor: interactive ? 'pointer' : 'default',
+        bg: mode === 'export' && on ? 'rgba(76,141,246,.10)' : 'transparent',
+        boxBorder: mode === 'source' ? '#2E2E32' : (on ? '#4C8DF6' : '#3A3A3E'),
+        boxBg: mode === 'source' ? '#232326' : (on ? '#4C8DF6' : 'transparent'),
+        idColor: t.kind === 'video' ? '#5DCAA5' : '#4C8DF6',
+        nameColor: mode === 'export' && !on ? '#9A9A96' : '#E8E8E6'
+      };
+    });
+  }
+
+  panelData(id) {
+    const c = { m: '#9A9A96', a: '#4C8DF6', g: '#5DCAA5', w: '#EF9F27' };
+    const s = this.state;
+    if (id === 'info') return { title: 'Source', rows: [
+      { k: 'container', v: 'mp4', color: '#E8E8E6' },
+      { k: 'codec', v: 'h264 / High', color: c.m }, { k: 'resolution', v: '2560 × 1440', color: c.m },
+      { k: 'frame rate', v: '60.00 fps', color: c.m }, { k: 'frames', v: '862,401', color: c.m },
+      { k: 'keyframes', v: '3,422', color: c.m }, { k: 'GOP', v: '252 frames · 4.2 s', color: c.m },
+      { k: 'bitrate', v: '11.6 Mb/s', color: c.m },
+      { k: 'size', v: '19.4 GB', color: c.m }, { k: 'heap', v: '147 MB in use', color: c.g }],
+      tracks: this.trackRows('source'), trackCount: '1 video · 6 audio' };
+    if (id === 'export') {
+      const audio = TRACKS.filter(t => t.kind === 'audio' && s.sel[t.id]).length;
+      return { title: 'Export', rows: [
+        { k: 'container', v: 'mp4', color: '#E8E8E6' }, { k: 'video', v: 'stream copy', color: c.a },
+        { k: 'audio', v: audio === 0 ? 'none selected' : 'stream copy × ' + audio, color: audio === 0 ? c.w : c.a },
+        { k: 'range', v: '00:02:02', color: '#E8E8E6' },
+        { k: 'est. size', v: (178 + audio * 29) + ' MB', color: c.m }, { k: 'writer', v: 'file system access', color: c.g },
+        { k: 'folder', v: '~/Recordings', color: c.m }, { k: 'name', v: 'session-4_clip.mp4', color: c.m }],
+        tracks: this.trackRows('export'), trackCount: (1 + audio) + ' of 7 selected' };
+    }
+    if (id === 'queue') return { title: 'Jobs', rows: [
+      { k: 'index', v: 'done · 138 ms', color: c.g }, { k: 'keyframe map', v: 'done · 41 ms', color: c.g },
+      { k: 'thumbs', v: '68% · running', color: c.a },
+      { k: 'waveform', v: 'queued', color: c.m }, { k: 'clip_03.mp4', v: 'done · 212 MB', color: c.g },
+      { k: 'clip_02.mp4', v: 'canceled', color: c.w }] };
+    return { title: '', rows: [] };
+  }
+
+  renderVals() {
+    const s = this.state, W = s.tlW || 1600;
+    const screen = s.screen;
+    const hasFile = screen !== 'empty' && screen !== 'unsupported';
+    const pxPerSec = W / s.viewSpan;
+    const showWaveform = this.props.waveform !== false;
+
+    /* ruler */
+    let step = STEPS[STEPS.length - 1];
+    for (const c of STEPS) { if (c * pxPerSec >= 90) { step = c; break; } }
+    const minor = step / 5, showMinor = minor * pxPerSec >= 13;
+    const ticks = [], tickLabels = [];
+    const start = Math.floor(s.viewStart / minor) * minor, end = s.viewStart + s.viewSpan;
+    for (let t = start; t <= end + minor; t += minor) {
+      if (t < 0 || t > DUR) continue;
+      const isMajor = Math.abs(t / step - Math.round(t / step)) < 1e-6;
+      if (!isMajor && !showMinor) continue;
+      const left = this.pct(t);
+      ticks.push({ left, color: isMajor ? '#4A4A4E' : '#2A2A2E', h: isMajor ? '22px' : '6px' });
+      if (isMajor) tickLabels.push({ left, text: tcShort(t, step) });
+    }
+
+    /* keyframe row */
+    const kfPx = GOP * pxPerSec;
+    const keyframeTicks = [];
+    let kfBand = 'none', kfBandOpacity = 0;
+    if (kfPx >= 3) {
+      const tall = kfPx >= 16;
+      for (let t = Math.floor(s.viewStart / GOP) * GOP; t <= end; t += GOP) {
+        if (t < 0 || t > DUR) continue;
+        const near = Math.abs(t - s.tin) < 0.01 || Math.abs(t - s.tout) < 0.01;
+        keyframeTicks.push({ left: this.pct(t), top: tall ? '0px' : '5px', color: near ? '#4C8DF6' : (tall ? '#8A8A92' : '#6E6E76') });
+      }
+    } else {
+      kfBand = 'repeating-linear-gradient(90deg,#6E6E76 0 1px,transparent 1px ' + Math.max(1.4, kfPx).toFixed(2) + 'px)';
+      kfBandOpacity = Math.max(0.4, Math.min(0.85, kfPx * 2));
+    }
+
+    /* filmstrip — dominant row, cells sized 16:9 to the row height */
+    const chromeH = 22 + 15 + (showWaveform ? 27 : 0);
+    const stripH = Math.max(60, Math.round((s.full ? Math.min(s.timelineH, 140) : s.timelineH) - chromeH));
+    const cellW = 120;
+    const cellSec = cellW / pxPerSec;
+    const n = Math.ceil(W / cellW) + 2, thumbs = [];
+    const firstIdx = Math.floor(s.viewStart / cellSec);
+    for (let i = 0; i < n; i++) {
+      const idx = firstIdx + i, t0 = idx * cellSec;
+      if (t0 > DUR) break;
+      const loaded = screen !== 'indexing' && (Math.abs(i - n / 2) / (n / 2)) < s.thumbPct / 100 + 0.2;
+      const a = noise(idx * 1.7), b = noise(idx * 1.7 + 4);
+      const bg = loaded
+        ? 'linear-gradient(155deg, hsl(' + Math.round(196 + a * 54) + ' 22% ' + Math.round(30 + a * 30) + '%), hsl(' + Math.round(22 + b * 46) + ' 20% ' + Math.round(17 + b * 20) + '%))'
+        : '#1B1B1F';
+      thumbs.push({ left: this.pct(t0), width: (cellW / W * 100).toFixed(4) + '%', bg });
+    }
+
+    /* waveform — quiet secondary band */
+    const wave = [];
+    if (screen !== 'indexing' && showWaveform) {
+      for (let x = 0; x < W; x += 5) {
+        const t = s.viewStart + x / W * s.viewSpan;
+        if (t > DUR) break;
+        const h = 3 + noise(t * 3.1) * 17;
+        const inside = t >= s.tin && t <= s.tout;
+        wave.push({ left: (x / W * 100).toFixed(4) + '%', h: h.toFixed(1) + 'px', color: inside ? 'rgba(76,141,246,.62)' : '#2E2E33' });
+      }
+    }
+
+    const inL = (s.tin - s.viewStart) / s.viewSpan * 100;
+    const outL = (s.tout - s.viewStart) / s.viewSpan * 100;
+    const dur = s.tout - s.tin;
+    const scale = pxPerSec / FPS;
+    const zoomLabel = scale >= 1 ? '1 frame = ' + scale.toFixed(1) + ' px' : '1 px = ' + Math.round(1 / scale).toLocaleString() + ' frames';
+
+    const pd = s.panel ? this.panelData(s.panel) : null;
+    const ppd = s.pinned ? this.panelData(s.pinned) : null;
+    const mk = (id, icon, title) => ({
+      icon, title,
+      bg: s.panel === id || s.pinned === id ? '#232326' : 'transparent',
+      border: s.panel === id ? '#2E2E32' : 'transparent',
+      color: s.panel === id || s.pinned === id ? '#E8E8E6' : '#6B6B68',
+      onClick: () => this.setState(st => ({ panel: st.panel === id ? null : id, shortcuts: false })),
+      onEnter: () => { clearTimeout(this._hv); this._hv = setTimeout(() => this.setState(st => (st.panel ? {} : { panel: id })), 400); },
+      onLeave: () => clearTimeout(this._hv)
+    });
+    const railButtons = [
+      mk('info', ICON.info, 'Source info'),
+      mk('export', ICON.gear, 'Export settings'),
+      mk('queue', ICON.queue, 'Jobs'),
+      { icon: ICON.keys, title: 'Keyboard (?)', bg: s.shortcuts ? '#232326' : 'transparent', border: 'transparent', color: s.shortcuts ? '#E8E8E6' : '#6B6B68', onClick: () => this.setState(st => ({ shortcuts: !st.shortcuts, panel: null })), onEnter: () => {}, onLeave: () => {} }
+    ];
+
+    const tb = (icon, title, onClick, active) => ({ icon, title, onClick, bg: active ? '#232326' : 'transparent', color: active ? '#E8E8E6' : '#9A9A96' });
+    const transportButtons = [
+      tb(T_ICON.prevKf, 'Previous keyframe (↑)', () => this.toKf(-1)),
+      tb(T_ICON.stepB, 'Step back (←)', () => this.seek(-1 / FPS)),
+      tb(s.playing ? T_ICON.pause : T_ICON.play, 'Play · pause (Space)', this.togglePlay, s.playing),
+      tb(T_ICON.stepF, 'Step forward (→)', () => this.seek(1 / FPS)),
+      tb(T_ICON.nextKf, 'Next keyframe (↓)', () => this.toKf(1))
+    ];
+
+    const hasNotice = !!(s.notice && s.trimMode === 'copy');
+
+    return {
+      showChrome: !s.full,
+      hasFile,
+      isEmpty: screen === 'empty',
+      isUnsupported: screen === 'unsupported',
+      isIndexing: screen === 'indexing',
+      isExporting: screen === 'exporting',
+      isDegraded: screen === 'degraded',
+      showExportToast: s.toast,
+      showWaveform,
+      exactAvailable: this.exactOK,
+      fileName: screen === 'empty' ? 'No file open' : 'rec_2026-07-18_session-4.mp4',
+      fileChip: screen === 'unsupported' ? 'MP4 · HEVC · 41.2 GB' : 'MP4 · H.264 · 19.4 GB',
+      outPath: '~/Recordings/session-4_clip.mp4',
+      stageLabel: s.drag ? 'filmstrip cache frame' : 'decoded frame',
+      timecode: tc(s.t), frameLabel: Math.round(s.t * FPS).toLocaleString('en-US') + ' f',
+      inTc: tc(s.tin), outTc: tc(s.tout), durTc: tc(dur),
+      timelineH: Math.round(s.full ? Math.min(s.timelineH, 140) : s.timelineH),
+      ticks, tickLabels, keyframeTicks, kfBand, kfBandOpacity, thumbs, wave,
+      inLeft: inL.toFixed(4) + '%', outLeft: outL.toFixed(4) + '%',
+      regionW: Math.max(0, outL - inL).toFixed(4) + '%',
+      dimLeftW: Math.max(0, Math.min(100, inL)).toFixed(4) + '%',
+      dimRightL: Math.max(0, Math.min(100, outL)).toFixed(4) + '%',
+      inHandleBg: s.drag === 'in' ? '#7FB0FF' : '#4C8DF6',
+      outHandleBg: s.drag === 'out' ? '#7FB0FF' : '#4C8DF6',
+      playLeft: ((s.t - s.viewStart) / s.viewSpan * 100).toFixed(4) + '%',
+      dragLabel: s.drag ? tc(s.drag === 'in' ? s.tin : s.tout) : null,
+      dragLabelLeft: s.drag === 'out' ? outL.toFixed(4) + '%' : inL.toFixed(4) + '%',
+      snapFlashLeft: s.snapFlash === null || s.snapFlash === undefined ? null : this.pct(s.snapFlash),
+      zoomLabel,
+      thumbLabel: screen === 'indexing' ? 'thumbs queued' : 'thumbs ' + s.thumbPct + '%',
+      indexLabel: screen === 'indexing' ? 'reading index — 138 ms' : 'index 862,401 frames · 3,422 keyframes',
+      indexPct: s.indexPct,
+      notice: hasNotice,
+      noticeLabel: hasNotice ? (s.notice.which === 'out' ? 'out moved' : 'in moved') : '',
+      noticeDelta: hasNotice ? (s.notice.delta > 0 ? '+' : '−') + Math.abs(s.notice.delta).toFixed(2) + ' s' : '',
+      noticeOpen: s.noticeOpen && hasNotice,
+      snappedTc: s.notice ? tc(s.notice.at) : '',
+      exportPct: Math.round(s.exportPct),
+      exportLine: (19.4 * s.exportPct / 100 * 9.2).toFixed(0) + ' MB written · 214 MB/s · ' + Math.max(1, Math.round((100 - s.exportPct) / 12)) + ' s left',
+      copyBg: s.trimMode === 'copy' ? '#232326' : 'transparent',
+      copyColor: s.trimMode === 'copy' ? '#E8E8E6' : '#6B6B68',
+      exactBg: s.trimMode === 'exact' ? '#232326' : 'transparent',
+      exactColor: this.exactOK ? (s.trimMode === 'exact' ? '#E8E8E6' : '#6B6B68') : '#4A4A4E',
+      exactDisabled: !this.exactOK,
+      exactCursor: this.exactOK ? 'pointer' : 'not-allowed',
+      exactOpacity: this.exactOK ? 1 : 0.55,
+      exactTitle: this.exactOK ? 'Re-encode the head of the clip for a frame-exact cut' : 'Frame-exact trim ships in a later release',
+      railButtons, transportButtons,
+      floatPanel: !!pd, panelTitle: pd ? pd.title : '', panelRows: pd ? pd.rows : [],
+      panelTracks: pd && pd.tracks ? pd.tracks : null, panelTrackCount: pd && pd.trackCount ? pd.trackCount : '',
+      pinnedPanel: !!ppd, pinnedTitle: ppd ? ppd.title : '', pinnedRows: ppd ? ppd.rows : [],
+      pinnedTracks: ppd && ppd.tracks ? ppd.tracks : null, pinnedTrackCount: ppd && ppd.trackCount ? ppd.trackCount : '',
+      shortcutsOpen: s.shortcuts,
+      keyRows: [
+        { k: 'Space / K', v: 'play · pause' }, { k: 'J / L', v: 'shuttle (accelerates)' },
+        { k: '← / →', v: 'step frame' }, { k: 'Shift + ← / →', v: 'step second' },
+        { k: 'I / O', v: 'set in · out' }, { k: 'Shift + I / O', v: 'jump to in · out' },
+        { k: 'Alt + I / O', v: 'clear in · out' }, { k: '↑ / ↓', v: 'previous · next keyframe' },
+        { k: '+ / −', v: 'zoom' }, { k: 'Shift + Z', v: 'zoom to fit' },
+        { k: 'Home / End', v: 'start · end' }, { k: 'F', v: 'full-screen preview' },
+        { k: '⌘ / Ctrl + E', v: 'export clip' }, { k: '⌘ / Ctrl + Z', v: 'undo' },
+        { k: 'Alt (drag)', v: 'disable snapping' }, { k: '?', v: 'this overlay' }
+      ],
+      setTlRef: this.setTlRef, onTimelineDown: this.onTimelineDown,
+      dragIn: this.dragIn, dragOut: this.dragOut, startSplitter: this.startSplitter,
+      setCopy: this.setCopy, setExact: this.setExact, keepExact: this.keepExact,
+      dismissNotice: this.dismissNotice, enterNotice: this.enterNotice, leaveNotice: this.leaveNotice,
+      startExport: this.startExport, cancelExport: this.cancelExport, dismissToast: this.dismissToast,
+      openFile: this.openFile, closeShortcuts: this.closeShortcuts,
+      pinPanel: this.pinPanel, unpin: this.unpin, holdPanel: this.holdPanel, releasePanel: this.releasePanel
+    };
+  }
+}
+
+</script>
+</body>
+</html>
