@@ -1,11 +1,13 @@
 # M1 Task 3 — frame cache: summary
 
-Status: implemented and tested (116 tests in `src/media/frames/`, all Node-runnable logic green: `npm run typecheck`,
-`npm run lint`, `npm test` all clean project-wide). **Not yet run against the real 27GB fixture or
-`longgop.mp4` in a browser** — that requires a real Chrome session with WebCodecs hardware decode,
-real Worker threads, OPFS, and (for the memory checkpoints) a human reading Activity Monitor by
-hand. This doc is explicit about which numbers are proven and which are still pending that pass —
-see "What's still open" below.
+Status: implemented, tested (128 tests in `src/media/frames/`, all Node-runnable logic green:
+`npm run typecheck`, `npm run lint`, `npm test` all clean project-wide), and **now confirmed
+against a real browser run on `longgop.mp4`** — coarse build, `getNearest()`, dense build +
+cancellation, atlas round-trip, and the 20-cycle leak check all pass with real, believable numbers
+(see "Part 9 measurements" below). Three real WebCodecs integration bugs were found and fixed
+along the way — the Node-only test suite could not have caught any of them, since Node has no
+WebCodecs. **Still pending**: the same run against `fixtures/27gb.mp4` (the actual target fixture)
+and the manual OS-level Activity Monitor memory checkpoints. See "What's still open" below.
 
 This is a handoff/context summary for a future session. Full design rationale lives in
 `src/media/frames/README.md`; this file is about what was built, what was decided, and what's
@@ -86,11 +88,77 @@ pattern (`src/media/playback/`'s `VideoElementLike`/`FakeVideoElement`).
   nearest-neighbor — a deliberate simplification; at 0.5s spacing the difference is imperceptible
   for a scrub preview, and the simpler algorithm was much cheaper to implement and verify.
 
-## Real bugs found during verification (all in test scaffolding, not shipped design)
+## Part 9 measurements — longgop.mp4 (real browser run, Chrome 151, 2026-08-06)
 
-Writing tests against hand-built synthetic tracks caught two real correctness issues before they
-could hide behind convenient assumptions — worth recording since both are the kind of mistake
-that's easy to repeat:
+The first real run surfaced three genuine WebCodecs integration bugs in a row (see next section)
+before producing a clean pass. Full JSON:
+`fixtures/frame_cache_harness_longgop.mp4_2026-08-06T14_17_17.874Z.json`.
+
+| Metric | Result | Target | Status |
+|---|---|---|---|
+| Coarse build (192 keyframes) | 247.2ms (776.6 keyframes/sec) | <15000ms | **PASS** (61x margin) |
+| `getNearest()` over 2000 calls | p50=0.000ms p95=0.005ms p99=0.005ms max=0.040ms | 60Hz-viable (≤16.67ms) | **PASS** |
+| Dense build (first window) | 343.8ms | — | real, non-trivial cost |
+| Dense rebuild after viewport moved (cancel + new window) | 325.2ms | — | real, non-trivial cost |
+| Dense decoded-vs-kept (one window) | 1 kept / 301 decoded | — | confirms the decode-chain cost this task's Part 1 redesign is built around |
+| Atlas round-trip (40 atlas builds across the leak-check cycles) | pack 5193.7ms / write 137.4ms / read 37.4ms / decode-once 785.9ms total, 10,310,720 bytes written | — | OPFS write/read are cheap; packing (WebP encode) dominates, as expected |
+| 20-cycle warm/clear leak check | `liveCount` = 0 after every single cycle | 0 | **PASS** |
+| Keyframe interval, longgop.mp4 (192 keyframes) | matches FEASIBILITY.md's already-recorded 10.000s constant | — | consistent with prior spike C measurement |
+
+Worker count: 2 (of `hardwareConcurrency=10`, capped by `defaultWorkerCount`'s `min(4, hw/2)`
+rule but starting at the "start with 2" default). Codec: `avc1.640028`, 1920x1080, track timescale
+15360.
+
+**Not yet run**: the same measurements against `fixtures/27gb.mp4` (4K, the actual target fixture
+— longgop.mp4 is 1080p, and spike C's own numbers show decode throughput is resolution-dependent),
+and the Part B manual Activity Monitor memory checkpoints (idle / coarse-warm / dense-warm /
+after-`clear()`) — the only trustworthy memory number per this task's own repeated warning.
+
+## Real bugs found during verification
+
+Three genuine WebCodecs integration bugs were found and fixed via the first real browser run
+against `longgop.mp4` — none of these could have been caught by the Node-only test suite, since
+Node has no WebCodecs implementation to test against at all. In order of discovery (each one
+masked the next until fixed):
+
+1. **`VideoDecoderConfig.description` included the avcC/hvcC box's 8-byte header.** Task 1's
+   `TrackIndex.description` deliberately keeps the full box (header included) for its other
+   consumers (remux/export need it); WebCodecs wants only the
+   AVCDecoderConfigurationRecord/HEVCDecoderConfigurationRecord content, starting at
+   `configurationVersion`. Passing the header-included bytes made `configure()` fail silently on
+   every single worker, for every single request — the only visible symptom was a generic,
+   misleading "Cannot call decode on a closed codec" the moment `decode()` was first called,
+   because the `VideoDecoder`'s `error()` callback fired with nothing in the pending queue yet
+   (right after `configure()`, before any `decode()`) and its real message was silently dropped.
+   Fixed by `stripBoxHeader()` (`FrameDecoder.ts`, tested) plus capturing `error()`'s message even
+   when nothing is pending, so the *real* cause surfaces instead of the downstream symptom.
+2. **Dense-tier decode chains got split at fixed-size flush boundaries, in TWO separate places.**
+   `flush()` resets WebCodecs' "key frame required" flag; a dense window is one continuous chain
+   (a keyframe followed by many dependent delta frames) that must never be split across a flush.
+   `RealFrameDecoder.decodeBatch()`'s own internal batching had this bug, AND — after fixing that
+   — `worker.ts`'s separate outer chunking loop (which exists only to check cancellation between
+   chunks) had the identical bug one layer up, reproducing the exact same failure even after the
+   inner fix landed. Both now use the same `groupIntoFlushBatches()` (`FrameDecoder.ts`, tested):
+   independent keyframes (coarse tier) still batch up to `batchSize` per flush, preserving spike
+   C's throughput finding, but a decode chain is never split regardless of length.
+3. **A decode error left the worker's `VideoDecoder` instance wedged for every subsequent
+   request.** `worker.ts` documented "a decode error leaves the decoder unusable" but didn't act
+   on it — it kept reusing the same broken decoder instead of closing it and building a fresh one,
+   so one bad batch would have silently broken every later request on that worker too.
+
+None of these were hypothetical — each was found by literally running the harness, reading the
+resulting error, and tracing it to a specific line. The general lesson, consistent with Task 2's
+own experience: this module's "everything provably correct in Node before touching a real
+decoder" strategy worked exactly as intended for the LOGIC (batching, scheduling, LRU, atlas
+layout, cancellation, the two-tier sampling math — all of which needed zero changes once real
+WebCodecs entered the picture) — but real WebCodecs behavior itself is only ever discoverable by
+actually running it, which is precisely why Part 9's browser pass is not optional busywork.
+
+## Test-scaffolding bugs found during Node-level verification
+
+Writing tests against hand-built synthetic tracks caught two more correctness issues, this time in
+the module's own logic rather than its WebCodecs integration — worth recording since both are the
+kind of mistake that's easy to repeat:
 
 1. **Dense-window clamping against the wrong bound.** An early version of `setViewport` clamped
    the dense window's end to the coarse tier's own keyframe extent (`coarseTimes[last]`) instead
@@ -107,16 +175,17 @@ that's easy to repeat:
 
 ## What's still open
 
-- **No numbers in this doc are from a real browser run yet.** Everything above is verified in
-  Node against fakes/synthetic data. The task prompt's Part 9 numbers (coarse build time on the
-  27GB fixture and target <15s, `getNearest()` latency at real scale, dense build/cancel timing,
-  atlas OPFS round-trip timing/bytes, and — critically — the OS-level Activity Monitor memory
-  checkpoints, the only trustworthy memory number per the prompt's own repeated warning) all
-  require running `npm run dev:coi` → `frames.html` by hand against `fixtures/27gb.mp4` and
-  `fixtures/longgop.mp4`, same as Task 2's Part 7 report. **Next session: run this harness for
-  real and replace this section with the actual measured numbers**, flagging anything that misses
-  a target (<15s coarse build, dense cancellation genuinely stopping in-flight work) per the task
-  prompt's instructions.
+- **`fixtures/27gb.mp4` (the actual target fixture) hasn't been run through the harness yet** —
+  only `longgop.mp4` (1080p, 2GB) has a confirmed real-browser pass. longgop.mp4's clean numbers
+  make it very likely the 27GB run will also succeed now that the three WebCodecs bugs above are
+  fixed, but decode throughput is resolution-dependent (spike C: 648.8/sec on longgop.mp4 vs.
+  150.4/sec on the 4K fixture, both batched) and the 27GB file's coarse tier is ~5x larger (1,015
+  keyframes vs. 192), so its own numbers — especially whether coarse build stays under the 15s
+  target — still need to be captured for real, not assumed from longgop's result.
+- **The Part B manual Activity Monitor memory checkpoints have not been run at all** — the only
+  trustworthy memory number per this task's own repeated warning (GPU-backed VideoFrame/ImageBitmap
+  memory is invisible to every JS API). `harness.ts`'s Part B section is built and ready
+  (`npm run dev:coi` → `frames.html`, scroll to "Part B: OS-level memory checkpoints").
 - **Part 0's job-descriptor decision is reasoned, not measured** (see above) — worth a real
   multi-worker timing comparison if a future task's profiling suggests the pool is bottlenecked on
   something this design didn't anticipate.
