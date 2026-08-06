@@ -4,6 +4,8 @@
 // rediscovering them:
 //   - flush() is required at least once per batch -- this decoder does not emit output for
 //     queued decode() calls otherwise.
+//   - flush() itself is timeout-raced, not bare-awaited -- it can hang indefinitely on malformed
+//     or unexpected input with no error() callback ever firing.
 //   - a decoder error() must reject every currently-pending output, not just log -- otherwise a
 //     single failed chunk hangs the batch forever (a real 4+ minute hang was observed before this
 //     fix existed).
@@ -80,11 +82,26 @@ export class RealFrameDecoder implements FrameDecoder {
       // NEVER flush speculatively mid-batch -- flush() resets the decoder's key-frame-required
       // flag, forcing an unwanted keyframe restart on the very next decode (spike C's "warm
       // decoder" finding). Exactly one flush() per batch, after every decode() in it is queued.
+      //
+      // Timeout-raced, not a bare await: spike C's decode-worker.ts found flush() itself can hang
+      // indefinitely on malformed/unexpected input, with no error() callback ever firing -- ported
+      // here rather than assumed safe, since dense-tier delta-frame decoding is a genuinely new
+      // code path (every prior use of WebCodecs in this project, coarse tier included, only ever
+      // decoded keyframes).
+      const timeoutMs = Math.max(10_000, batch.length * 1_000);
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          reject(new Error(`flush() timed out after ${String(timeoutMs)}ms (batch of ${String(batch.length)}, first jobId=${String(batch[0]?.id ?? -1)}, decoder.state=${decoder.state}, decodeQueueSize=${String(decoder.decodeQueueSize)})`));
+        }, timeoutMs);
+      });
       try {
-        await decoder.flush();
+        await Promise.race([decoder.flush(), timeout]);
       } catch (err) {
         errors.push({ kind: 'decode-error', message: err instanceof Error ? err.message : String(err), jobId: batch[0]?.id ?? -1 });
         break;
+      } finally {
+        clearTimeout(timeoutHandle);
       }
 
       for (const [i, job] of batch.entries()) {

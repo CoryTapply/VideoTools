@@ -59,7 +59,16 @@ async function handleDecode(req: Extract<FrameWorkerRequest, { type: 'decode' }>
     const result = await decoder.decodeBatch(decodeJobs, req.size, batchSize);
     for (const t of result.thumbnails) thumbnails.push({ id: t.id, presentationTime: t.presentationTime, bitmap: t.bitmap });
     errors.push(...result.errors);
-    if (result.errors.length > 0) break; // decoder is unusable after an error; nothing further to submit
+    if (result.errors.length > 0) {
+      // Per FrameDecoder's contract, any decode error leaves the underlying VideoDecoder
+      // unusable -- close it and clear configuredCodec so the NEXT handleDecode() call (even one
+      // requesting the identical config) constructs a genuinely fresh decoder, instead of
+      // silently reusing a wedged instance for every request that follows this worker forever.
+      decoder.close();
+      decoder = undefined;
+      configuredCodec = '';
+      break;
+    }
   }
 
   if (cancelled.delete(req.requestId)) {
