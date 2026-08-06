@@ -27,6 +27,7 @@ export default defineConfig({
         t0: 'T0-exportcost.html',
         mediaIndex: 'media-index.html',
         playback: 'playback.html',
+        frames: 'frames.html',
       },
     },
   },

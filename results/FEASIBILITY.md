@@ -205,11 +205,29 @@ thumbnail atlas both completed with real, actionable findings.
 - **Multi-worker index sharing: use `SharedArrayBuffer`, not per-worker transferable
   copies**, if more than one worker needs read access to the index — 9.03ms to 2 workers
   concurrently beat 25.34ms to a single worker via transferables in this test.
-- **Scrub cache window/frame rate: 2fps, 5-minute window (600 frames @ 320x180)** is the
-  validated config — sustains 60Hz with ~100x latency margin. Expect **~27s** to build
-  this cache (18,210 frames actually decoded to fill 600 slots — a ~30:1 decode-to-keep
-  ratio inherent to needing every intervening frame, not a bug). This must happen
-  progressively / in the background, never as a blocking operation before first scrub.
+- **Scrub cache: two tiers, not a single 2fps/5-minute window.** Superseded by M1 Task 3
+  (`src/media/frames/`, see its README.md) after this constant produced a real design
+  problem: filling 600 slots at 2fps required decoding 18,210 frames — every frame in the
+  window, a ~30:1 decode-to-keep ratio inherent to needing every intervening frame, not a
+  bug — costing 27.1s per window, and on a 70-minute recording left 93% of the timeline
+  uncached with no designed fallback for scrubbing there. The fix: sample at KEYFRAMES
+  instead of a fixed frame rate, since keyframes decode independently with no dependency
+  chain. On the 27GB fixture, 1,015 keyframes cover the ENTIRE file in ~6.7s at
+  150.4/sec batched (vs. 27.1s for one 5-minute window at 2fps) — the "outside the
+  window" problem disappears because there is no window.
+  - **COARSE** — whole file, one entry per keyframe (~4.17s spacing on the 27GB
+    fixture), 160x90. Built eagerly on open, target under 15s (resolution-dependent —
+    longgop.mp4 measured 648.8/sec batched vs. 150.4/sec on the 4K fixture, so a flat
+    15s target needs a resolution-aware estimate). This is the filmstrip AND the
+    default scrub source: at full-file zoom on a ~1400px timeline, a 4.17s keyframe
+    interval is about 5px, finer than the pointer, so coarse alone covers the large
+    majority of scrubbing.
+  - **DENSE** — +/-30s around the viewport, 2fps, 320x180 — spike C's originally
+    validated path (60Hz sustained, ~100x latency margin), now scoped to build lazily
+    and only when zoom exceeds roughly one keyframe per 40px, cancelled and rebuilt as
+    the viewport moves, instead of being the only cache tier.
+  - Both must build progressively / in the background, never as a blocking operation
+    before first scrub — unchanged from the original guidance.
 - **Expected export throughput for progress estimation: flat, not size-dependent.**
   Superseding this section's earlier size-scaled guidance (see the retraction in §2):
   `total_ms ≈ 13.2 + size_MB / 178.5`, holding from 3MB to 4GB and across all 5 source

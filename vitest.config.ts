@@ -5,7 +5,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/media/index/**/*.test.ts', 'src/media/playback/**/*.test.ts'],
+    include: ['src/media/index/**/*.test.ts', 'src/media/playback/**/*.test.ts', 'src/media/frames/**/*.test.ts'],
     globals: false,
   },
 });
