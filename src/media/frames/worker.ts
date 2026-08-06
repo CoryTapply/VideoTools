@@ -11,7 +11,7 @@ declare const self: {
 };
 
 import { createFrameLifecycleRegistry } from './frame-lifecycle';
-import { DEFAULT_BATCH_SIZE, type DecodeJob, type DecodedBitmap, type FrameDecodeError, type FrameDecoderConfig } from './FrameDecoder';
+import { DEFAULT_BATCH_SIZE, groupIntoFlushBatches, type DecodeJob, type DecodedBitmap, type FrameDecodeError, type FrameDecoderConfig } from './FrameDecoder';
 import { RealFrameDecoder } from './RealFrameDecoder';
 import type { FrameWorkerRequest, FrameWorkerResponse, WireThumbnail } from './worker-protocol';
 import type { DecodeJobDescriptor } from './worker-pool';
@@ -55,16 +55,23 @@ async function handleDecode(req: Extract<FrameWorkerRequest, { type: 'decode' }>
   const thumbnails: WireThumbnail[] = [];
   const errors: FrameDecodeError[] = [];
 
-  for (let i = 0; i < req.jobs.length; i += batchSize) {
+  // Chunked by groupIntoFlushBatches, NOT a naive fixed-size slice: this loop exists so
+  // `cancelled` can be checked between chunks, but req.jobs may contain a decode chain (a
+  // keyframe followed by dependent delta frames, dense tier) that must never be split at an
+  // arbitrary boundary -- slicing it here and calling decodeBatch() once per slice would flush
+  // (and reset the key-frame-required flag) at the end of every slice regardless of chain state,
+  // reintroducing exactly the bug groupIntoFlushBatches exists to prevent, just one layer up.
+  // Each group is passed to decodeBatch() with batchSize = group.length so its OWN internal
+  // grouping is a single-batch passthrough, not a second, redundant re-split.
+  for (const group of groupIntoFlushBatches(req.jobs, batchSize)) {
     if (cancelled.delete(req.requestId)) {
       closeAll(thumbnails.map((t) => t.bitmap));
       self.postMessage({ type: 'result', requestId: req.requestId, thumbnails: [], errors: [], cancelled: true });
       return;
     }
 
-    const batch = req.jobs.slice(i, i + batchSize);
-    const decodeJobs = await Promise.all(batch.map(readJobBytes));
-    const result = await decoder.decodeBatch(decodeJobs, req.size, batchSize);
+    const decodeJobs = await Promise.all(group.map(readJobBytes));
+    const result = await decoder.decodeBatch(decodeJobs, req.size, decodeJobs.length);
     for (const t of result.thumbnails) thumbnails.push({ id: t.id, presentationTime: t.presentationTime, bitmap: t.bitmap });
     errors.push(...result.errors);
     if (result.errors.length > 0) {
