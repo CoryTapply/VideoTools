@@ -2,12 +2,13 @@
 
 Status: implemented, tested (128 tests in `src/media/frames/`, all Node-runnable logic green:
 `npm run typecheck`, `npm run lint`, `npm test` all clean project-wide), and **now confirmed
-against a real browser run on `longgop.mp4`** — coarse build, `getNearest()`, dense build +
-cancellation, atlas round-trip, and the 20-cycle leak check all pass with real, believable numbers
-(see "Part 9 measurements" below). Three real WebCodecs integration bugs were found and fixed
-along the way — the Node-only test suite could not have caught any of them, since Node has no
-WebCodecs. **Still pending**: the same run against `fixtures/27gb.mp4` (the actual target fixture)
-and the manual OS-level Activity Monitor memory checkpoints. See "What's still open" below.
+against real browser runs on both `longgop.mp4` AND `fixtures/27gb.mp4` (the actual target
+fixture)** — coarse build, `getNearest()`, dense build + cancellation, atlas round-trip, and the
+20-cycle leak check all pass on both, with real, believable numbers (see "Part 9 measurements"
+below). Three real WebCodecs integration bugs were found and fixed along the way — the Node-only
+test suite could not have caught any of them, since Node has no WebCodecs. **Only remaining gap**:
+the manual OS-level Activity Monitor memory checkpoints (Part B) haven't been run. See "What's
+still open" below.
 
 This is a handoff/context summary for a future session. Full design rationale lives in
 `src/media/frames/README.md`; this file is about what was built, what was decided, and what's
@@ -109,10 +110,34 @@ Worker count: 2 (of `hardwareConcurrency=10`, capped by `defaultWorkerCount`'s `
 rule but starting at the "start with 2" default). Codec: `avc1.640028`, 1920x1080, track timescale
 15360.
 
-**Not yet run**: the same measurements against `fixtures/27gb.mp4` (4K, the actual target fixture
-— longgop.mp4 is 1080p, and spike C's own numbers show decode throughput is resolution-dependent),
-and the Part B manual Activity Monitor memory checkpoints (idle / coarse-warm / dense-warm /
-after-`clear()`) — the only trustworthy memory number per this task's own repeated warning.
+## Part 9 measurements — 27gb.mp4 (real browser run, Chrome 151, 2026-08-06)
+
+The actual target fixture (4K, 27.1GB). Full JSON:
+`fixtures/frame_cache_harness_27gb.mp4_2026-08-06T14_23_07.641Z.json`. Confirms the same design
+choices at the fixture the task was actually specified against, not just longgop's smaller 1080p
+proxy.
+
+| Metric | Result | Target | Status |
+|---|---|---|---|
+| Coarse build (1,015 keyframes — exact match to FEASIBILITY.md's documented count) | 5192.2ms (195.5 keyframes/sec) | <15000ms | **PASS** (2.9x margin) |
+| `getNearest()` over 2000 calls | p50=0.000ms p95=0.005ms p99=0.005ms max=0.040ms | 60Hz-viable | **PASS** — identical to longgop's numbers, confirming file size doesn't affect lookup cost (as expected: it's a binary search over a fixed-size array once warmed) |
+| Dense build (first window) | 1613.6ms | — | real, non-trivial cost |
+| Dense rebuild after viewport moved (cancel + new window) | 1321.4ms | — | real, non-trivial cost |
+| Dense decoded-vs-kept (one window) | 1 kept / 158 decoded | — | different ratio than longgop's 301/1 — expected, since this fixture's GOP (4.166s) differs from longgop's (10s), so a fixed-duration window spans a different chain length |
+| Atlas round-trip (231 atlas builds across 21 coarse warms: 1 initial + 20 leak cycles, 11 atlases each — 1015/100 rounds up to 11) | pack 36,338.9ms / write 872.8ms / read 197.1ms / decode-once 5,414.9ms; ~157ms/atlas pack, ~3.8ms/atlas OPFS write, ~0.85ms/atlas OPFS read, ~23.4ms/atlas decode-once | — | the ~23.4ms per-atlas decode-once number lines up almost exactly with spike C's own 23.81ms/`createImageBitmap` finding — confirms the atlas model: that cost is paid ONCE per atlas per session (`decodeAtlas`), never once per tile |
+| 20-cycle warm/clear leak check | `liveCount` = 0 after every single cycle | 0 | **PASS** |
+| Effective coarse throughput vs. spike C's single-worker baseline | 195.5/sec (this run, 2 parallel workers) vs. 150.4/sec (spike C, single-threaded, batched) | — | only a ~1.3x gain from doubling worker count, not 2x — consistent with the task prompt's own caution that "4K hardware decode may already be the bottleneck, in which case more workers just contend" |
+
+Worker count: 2. Codec: `avc1.640034`, 3840x2160, track timescale 90000. Total automated harness
+run: 115.7s (dominated by 21 repeated full coarse builds during the leak check — real cost of the
+diagnostic itself, not a per-cycle production concern). JS-side `measureUserAgentSpecificMemory`
+peaked at ~191.7MB during the run and returned to ~11.3MB after (explicitly non-authoritative per
+this task's own warning — does not include GPU-backed VideoFrame/ImageBitmap memory at all; see
+Part B below for the number that actually matters).
+
+**Not yet run**: the Part B manual Activity Monitor memory checkpoints (idle / coarse-warm /
+dense-warm / after-`clear()`) — the only trustworthy memory number per this task's own repeated
+warning, and the only remaining gap before this task's empirical validation is complete.
 
 ## Real bugs found during verification
 
@@ -175,13 +200,6 @@ kind of mistake that's easy to repeat:
 
 ## What's still open
 
-- **`fixtures/27gb.mp4` (the actual target fixture) hasn't been run through the harness yet** —
-  only `longgop.mp4` (1080p, 2GB) has a confirmed real-browser pass. longgop.mp4's clean numbers
-  make it very likely the 27GB run will also succeed now that the three WebCodecs bugs above are
-  fixed, but decode throughput is resolution-dependent (spike C: 648.8/sec on longgop.mp4 vs.
-  150.4/sec on the 4K fixture, both batched) and the 27GB file's coarse tier is ~5x larger (1,015
-  keyframes vs. 192), so its own numbers — especially whether coarse build stays under the 15s
-  target — still need to be captured for real, not assumed from longgop's result.
 - **The Part B manual Activity Monitor memory checkpoints have not been run at all** — the only
   trustworthy memory number per this task's own repeated warning (GPU-backed VideoFrame/ImageBitmap
   memory is invisible to every JS API). `harness.ts`'s Part B section is built and ready
