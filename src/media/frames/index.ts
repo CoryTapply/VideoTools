@@ -9,7 +9,7 @@ export type { Closable, FrameLifecycleRegistry } from './frame-lifecycle';
 export { createFrameLifecycleRegistry, withFrame, withFrameAsync, assertNoStaleFrames, StaleFrameError } from './frame-lifecycle';
 
 export type { DecodeJob, DecodedBitmap, DecodedThumbnail, FrameDecodeBatchResult, FrameDecodeError, FrameDecoder, FrameDecoderConfig, ThumbnailSize } from './FrameDecoder';
-export { DEFAULT_BATCH_SIZE } from './FrameDecoder';
+export { DEFAULT_BATCH_SIZE, formatFrameDecodeError, stripBoxHeader } from './FrameDecoder';
 export { RealFrameDecoder } from './RealFrameDecoder';
 export { FakeFrameDecoder } from './FakeFrameDecoder';
 export type { FakeFrameDecoderOptions } from './FakeFrameDecoder';

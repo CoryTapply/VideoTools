@@ -38,8 +38,16 @@ function closeAll(bitmaps: DecodedBitmap[]): void {
 async function handleDecode(req: Extract<FrameWorkerRequest, { type: 'decode' }>): Promise<void> {
   if (!decoder || configKey(req.config) !== configuredCodec) {
     decoder?.close();
-    decoder = new RealFrameDecoder(createFrameLifecycleRegistry());
-    decoder.configure(req.config);
+    const candidate = new RealFrameDecoder(createFrameLifecycleRegistry());
+    // Checked first, per the task spec -- a clean, specific "unsupported config" result beats
+    // discovering the same fact indirectly via a cascade of opaque "closed codec" decode errors.
+    const supported = await candidate.isConfigSupported(req.config);
+    if (!supported) {
+      self.postMessage({ type: 'result', requestId: req.requestId, thumbnails: [], errors: [{ kind: 'unsupported-config', codec: req.config.codec }], cancelled: false });
+      return;
+    }
+    candidate.configure(req.config);
+    decoder = candidate;
     configuredCodec = configKey(req.config);
   }
 

@@ -21,7 +21,7 @@ import { binarySearchNearest } from './binary-search';
 import { ATLAS_CAPACITY, atlasSlotFor } from './atlas-layout';
 import { warmCoarse as warmCoarseTier } from './coarse-tier';
 import { rebuildDense } from './dense-tier';
-import type { DecodedBitmap, FrameDecoderConfig } from './FrameDecoder';
+import { formatFrameDecodeError, stripBoxHeader, type DecodedBitmap, type FrameDecoderConfig } from './FrameDecoder';
 import { buildCoarseJobs, buildDenseWindowJobs } from './job-builder';
 import { createFrameLru, estimateRgbaBytes, type FrameLru } from './lru';
 import type { SampleIndex } from '../index/query';
@@ -99,7 +99,7 @@ export class FrameCache {
     this.sampleIndex = options.sampleIndex;
     this.trackId = options.videoTrackId;
     this.pool = options.pool;
-    this.config = { codec: track.codec, codedWidth: track.video.codedWidth, codedHeight: track.video.codedHeight, description: track.description };
+    this.config = { codec: track.codec, codedWidth: track.video.codedWidth, codedHeight: track.video.codedHeight, description: stripBoxHeader(track.description) };
     this.timescale = track.timescale;
     this.coarseSize = options.coarseSize ?? DEFAULT_COARSE_SIZE;
     this.denseSize = options.denseSize ?? DEFAULT_DENSE_SIZE;
@@ -312,7 +312,7 @@ export class FrameCache {
         });
 
         if (result.errors.length > 0) {
-          const message = `dense window (${String(jobs.length)} jobs) had ${String(result.errors.length)} decode error(s): ${result.errors.map((e) => (e.kind === 'decode-error' ? e.message : e.kind)).join('; ')}`;
+          const message = `dense window (${String(jobs.length)} jobs) had ${String(result.errors.length)} decode error(s): ${result.errors.map(formatFrameDecodeError).join('; ')}`;
           this.onError(message, result.errors);
         }
       })

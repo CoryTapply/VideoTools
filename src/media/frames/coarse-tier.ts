@@ -4,7 +4,7 @@
 // the actual state (the lookup arrays, the LRU); this function only drives the pool and reports
 // results back through callbacks, which is what makes it testable against a fake pool in Node.
 
-import { DEFAULT_BATCH_SIZE, type FrameDecodeError, type FrameDecoderConfig, type ThumbnailSize } from './FrameDecoder';
+import { DEFAULT_BATCH_SIZE, formatFrameDecodeError, type FrameDecodeError, type FrameDecoderConfig, type ThumbnailSize } from './FrameDecoder';
 import { PriorityScheduler } from './scheduler';
 import type { Time } from './types';
 import type { TimedJob } from './job-builder';
@@ -63,7 +63,7 @@ function reportErrorsIfAny(errors: readonly FrameDecodeError[], jobCount: number
   // partial coarse warm (some keyframes missing) is still useful and the rest of the file's
   // chunks are on other, unaffected workers.
   if (errors.length === 0) return;
-  const message = `coarse chunk (${String(jobCount)} jobs) had ${String(errors.length)} decode error(s): ${errors.map((e) => (e.kind === 'decode-error' ? e.message : e.kind)).join('; ')}`;
+  const message = `coarse chunk (${String(jobCount)} jobs) had ${String(errors.length)} decode error(s): ${errors.map(formatFrameDecodeError).join('; ')}`;
   if (onError) onError(message, errors);
   else console.warn(`frame cache: ${message}`, errors);
 }

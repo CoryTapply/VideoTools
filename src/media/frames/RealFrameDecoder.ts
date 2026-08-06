@@ -26,6 +26,15 @@ export class RealFrameDecoder implements FrameDecoder {
 
   private decoder: VideoDecoder | undefined;
   private pending: Array<{ resolve: (frame: VideoFrame) => void; reject: (err: Error) => void }> = [];
+  /**
+   * The VideoDecoder's error() callback can fire with NOTHING in `pending` -- e.g. when
+   * configure() itself is rejected asynchronously, before any decode() has even been called. If
+   * that error is only ever delivered by rejecting pending entries, it's silently dropped in that
+   * case: the ONLY visible symptom becomes a later, unrelated-looking "Cannot call decode on a
+   * closed codec" the moment something does call decode(). Captured here so decodeBatch() can
+   * surface the REAL cause instead of that downstream symptom.
+   */
+  private lastDecoderError: string | undefined;
   private readonly registry: FrameLifecycleRegistry;
 
   constructor(registry: FrameLifecycleRegistry) {
@@ -40,6 +49,7 @@ export class RealFrameDecoder implements FrameDecoder {
   configure(config: FrameDecoderConfig): void {
     if (this.decoder && this.decoder.state !== 'closed') this.decoder.close();
     this.pending = [];
+    this.lastDecoderError = undefined;
 
     const decoder = new VideoDecoder({
       output: (frame) => {
@@ -48,6 +58,7 @@ export class RealFrameDecoder implements FrameDecoder {
         else frame.close(); // shouldn't happen -- output() firing with nothing pending would otherwise leak
       },
       error: (err) => {
+        this.lastDecoderError = err instanceof Error ? err.message : String(err);
         const failed = this.pending;
         this.pending = [];
         for (const entry of failed) entry.reject(err instanceof Error ? err : new Error(String(err)));
@@ -67,16 +78,34 @@ export class RealFrameDecoder implements FrameDecoder {
 
     outer: for (let batchStart = 0; batchStart < jobs.length; batchStart += batchSize) {
       const batch = jobs.slice(batchStart, batchStart + batchSize);
+
+      if (decoder.state === 'closed') {
+        // The decoder closed asynchronously (e.g. configure() was rejected, or a prior batch's
+        // error() fired) without this call ever seeing it directly -- surface the REAL captured
+        // reason rather than letting the next decoder.decode() throw the uninformative "Cannot
+        // call decode on a closed codec" and losing the actual cause.
+        errors.push({ kind: 'decode-error', message: this.lastDecoderError ?? 'decoder closed before this batch could run (no error() detail captured)', jobId: batch[0]?.id ?? -1 });
+        break;
+      }
+
       const framePromises: Promise<VideoFrame>[] = [];
 
-      for (const job of batch) {
-        const { result: bytes } = stripNonVclNals(job.data);
-        const chunk = new EncodedVideoChunk({ type: job.type, timestamp: job.presentationTime, data: bytes });
-        const framePromise = new Promise<VideoFrame>((resolve, reject) => {
-          this.pending.push({ resolve, reject });
-        });
-        framePromises.push(framePromise);
-        decoder.decode(chunk);
+      try {
+        for (const job of batch) {
+          const { result: bytes } = stripNonVclNals(job.data);
+          const chunk = new EncodedVideoChunk({ type: job.type, timestamp: job.presentationTime, data: bytes });
+          const framePromise = new Promise<VideoFrame>((resolve, reject) => {
+            this.pending.push({ resolve, reject });
+          });
+          framePromises.push(framePromise);
+          decoder.decode(chunk);
+        }
+      } catch (err) {
+        // decode() can throw synchronously (confirmed: "Cannot call 'decode' on a closed codec"
+        // when the decoder closed between the state check above and this call) -- prefer the
+        // captured async error() reason if one exists, since it's almost always the real cause.
+        errors.push({ kind: 'decode-error', message: this.lastDecoderError ?? (err instanceof Error ? err.message : String(err)), jobId: batch[0]?.id ?? -1 });
+        break;
       }
 
       // NEVER flush speculatively mid-batch -- flush() resets the decoder's key-frame-required

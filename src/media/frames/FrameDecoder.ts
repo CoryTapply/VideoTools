@@ -17,8 +17,30 @@ export interface FrameDecoderConfig {
   readonly codec: string;
   readonly codedWidth: number;
   readonly codedHeight: number;
-  /** Raw avcC/hvcC bytes, verbatim from TrackIndex.description. */
+  /**
+   * The AVCDecoderConfigurationRecord/HEVCDecoderConfigurationRecord content ONLY -- starting at
+   * `configurationVersion`, NOT the same bytes as `TrackIndex.description`. Task 1's
+   * `TrackIndex.description` deliberately includes the avcC/hvcC box's own 8-byte header (4-byte
+   * size + 4-byte fourcc), per its own doc comment, because other consumers (remux/export) need
+   * the full box. WebCodecs' `VideoDecoderConfig.description` does not: passing the box header
+   * along feeds the decoder 8 bogus leading bytes and reliably fails configure() -- confirmed via
+   * a real harness run (every single decode failed uniformly with "Cannot call decode on a closed
+   * codec", the downstream symptom of configure() itself being silently rejected). Callers
+   * building this field from a TrackIndex must slice off the first 8 bytes; see FrameCache.ts's
+   * constructor.
+   */
   readonly description: Uint8Array;
+}
+
+/**
+ * Strips an ISOBMFF box's 8-byte header (4-byte size + 4-byte fourcc) from a raw box byte slice,
+ * turning `TrackIndex.description` (Task 1's convention: the full box, header included) into the
+ * AVCDecoderConfigurationRecord/HEVCDecoderConfigurationRecord content WebCodecs actually wants
+ * for `FrameDecoderConfig.description`. See that field's doc comment for why this distinction is
+ * load-bearing, not cosmetic.
+ */
+export function stripBoxHeader(rawBoxBytes: Uint8Array): Uint8Array {
+  return rawBoxBytes.slice(8);
 }
 
 export interface ThumbnailSize {
@@ -65,6 +87,16 @@ export interface FrameDecodeBatchResult {
   readonly thumbnails: DecodedThumbnail[];
   /** Non-empty only if the batch was cut short by a decoder error. */
   readonly errors: FrameDecodeError[];
+}
+
+/** An actionable, human-readable message for each FrameDecodeError kind -- mirrors src/media/index/errors.ts's formatIndexError and src/media/playback/errors.ts's formatPlaybackError. */
+export function formatFrameDecodeError(error: FrameDecodeError): string {
+  switch (error.kind) {
+    case 'unsupported-config':
+      return `unsupported codec config: ${error.codec}`;
+    case 'decode-error':
+      return error.message;
+  }
 }
 
 /** 3.6x throughput over fully-sequential decoding, per spike C (results/FEASIBILITY.md §4) -- the single highest-leverage batching constant in this module. */
