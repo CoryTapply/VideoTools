@@ -22,6 +22,8 @@ export interface WarmCoarseDeps {
   readonly isCurrentGeneration: () => boolean;
   readonly onChunkDone: (thumbnails: readonly WorkerDecodedThumbnail[]) => void;
   readonly onProgress?: (completed: number, total: number) => void;
+  /** Called with any decode errors from a chunk. Defaults to console.warn -- pass this to surface errors somewhere more visible than DevTools (e.g. an on-page log), since a caller watching only onProgress/onChunkDone would otherwise never learn a chunk silently produced zero thumbnails. */
+  readonly onError?: (message: string, errors: readonly FrameDecodeError[]) => void;
 }
 
 export async function warmCoarse(deps: WarmCoarseDeps): Promise<void> {
@@ -47,7 +49,7 @@ export async function warmCoarse(deps: WarmCoarseDeps): Promise<void> {
       }
       if (!result.cancelled) {
         deps.onChunkDone(result.thumbnails);
-        logErrorsIfAny(result.errors);
+        reportErrorsIfAny(result.errors, req.jobs.length, deps.onError);
       }
       scheduler.markCompleted(req.jobs.length);
       deps.onProgress?.(scheduler.progress.completed, scheduler.progress.total);
@@ -55,10 +57,13 @@ export async function warmCoarse(deps: WarmCoarseDeps): Promise<void> {
   );
 }
 
-function logErrorsIfAny(errors: readonly FrameDecodeError[]): void {
+function reportErrorsIfAny(errors: readonly FrameDecodeError[], jobCount: number, onError: WarmCoarseDeps['onError']): void {
   // Decode errors here are per-worker-instance failures (the offending worker's decoder became
   // unusable and stopped after the first one) -- surfaced for diagnostics, not thrown, since a
   // partial coarse warm (some keyframes missing) is still useful and the rest of the file's
   // chunks are on other, unaffected workers.
-  if (errors.length > 0) console.warn(`frame cache: coarse chunk had ${String(errors.length)} decode error(s)`, errors);
+  if (errors.length === 0) return;
+  const message = `coarse chunk (${String(jobCount)} jobs) had ${String(errors.length)} decode error(s): ${errors.map((e) => (e.kind === 'decode-error' ? e.message : e.kind)).join('; ')}`;
+  if (onError) onError(message, errors);
+  else console.warn(`frame cache: ${message}`, errors);
 }

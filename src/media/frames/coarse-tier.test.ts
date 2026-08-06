@@ -68,6 +68,33 @@ describe('warmCoarse', () => {
     expect(received.sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
+  it('reports decode errors via onError instead of only console.warn', async () => {
+    const erroringHandle: WorkerHandle = {
+      decode: (request) => Promise.resolve({ requestId: request.requestId, thumbnails: [], errors: [{ kind: 'decode-error', message: 'simulated decoder failure', jobId: 0 }], cancelled: false }),
+      cancel: () => undefined,
+      terminate: () => undefined,
+    };
+    const pool = new FrameWorkerPool([erroringHandle]);
+    const reported: Array<{ message: string; count: number }> = [];
+    let nextId = 1;
+
+    await warmCoarse({
+      pool,
+      config,
+      size,
+      jobs: keyframeJobs(2),
+      initialCenter: 0,
+      nextRequestId: () => nextId++,
+      isCurrentGeneration: () => true,
+      onChunkDone: () => undefined,
+      onError: (message, errors) => reported.push({ message, count: errors.length }),
+    });
+
+    expect(reported).toHaveLength(1);
+    expect(reported[0]?.message).toContain('simulated decoder failure');
+    expect(reported[0]?.count).toBe(1);
+  });
+
   it('chunks jobs into requests no larger than chunkSize', async () => {
     const handle = new ImmediateWorkerHandle();
     const pool = new FrameWorkerPool([handle]);

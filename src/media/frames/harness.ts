@@ -118,6 +118,12 @@ async function runAutomatedMeasurements(file: File, log: (msg: string) => void):
     pool,
     registry,
     onCoarseAtlasReady: makeAtlasHandler(fingerprint, DEFAULT_COARSE_SIZE, log, atlasStats),
+    onError: (message) => { log(`DECODE ERROR: ${message}`); },
+    // Smaller than the production default (30s) for this harness's own dense-build/cancellation
+    // timing probes -- a shorter window means a shorter single decode chain (see dense-tier.ts's
+    // header comment on why a window is one atomic chain), which keeps this diagnostic faster and
+    // narrower to debug if something stalls.
+    denseWindowSeconds: 5,
   });
 
   // --- coarse build time + effective keyframes/sec (target < 15s) ---------------------------
@@ -142,14 +148,14 @@ async function runAutomatedMeasurements(file: File, log: (msg: string) => void):
   const denseTriggerPxPerSec = 400; // comfortably above the default 40px/keyframe trigger for any realistic GOP
   const denseT0 = performance.now();
   cache.setViewport(midTicks - 1000, midTicks + 1000, denseTriggerPxPerSec);
-  await waitUntil(() => cache.getNearest(midTicks)?.tier === 'dense', 15_000);
+  await waitUntil(() => cache.getNearest(midTicks)?.tier === 'dense', 20_000, log, 'dense build (first window)');
   const denseBuildMs = performance.now() - denseT0;
   log(`dense build (first window, around ${(ticksToSeconds(midTicks, videoTrack.timescale)).toFixed(1)}s): ${denseBuildMs.toFixed(1)}ms`);
 
   const cancelT0 = performance.now();
   const farTicks = Math.min(durationTicks - 1000, midTicks + durationTicks / 4);
   cache.setViewport(farTicks - 1000, farTicks + 1000, denseTriggerPxPerSec); // supersedes the first window -- cancels it
-  await waitUntil(() => cache.getNearest(farTicks)?.tier === 'dense', 15_000);
+  await waitUntil(() => cache.getNearest(farTicks)?.tier === 'dense', 20_000, log, 'dense rebuild after viewport moved');
   const cancelResponsivenessMs = performance.now() - cancelT0;
   log(`dense rebuild after viewport moved (cancellation + new window): ${cancelResponsivenessMs.toFixed(1)}ms`);
 
@@ -188,17 +194,25 @@ async function runAutomatedMeasurements(file: File, log: (msg: string) => void):
   };
 }
 
-function waitUntil(condition: () => boolean, timeoutMs: number): Promise<void> {
+/** Logs a heartbeat every ~2s so a genuine stall is visible on-page rather than looking identical to "still running" -- see `log` in the caller. */
+function waitUntil(condition: () => boolean, timeoutMs: number, log: (msg: string) => void, label: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const start = performance.now();
+    let lastHeartbeat = start;
     const tick = (): void => {
       if (condition()) {
         resolve();
         return;
       }
-      if (performance.now() - start > timeoutMs) {
-        reject(new Error(`waitUntil: condition not met within ${String(timeoutMs)}ms`));
+      const now = performance.now();
+      const elapsed = now - start;
+      if (elapsed > timeoutMs) {
+        reject(new Error(`waitUntil(${label}): condition not met within ${String(timeoutMs)}ms`));
         return;
+      }
+      if (now - lastHeartbeat > 2000) {
+        lastHeartbeat = now;
+        log(`  ...still waiting on "${label}" after ${(elapsed / 1000).toFixed(1)}s`);
       }
       setTimeout(tick, 16);
     };
@@ -214,11 +228,21 @@ mountSpikeHarness(
   'frame cache harness',
   'M1 Task 3 Part 9: coarse/dense build timing, getNearest() latency, atlas round-trip, and the 20-cycle leak check. Run once against fixtures/27gb.mp4, once against fixtures/longgop.mp4 (note its keyframe interval/rate in the log -- resolution-dependent per spike C).',
   async (file, log) => {
-    const metrics = await runAutomatedMeasurements(file, log);
-    return {
-      metrics,
-      notes: `coarse ${(metrics.coarseBuildMs as number).toFixed(0)}ms / getNearest p50=${(metrics.getNearestLatencyMs as { p50: number }).p50.toFixed(3)}ms / dense build ${(metrics.denseBuildMs as number).toFixed(0)}ms / leak check ${metrics.leakCheckPassed ? 'PASS' : 'FAIL'}`,
-    };
+    // mountSpikeHarness (src/spikes/harness.ts, not modifiable here) has no try/catch around this
+    // callback -- an uncaught rejection would leave the page's Run button disabled forever with no
+    // visible error, indistinguishable from "still running". Catch here so a failure is always a
+    // clearly-logged result, not a silent stall.
+    try {
+      const metrics = await runAutomatedMeasurements(file, log);
+      return {
+        metrics,
+        notes: `coarse ${(metrics.coarseBuildMs as number).toFixed(0)}ms / getNearest p50=${(metrics.getNearestLatencyMs as { p50: number }).p50.toFixed(3)}ms / dense build ${(metrics.denseBuildMs as number).toFixed(0)}ms / leak check ${metrics.leakCheckPassed ? 'PASS' : 'FAIL'}`,
+      };
+    } catch (err) {
+      const message = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      log(`FAILED: ${message}`);
+      return { metrics: { failed: true, error: message }, notes: `FAILED: ${err instanceof Error ? err.message : String(err)}` };
+    }
   },
 );
 
@@ -310,7 +334,7 @@ function mountMemoryCheckpointSection(container: HTMLElement): void {
       durationTicks = videoTrack.duration - videoTrack.editOffsetTicks;
       const workerCount = defaultWorkerCount(navigator.hardwareConcurrency);
       const pool = new FrameWorkerPool(Array.from({ length: workerCount }, () => new FrameWorkerClient(file)));
-      cache = new FrameCache({ sampleIndex, videoTrackId: trackId, pool });
+      cache = new FrameCache({ sampleIndex, videoTrackId: trackId, pool, denseWindowSeconds: 5, onError: (message) => { log(`DECODE ERROR: ${message}`); } });
       await recordCheckpoint('1-idle');
       idleBtn.disabled = true;
       coarseBtn.disabled = false;
@@ -332,7 +356,7 @@ function mountMemoryCheckpointSection(container: HTMLElement): void {
       if (!cache) return;
       const mid = durationTicks / 2;
       cache.setViewport(mid - 1000, mid + 1000, 400);
-      await waitUntil(() => cache?.getNearest(mid)?.tier === 'dense', 15_000).catch(() => undefined);
+      await waitUntil(() => cache?.getNearest(mid)?.tier === 'dense', 15_000, log, 'dense warm (checkpoint)').catch(() => undefined);
       await recordCheckpoint('3-dense-warm');
       denseBtn.disabled = true;
       clearBtn.disabled = false;

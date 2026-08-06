@@ -198,6 +198,22 @@ describe('warmCoarse', () => {
     expect(byAtlasId.get(0)).toBe(100);
     expect(byAtlasId.get(1)).toBe(50);
   });
+
+  it('reports a coarse decode error via onError rather than only console.warn', async () => {
+    const erroringHandle: WorkerHandle = {
+      decode: (request) => Promise.resolve({ requestId: request.requestId, thumbnails: [], errors: [{ kind: 'decode-error', message: 'simulated decoder failure', jobId: 0 }], cancelled: false }),
+      cancel: () => undefined,
+      terminate: () => undefined,
+    };
+    const pool = new FrameWorkerPool([erroringHandle]);
+    const onError = vi.fn();
+    const cache = makeCache(pool, { onError });
+    await cache.warmCoarse();
+    expect(onError).toHaveBeenCalledTimes(1);
+    const [message] = onError.mock.calls[0] as [string, unknown];
+    expect(message).toContain('simulated decoder failure');
+    expect(cache.getNearest(0)).toBeNull(); // no thumbnail was actually produced
+  });
 });
 
 describe('clear()', () => {

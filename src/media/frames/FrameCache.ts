@@ -54,6 +54,8 @@ export interface FrameCacheOptions {
   readonly registry?: FrameLifecycleRegistry;
   /** Fires once every one of an atlas's 100 coarse-tier slots has a resident bitmap. Browser-only integration point -- see this file's header comment. */
   readonly onCoarseAtlasReady?: (atlasId: number, bitmaps: readonly DecodedBitmap[]) => void;
+  /** Decode errors (coarse chunk or dense window) and dense-rebuild rejections. Defaults to console.warn/console.error -- pass this to surface failures somewhere more visible than DevTools, since a caller watching only onFrameAvailable/getNearest would otherwise see nothing but silently-missing frames. */
+  readonly onError?: (message: string, detail: unknown) => void;
 }
 
 export class FrameCache {
@@ -71,6 +73,7 @@ export class FrameCache {
   private readonly lru: FrameLru<string, DecodedBitmap>;
   private readonly listeners = new Set<(time: Time) => void>();
   private readonly onCoarseAtlasReady: ((atlasId: number, bitmaps: readonly DecodedBitmap[]) => void) | undefined;
+  private readonly onError: (message: string, detail: unknown) => void;
 
   private coarseTimes = new Float64Array(0);
   private coarseFrames: (CachedFrame | null)[] = [];
@@ -105,6 +108,7 @@ export class FrameCache {
     this.denseTriggerPxPerKeyframe = options.denseTriggerPxPerKeyframe ?? DEFAULT_DENSE_TRIGGER_PX_PER_KEYFRAME;
     this.registry = options.registry ?? createFrameLifecycleRegistry();
     this.onCoarseAtlasReady = options.onCoarseAtlasReady;
+    this.onError = options.onError ?? ((message, detail) => { console.warn(`frame cache: ${message}`, detail); });
     this.lru = createFrameLru<string, DecodedBitmap>(options.budgetBytes ?? DEFAULT_BUDGET_BYTES, this.registry, (key) => {
       this.handleLruRemoval(key);
     });
@@ -134,6 +138,7 @@ export class FrameCache {
         for (const t of thumbnails) this.applyCoarseThumbnail(t.presentationTime, t.bitmap);
       },
       onProgress,
+      onError: this.onError,
     });
   }
 
@@ -306,10 +311,13 @@ export class FrameCache {
           return { presentationTime: t.presentationTime, bitmap: t.bitmap, tier: 'dense' as const };
         });
 
-        if (result.errors.length > 0) console.warn(`frame cache: dense window had ${String(result.errors.length)} decode error(s)`, result.errors);
+        if (result.errors.length > 0) {
+          const message = `dense window (${String(jobs.length)} jobs) had ${String(result.errors.length)} decode error(s): ${result.errors.map((e) => (e.kind === 'decode-error' ? e.message : e.kind)).join('; ')}`;
+          this.onError(message, result.errors);
+        }
       })
       .catch((err: unknown) => {
-        console.warn('frame cache: dense window rebuild failed', err);
+        this.onError(`dense window rebuild threw: ${err instanceof Error ? err.message : String(err)}`, err);
       });
   }
 
