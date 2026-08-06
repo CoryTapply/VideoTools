@@ -65,6 +65,45 @@ export interface DecodeJob {
   readonly keep: boolean;
 }
 
+/**
+ * Groups jobs into units that are each safe to flush() after, WITHOUT ever splitting a decode
+ * chain across a flush boundary. Confirmed by a real harness run against longgop.mp4: flush()
+ * resets the decoder's key-frame-required flag (already known, see decodeBatch's own comment on
+ * never flushing speculatively), so submitting a fixed-size batchSize slice blindly -- ignoring
+ * job type -- eventually starts a batch on a 'delta' job right after a flush(), which WebCodecs
+ * rejects outright ("A key frame is required after configure() or flush()").
+ *
+ * Independent keyframes (coarse tier: every job is type 'key', no dependency chain) batch up to
+ * `batchSize` per flush, preserving spike C's 3.6x-throughput batching finding. A chain (dense
+ * tier: a 'key' job followed by one or more dependent 'delta' jobs) is NEVER split, regardless of
+ * its length -- it's submitted and flushed as exactly one unit, since only its first job is safe
+ * to follow a flush.
+ */
+export function groupIntoFlushBatches<T extends { readonly type: 'key' | 'delta' }>(jobs: readonly T[], batchSize: number): T[][] {
+  const batches: T[][] = [];
+  let i = 0;
+  while (i < jobs.length) {
+    const batch: T[] = [jobs[i]];
+    i += 1;
+    if (i < jobs.length && jobs[i].type === 'delta') {
+      // jobs[i - 1] starts a chain -- consume every dependent delta frame before the next flush,
+      // however long the chain runs.
+      while (i < jobs.length && jobs[i].type === 'delta') {
+        batch.push(jobs[i]);
+        i += 1;
+      }
+    } else {
+      // Independent-keyframe mode: batch up to batchSize consecutive keyframes.
+      while (batch.length < batchSize && i < jobs.length && jobs[i].type === 'key') {
+        batch.push(jobs[i]);
+        i += 1;
+      }
+    }
+    batches.push(batch);
+  }
+  return batches;
+}
+
 /** A real ImageBitmap satisfies this without a cast; a Node-side fake implements it directly. */
 export interface DecodedBitmap extends Closable {
   readonly width: number;

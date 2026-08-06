@@ -12,13 +12,25 @@
 //   - this project's OBS fixture's keyframes carry in-band SPS/PPS/SEI NAL units ahead of the IDR
 //     slice, which stalls this decoder when it's already configured with the same parameter sets
 //     via `description` -- stripNonVclNals() removes them before decode().
+// Two more findings this module discovered itself (dense-tier delta-frame decoding is a genuinely
+// new WebCodecs code path -- every prior use, coarse tier included, only ever decoded keyframes):
+//   - batching by a fixed batchSize and flushing after every batch is only safe for INDEPENDENT
+//     keyframes. flush() resets the decoder's key-frame-required flag, so slicing a decode chain
+//     (a keyframe followed by dependent delta frames) at an arbitrary batchSize boundary
+//     eventually starts a batch on a 'delta' job right after a flush -- WebCodecs rejects this
+//     outright ("A key frame is required after configure() or flush()"), confirmed by a real
+//     harness run. groupIntoFlushBatches() (FrameDecoder.ts) fixes this: a chain is never split,
+//     however long it runs.
+//   - VideoDecoderConfig.description must be the avcC/hvcC box's CONTENT only, not the same bytes
+//     as TrackIndex.description (which deliberately includes the box's own 8-byte header for its
+//     other consumers) -- see FrameDecoderConfig.description's doc comment and stripBoxHeader().
 // `hardwareAcceleration: 'prefer-hardware'` per the task prompt; a machine without hardware H.264
 // decode measured ~4x slower in spike C, so which path is active is worth surfacing to a caller
 // (see `hardwareAccelerationUsed` below) rather than left silent.
 
 import { stripNonVclNals } from '../../spikes/C-decode/nal-strip';
 import { withFrameAsync, type FrameLifecycleRegistry } from './frame-lifecycle';
-import type { DecodeJob, DecodedThumbnail, FrameDecodeBatchResult, FrameDecodeError, FrameDecoder, FrameDecoderConfig, ThumbnailSize } from './FrameDecoder';
+import { groupIntoFlushBatches, type DecodeJob, type DecodedThumbnail, type FrameDecodeBatchResult, type FrameDecodeError, type FrameDecoder, type FrameDecoderConfig, type ThumbnailSize } from './FrameDecoder';
 
 export class RealFrameDecoder implements FrameDecoder {
   /** Set once configure() resolves; reflects which decode path Chrome actually chose, not just what was requested. */
@@ -76,9 +88,7 @@ export class RealFrameDecoder implements FrameDecoder {
     const thumbnails: DecodedThumbnail[] = [];
     const errors: FrameDecodeError[] = [];
 
-    outer: for (let batchStart = 0; batchStart < jobs.length; batchStart += batchSize) {
-      const batch = jobs.slice(batchStart, batchStart + batchSize);
-
+    outer: for (const batch of groupIntoFlushBatches(jobs, batchSize)) {
       if (decoder.state === 'closed') {
         // The decoder closed asynchronously (e.g. configure() was rejected, or a prior batch's
         // error() fired) without this call ever seeing it directly -- surface the REAL captured
