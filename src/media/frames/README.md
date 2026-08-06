@@ -105,6 +105,14 @@ window (~38MB, comfortably more than fits in a typical viewport at the trigger t
 capping worst-case GPU memory well under the 190MB "everything resident" ceiling a naive
 implementation would hit.
 
+**This arithmetic is a naive RGBA-bytes estimate, not a measured one -- and the real number is
+higher.** A real Activity Monitor measurement against the 27GB fixture (`results/task-3-frame-cache-summary.md`'s
+Part B section) found warming the coarse tier alone costs **~121MB** of real memory, roughly 2x
+this estimate -- GPU texture padding/alignment and driver overhead aren't visible to the math
+above. `DEFAULT_BUDGET_BYTES` still does real work (bounded beats unbounded), but treat its
+specific value as an unvalidated starting point pending a proper re-tuning pass with more
+measurements, not a number this arithmetic actually proves sufficient.
+
 ## Measurement caveats (read before trusting a number out of `harness.ts`)
 
 `ImageBitmap` and `VideoFrame` memory is GPU-backed and does **not** appear in

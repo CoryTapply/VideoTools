@@ -1,14 +1,15 @@
 # M1 Task 3 — frame cache: summary
 
 Status: implemented, tested (128 tests in `src/media/frames/`, all Node-runnable logic green:
-`npm run typecheck`, `npm run lint`, `npm test` all clean project-wide), and **now confirmed
-against real browser runs on both `longgop.mp4` AND `fixtures/27gb.mp4` (the actual target
-fixture)** — coarse build, `getNearest()`, dense build + cancellation, atlas round-trip, and the
-20-cycle leak check all pass on both, with real, believable numbers (see "Part 9 measurements"
+`npm run typecheck`, `npm run lint`, `npm test` all clean project-wide), and **fully empirically
+validated against real browser runs on both `longgop.mp4` AND `fixtures/27gb.mp4` (the actual
+target fixture), including the OS-level Activity Monitor memory checkpoints** — coarse build,
+`getNearest()`, dense build + cancellation, atlas round-trip, the 20-cycle leak check, and real
+memory-return-to-baseline after `clear()` all confirmed (see "Part 9 measurements" and "Part B"
 below). Three real WebCodecs integration bugs were found and fixed along the way — the Node-only
-test suite could not have caught any of them, since Node has no WebCodecs. **Only remaining gap**:
-the manual OS-level Activity Monitor memory checkpoints (Part B) haven't been run. See "What's
-still open" below.
+test suite could not have caught any of them, since Node has no WebCodecs. **One follow-up worth
+tracking, not a blocker**: real measured coarse-tier memory (+121MB) ran ~2x over the naive
+estimate the ~96MB eviction budget was calibrated against — see Part B below.
 
 This is a handoff/context summary for a future session. Full design rationale lives in
 `src/media/frames/README.md`; this file is about what was built, what was decided, and what's
@@ -135,9 +136,49 @@ peaked at ~191.7MB during the run and returned to ~11.3MB after (explicitly non-
 this task's own warning — does not include GPU-backed VideoFrame/ImageBitmap memory at all; see
 Part B below for the number that actually matters).
 
-**Not yet run**: the Part B manual Activity Monitor memory checkpoints (idle / coarse-warm /
-dense-warm / after-`clear()`) — the only trustworthy memory number per this task's own repeated
-warning, and the only remaining gap before this task's empirical validation is complete.
+## Part B — OS-level memory checkpoints (27gb.mp4, real Activity Monitor reads, 2026-08-06)
+
+The one number in this task that no JS API can provide. Full JSON:
+`fixtures/frame-cache-memory-checkpoints_27gb.mp4_2026-08-06T14_37_29.190Z.json`.
+
+| Checkpoint | Activity Monitor | Δ from idle |
+|---|---|---|
+| 1. Idle (index built, nothing warmed) | 174MB | — |
+| 2. Coarse warm (1,015 keyframes decoded) | 295MB | **+121MB** |
+| 3. Dense warm (viewport zoomed, one window built) | 210MB | +36MB (**-85MB from coarse-warm**) |
+| 4. After `clear()` | 179MB | **+5MB** (~3%, within measurement noise) |
+
+**`clear()` genuinely returns memory to baseline** — 179MB vs. 174MB idle, a ~3% delta. This
+independently confirms Part A's registry-based `liveCount=0` leak check (a Node-visible signal)
+with the actual OS-level number the task explicitly said was the only one that mattered. Two
+independent signals agreeing is a real, confirmed result, not an assumption.
+
+**Two things worth flagging, not glossing over:**
+
+1. **Coarse-warm's real footprint (+121MB) is ~2x README.md's naive RGBA estimate (~58MB for
+   1,015 entries at 160x90).** The theoretical math only accounts for raw pixel bytes; it doesn't
+   (and can't, from JS) account for GPU texture padding/alignment, driver-level overhead, or
+   transient buffers Activity Monitor happens to catch mid-measurement. This is real, useful
+   calibration data: **the ~96MB `DEFAULT_BUDGET_BYTES` eviction cap, which was sized against the
+   naive ~58MB coarse estimate plus headroom, is likely undersized relative to real GPU memory
+   cost** — the coarse tier ALONE measured higher than the entire budget's target ceiling. The
+   budget still does real work (it's the difference between "unbounded" and "capped"), but its
+   specific byte value should be revisited with this real multiplier in mind rather than trusted
+   as calibrated. Flagged here rather than silently changing `DEFAULT_BUDGET_BYTES` based on a
+   single-machine, single-run data point — that's a decision for whoever tunes this next, ideally
+   with a few more real measurements first.
+2. **Dense-warm (210MB) measured LOWER than coarse-warm (295MB)**, which is counterintuitive —
+   adding a dense window on top of an already-warm coarse tier should only ever add memory, never
+   subtract it. The most likely explanation: the coarse-warm reading caught a transient peak (atlas
+   WebP-encoding buffers, temporary decode buffers, OPFS write buffers — all real but short-lived,
+   from packing 11 atlases' worth of data right as that checkpoint was read) that had already been
+   reclaimed by the time the dense-warm checkpoint was taken moments later, and the dense tier's
+   own genuine addition (a few dozen more resident bitmaps) is smaller than the amount that
+   settled out. This is inference, not proven — a repeat run with a longer pause before each
+   reading (to let transient buffers settle) would confirm it, but wasn't done here.
+
+Both of these are exactly the kind of finding this task's harness exists to surface — real
+numbers, not assumptions, including the inconvenient ones.
 
 ## Real bugs found during verification
 
@@ -200,10 +241,14 @@ kind of mistake that's easy to repeat:
 
 ## What's still open
 
-- **The Part B manual Activity Monitor memory checkpoints have not been run at all** — the only
-  trustworthy memory number per this task's own repeated warning (GPU-backed VideoFrame/ImageBitmap
-  memory is invisible to every JS API). `harness.ts`'s Part B section is built and ready
-  (`npm run dev:coi` → `frames.html`, scroll to "Part B: OS-level memory checkpoints").
+- **`DEFAULT_BUDGET_BYTES` (~96MB) should be revisited.** Part B's real Activity Monitor numbers
+  show the coarse tier alone costing ~121MB of real memory (vs. the ~58MB naive RGBA estimate the
+  budget was calibrated against) — a ~2x gap. The budget still functions (bounded is better than
+  unbounded), but its specific value is a rough starting point, not a validated cap, until this is
+  re-measured with a couple more real runs (ideally across machines/GPUs, not just one).
+- **The dense-warm-lower-than-coarse-warm anomaly in Part B is unexplained, only plausibly
+  inferred** (see Part B above) — worth a repeat run with longer pauses between checkpoints if
+  someone wants to nail down whether it's genuinely transient-buffer settling or something else.
 - **Part 0's job-descriptor decision is reasoned, not measured** (see above) — worth a real
   multi-worker timing comparison if a future task's profiling suggests the pool is bottlenecked on
   something this design didn't anticipate.
