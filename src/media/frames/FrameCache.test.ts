@@ -371,3 +371,45 @@ describe('DEFAULT_BUDGET_BYTES', () => {
     expect(DEFAULT_BUDGET_BYTES).toBe(96 * 1024 * 1024);
   });
 });
+
+describe('stats()', () => {
+  it('reports resident counts, budget accounting, and liveCount with no evictions under a generous budget', async () => {
+    const pool = new FrameWorkerPool([new ImmediateWorkerHandle()]);
+    const cache = makeCache(pool); // 5 coarse keyframes at 160x90 -> 5 * 57600 = 288000 bytes, default 96MB budget
+    await cache.warmCoarse();
+
+    const stats = cache.stats();
+    expect(stats.coarseResidentCount).toBe(5);
+    expect(stats.denseResidentCount).toBe(0);
+    expect(stats.totalBytes).toBe(5 * 160 * 90 * 4);
+    expect(stats.count).toBe(5);
+    expect(stats.evictionCount).toBe(0);
+    expect(stats.liveCount).toBe(5);
+  });
+
+  // Documents TODAY's single-shared-LRU behavior (Task 3.5): coarse and dense compete for one
+  // budget, so a dense window filling in CAN evict coarse entries purely because they were
+  // inserted first -- this is the exact hazard the roadmap's Task 3.5 investigates with real
+  // Activity Monitor data before deciding whether to give the coarse tier a protected reservation.
+  it('a dense window filling in can evict coarse entries once the shared budget is exceeded', async () => {
+    const handle = new ImmediateWorkerHandle();
+    const pool = new FrameWorkerPool([handle]);
+    const sampleIndex = new SampleIndex([makeDenseTestTrack()]); // 2 coarse keyframes -> 2 * 57600 = 115200 bytes
+    // Budget fits both coarse keyframes (115200) but not one more dense tile (320x180x4 = 230400) on top.
+    const cache = new FrameCache({ sampleIndex, videoTrackId: 1, pool, denseWindowSeconds: 0.3, budgetBytes: 150_000 });
+    await cache.warmCoarse();
+
+    const afterCoarse = cache.stats();
+    expect(afterCoarse.coarseResidentCount).toBe(2);
+    expect(afterCoarse.evictionCount).toBe(0); // coarse alone fits the budget
+
+    cache.setViewport(14000, 16000, 100);
+    await vi.waitFor(() => {
+      expect(cache.getNearest(6000)?.tier).toBe('dense');
+    });
+
+    const afterDense = cache.stats();
+    expect(afterDense.evictionCount).toBeGreaterThan(0);
+    expect(afterDense.coarseResidentCount).toBeLessThan(2); // a coarse entry was evicted to make room for dense
+  });
+});

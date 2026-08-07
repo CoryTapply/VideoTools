@@ -106,12 +106,25 @@ capping worst-case GPU memory well under the 190MB "everything resident" ceiling
 implementation would hit.
 
 **This arithmetic is a naive RGBA-bytes estimate, not a measured one -- and the real number is
-higher.** A real Activity Monitor measurement against the 27GB fixture (`results/task-3-frame-cache-summary.md`'s
-Part B section) found warming the coarse tier alone costs **~121MB** of real memory, roughly 2x
-this estimate -- GPU texture padding/alignment and driver overhead aren't visible to the math
-above. `DEFAULT_BUDGET_BYTES` still does real work (bounded beats unbounded), but treat its
-specific value as an unvalidated starting point pending a proper re-tuning pass with more
-measurements, not a number this arithmetic actually proves sufficient.
+higher.** Real Activity Monitor measurements against the 27GB fixture
+(`results/task-3-frame-cache-summary.md`'s Part B and Part B.2 sections, three runs total) put
+warming the coarse tier alone at **~121-202MB** of real memory, roughly **2-3.4x** this estimate --
+GPU texture padding/alignment and driver overhead aren't visible to the math above.
+`DEFAULT_BUDGET_BYTES` still does real work (bounded beats unbounded), but treat its specific value
+as an unvalidated starting point, not a number this arithmetic actually proves sufficient --
+`totalBytes` (what the budget is compared against) stayed under 86MB in the Part B.2 runs even as
+real memory passed 350MB, so at today's production scale the budget doesn't engage at all.
+
+**Task 3.5 (closed, 2026-08-07): the coarse and dense tiers share ONE `FrameLru` instance, with no
+tier priority -- confirmed NOT a live hazard at production scale.** `FrameCache.stats()` exposes
+`evictionCount`/`liveCount`/per-tier resident counts. `FrameCache.test.ts`'s `stats()` describe
+block still shows, at a small enough nominal-byte budget, that a dense window filling in CAN evict
+coarse entries purely because they were inserted first. But real Activity Monitor re-runs at both
+`denseWindowSeconds: 5` and production's default `30` (`results/task-3-frame-cache-summary.md`'s
+Part B.2) show `evictionCount: 0` and `coarseResidentCount` unchanged (1015 -> 1015) across the
+coarse-warm -> dense-warm transition in both runs -- the dense-warm memory drop (~170MB in both
+runs, not scaling with dense-tier size) is transient buffer settling, not eviction. No conditional
+`coarseLru`/`denseLru` split was needed. See `roadmap.md`'s Task 3.5 and `architecture-v3.md` §4.1.
 
 ## Measurement caveats (read before trusting a number out of `harness.ts`)
 

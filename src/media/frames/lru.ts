@@ -25,6 +25,8 @@ export interface FrameLru<K, B extends Closable> {
   readonly totalBytes: number;
   readonly count: number;
   readonly budgetBytes: number;
+  /** Cumulative count of budget-driven evictions (evictOne() calls) -- NOT incremented by delete()/clear(), so it answers "was this entry forced out by the budget" specifically. */
+  readonly evictionCount: number;
   has(key: K): boolean;
   /** Marks `key` as most-recently-used. Returns undefined on a miss (does not count as a touch). */
   get(key: K): B | undefined;
@@ -51,6 +53,7 @@ export function createFrameLru<K, B extends Closable>(budgetBytes: number, regis
   // which is exactly "most recently used" without a separate linked-list structure.
   const entries = new Map<K, Entry<B>>();
   let totalBytes = 0;
+  let evictionCount = 0;
 
   function evictOne(): void {
     const oldestKey = entries.keys().next();
@@ -58,6 +61,7 @@ export function createFrameLru<K, B extends Closable>(budgetBytes: number, regis
     const entry = entries.get(oldestKey.value);
     entries.delete(oldestKey.value);
     if (entry) {
+      evictionCount += 1;
       totalBytes -= entry.byteSize;
       entry.bitmap.close();
       registry?.untrack(entry.bitmap);
@@ -79,6 +83,9 @@ export function createFrameLru<K, B extends Closable>(budgetBytes: number, regis
     },
     get count() {
       return entries.size;
+    },
+    get evictionCount() {
+      return evictionCount;
     },
     budgetBytes,
 
