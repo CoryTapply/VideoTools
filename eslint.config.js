@@ -5,7 +5,9 @@ export default tseslint.config(
   {
     // src/spikes/ is explicitly out of scope for this task's lint rules: it
     // uses non-null assertions throughout and must not be modified.
-    ignores: ['dist/**', 'src/spikes/**'],
+    // design/reference/ is generated output (dc-runtime build artifacts), not app source --
+    // see the "GENERATED ... do not edit" header in design/reference/support.js.
+    ignores: ['dist/**', 'src/spikes/**', 'design/reference/**'],
   },
   js.configs.recommended,
   // Type-aware rules need parserOptions.project, which only resolves for files under
