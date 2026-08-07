@@ -34,10 +34,29 @@ Trim a real clip out of a 27 GB file, end to end.
 ### ✔ Task 3 — frame cache
 `src/media/frames/`. Two-tier cache serving both the filmstrip and the scrub preview, worker pool, atlas storage with the decode-once rule, byte-budgeted LRU, structural frame lifecycle safety. Coarse warm 5.19 s, `getNearest()` p50 0.000 ms, leak-free across 20 warm/clear cycles confirmed by two independent signals.
 
-### ▸ Task 3.5 — budget re-tune (½ day, do before 4b)
+### ✔ Task 3.5 — budget re-tune
 Small but load-bearing. Log LRU eviction count and `liveCount` at each Activity Monitor checkpoint, repeat the memory run with pauses between readings, and determine whether the dense-warm memory drop is transient buffers or coarse-tier eviction. If eviction: give the coarse tier a protected reservation so a transient dense window can't evict the scrub source. Re-tune `DEFAULT_BUDGET_BYTES` against the real ~2× multiplier.
 
-**Exit:** the anomaly has an explanation backed by a number, not an inference.
+**Status: done.** Real Activity Monitor re-runs against the 27GB fixture at both
+`denseWindowSeconds: 5` (reproducing the original setup) and `30` (production's default) both show
+`evictionCount: 0` and `coarseResidentCount` unchanged (1015 → 1015) across the coarse-warm →
+dense-warm transition — the dense-warm memory drop is **not coarse-tier eviction**. The drop is
+~170MB in both runs despite a 6x difference in dense-tier work (20 vs. 120 dense frames), which
+doesn't scale with anything the cache itself does — consistent with transient decode/atlas buffers
+from the coarse warm's own pack/write/read/decode round trip settling out by the time of the
+dense-warm reading, not with anything eviction-shaped. No conditional `coarseLru`/`denseLru` split
+needed. Real numbers: `results/task-3-frame-cache-summary.md`'s "Part B.2" section.
+
+One follow-up surfaced by the same runs: real coarse-tier memory cost (idle → coarse-warm) was
++199MB/+202MB against a nominal `totalBytes` of ~58MB, a **~3.4x** real/nominal ratio — higher than
+the original ~2.1x finding. `DEFAULT_BUDGET_BYTES` (96MB) is compared against nominal bytes, which
+never exceeded 86MB in either run even as real memory passed 350MB, so the budget isn't yet
+providing real protection at production scale. Left as `src/media/frames/README.md`'s documented
+calibration data rather than silently bumped — an unvalidated single-machine multiplier isn't a
+basis for picking a new production constant.
+
+**Exit: met.** The anomaly has an explanation backed by a number (`evictionCount: 0`,
+`coarseResidentCount` unchanged), not an inference.
 
 ### ▸ Task 4a — app shell and design system (2–3 days)
 React shell, layout regions, design tokens transcribed from the Claude Design output, rail and floating panels, transport bar, status bar, empty state, splitter. Consumes `design/README.md` and its deltas list.

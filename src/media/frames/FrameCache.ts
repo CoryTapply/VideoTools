@@ -58,6 +58,19 @@ export interface FrameCacheOptions {
   readonly onError?: (message: string, detail: unknown) => void;
 }
 
+/** Diagnostic snapshot for Task 3.5's eviction-vs-transient-buffer investigation -- see FrameCache.stats(). */
+export interface FrameCacheStats {
+  readonly totalBytes: number;
+  readonly count: number;
+  readonly budgetBytes: number;
+  /** Cumulative budget-driven evictions across BOTH tiers (they share one FrameLru) -- see lru.ts's evictionCount. Not incremented by clear(). */
+  readonly evictionCount: number;
+  /** FrameLifecycleRegistry's count of currently-tracked closables -- the same signal Part 9's leak check uses, now available per-checkpoint too. */
+  readonly liveCount: number;
+  readonly coarseResidentCount: number;
+  readonly denseResidentCount: number;
+}
+
 export class FrameCache {
   private readonly sampleIndex: SampleIndex;
   private readonly trackId: number;
@@ -200,6 +213,19 @@ export class FrameCache {
     this.listeners.add(cb);
     return () => {
       this.listeners.delete(cb);
+    };
+  }
+
+  /** Diagnostic snapshot -- see FrameCacheStats. Cheap: resident counts filter already-maintained arrays, no new bookkeeping. */
+  stats(): FrameCacheStats {
+    return {
+      totalBytes: this.lru.totalBytes,
+      count: this.lru.count,
+      budgetBytes: this.lru.budgetBytes,
+      evictionCount: this.lru.evictionCount,
+      liveCount: this.registry.liveCount,
+      coarseResidentCount: this.coarseFrames.filter((f) => f !== null).length,
+      denseResidentCount: this.denseFrames.filter((f) => f !== null).length,
     };
   }
 

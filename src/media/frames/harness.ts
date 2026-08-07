@@ -220,6 +220,16 @@ function waitUntil(condition: () => boolean, timeoutMs: number, log: (msg: strin
   });
 }
 
+// Settle pause before each Part B Activity Monitor reading (Task 3.5): gives transient
+// decode/atlas/GC buffers a chance to be reclaimed before the human switches over to read memory,
+// so the reading reflects steady state rather than a mid-operation peak. See the summary doc for
+// why this matters -- the original run had no pause and produced an unexplained
+// dense-warm-below-coarse-warm drop. Declared here (not next to mountMemoryCheckpointSection
+// below) because mountMemoryCheckpointSection(root) is called before its own definition -- `const`
+// bindings aren't hoisted the way `function` declarations are, so a const declared after the call
+// site is still in the temporal dead zone when the function body runs.
+const CHECKPOINT_SETTLE_MS = 2000;
+
 const root = document.getElementById('app');
 if (!root) throw new Error('#app element missing from frames.html');
 
@@ -263,6 +273,7 @@ interface MemoryCheckpoint {
   jsHeapBytes: number | null;
   jsHeapMethod: string;
   activityMonitorMB: number;
+  stats: ReturnType<FrameCache['stats']> | null;
 }
 
 function mountMemoryCheckpointSection(container: HTMLElement): void {
@@ -272,7 +283,12 @@ function mountMemoryCheckpointSection(container: HTMLElement): void {
     <h2>Part B: OS-level memory checkpoints</h2>
     <p>Pick the SAME file used above. Click each button in order, reading Activity Monitor's
     "Memory" column for this tab's render process (Shift+Esc in Chrome, or macOS Activity Monitor)
-    right after each click, before doing anything else.</p>
+    right after each click. Each checkpoint waits ${String(CHECKPOINT_SETTLE_MS / 1000)}s after its
+    action before prompting -- wait for that log line before switching to Activity Monitor.</p>
+    <p>Task 3.5 requires TWO full runs: once with the dense window below at 5 (reproduces the
+    original anomaly), once at 30 (production's real default, DEFAULT_DENSE_WINDOW_SECONDS) --
+    reload the page between runs to reset all four buttons.</p>
+    <label>Dense window (seconds, ±): <input type="number" id="mem-dense-window" value="5" min="1" /></label><br /><br />
     <input type="file" id="mem-file" accept="video/*" /><br /><br />
     <button id="mem-idle" disabled>1. Idle (file loaded, nothing warmed)</button>
     <button id="mem-coarse" disabled>2. Coarse warm</button>
@@ -284,13 +300,14 @@ function mountMemoryCheckpointSection(container: HTMLElement): void {
   container.appendChild(section);
 
   const fileInput = section.querySelector<HTMLInputElement>('#mem-file');
+  const denseWindowInput = section.querySelector<HTMLInputElement>('#mem-dense-window');
   const idleBtn = section.querySelector<HTMLButtonElement>('#mem-idle');
   const coarseBtn = section.querySelector<HTMLButtonElement>('#mem-coarse');
   const denseBtn = section.querySelector<HTMLButtonElement>('#mem-dense');
   const clearBtn = section.querySelector<HTMLButtonElement>('#mem-clear');
   const downloadBtn = section.querySelector<HTMLButtonElement>('#mem-download');
   const logEl = section.querySelector<HTMLPreElement>('#mem-log');
-  if (!fileInput || !idleBtn || !coarseBtn || !denseBtn || !clearBtn || !downloadBtn || !logEl) throw new Error('memory checkpoint section failed to build its DOM');
+  if (!fileInput || !denseWindowInput || !idleBtn || !coarseBtn || !denseBtn || !clearBtn || !downloadBtn || !logEl) throw new Error('memory checkpoint section failed to build its DOM');
 
   const log = (msg: string): void => {
     logEl.textContent += `${msg}\n`;
@@ -300,12 +317,17 @@ function mountMemoryCheckpointSection(container: HTMLElement): void {
   let sampleIndex: SampleIndex | undefined;
   let trackId = -1;
   let durationTicks = 0;
+  let denseWindowSeconds = 5;
   const checkpoints: MemoryCheckpoint[] = [];
 
   async function recordCheckpoint(label: string): Promise<void> {
+    log(`${label}: settling ${String(CHECKPOINT_SETTLE_MS / 1000)}s before reading...`);
+    await new Promise((resolve) => setTimeout(resolve, CHECKPOINT_SETTLE_MS));
     const reading = await measureMemory();
+    const stats = cache?.stats() ?? null;
+    if (stats) log(`${label}: evictions=${String(stats.evictionCount)} liveCount=${String(stats.liveCount)} resident=coarse:${String(stats.coarseResidentCount)}/dense:${String(stats.denseResidentCount)} totalBytes=${String(stats.totalBytes)}`);
     const activityMonitorMB = Number(prompt(`Checkpoint "${label}": enter Activity Monitor's Memory reading for this process group, in MB`, '0') ?? '0');
-    checkpoints.push({ label, jsHeapBytes: reading.bytes, jsHeapMethod: reading.method, activityMonitorMB });
+    checkpoints.push({ label, jsHeapBytes: reading.bytes, jsHeapMethod: reading.method, activityMonitorMB, stats });
     log(`${label}: JS-side ${reading.method}=${String(reading.bytes)} bytes (NOT authoritative) | Activity Monitor=${String(activityMonitorMB)}MB`);
   }
 
@@ -318,6 +340,8 @@ function mountMemoryCheckpointSection(container: HTMLElement): void {
     void (async () => {
       const file = fileInput.files?.[0];
       if (!file) return;
+      denseWindowSeconds = Number(denseWindowInput.value) || 5;
+      denseWindowInput.disabled = true;
       const source = new FileByteSource(file);
       const indexResult = await buildIndex(source);
       if (!indexResult.ok) {
@@ -334,7 +358,8 @@ function mountMemoryCheckpointSection(container: HTMLElement): void {
       durationTicks = videoTrack.duration - videoTrack.editOffsetTicks;
       const workerCount = defaultWorkerCount(navigator.hardwareConcurrency);
       const pool = new FrameWorkerPool(Array.from({ length: workerCount }, () => new FrameWorkerClient(file)));
-      cache = new FrameCache({ sampleIndex, videoTrackId: trackId, pool, denseWindowSeconds: 5, onError: (message) => { log(`DECODE ERROR: ${message}`); } });
+      cache = new FrameCache({ sampleIndex, videoTrackId: trackId, pool, denseWindowSeconds, onError: (message) => { log(`DECODE ERROR: ${message}`); } });
+      log(`dense window: ±${String(denseWindowSeconds)}s`);
       await recordCheckpoint('1-idle');
       idleBtn.disabled = true;
       coarseBtn.disabled = false;
@@ -378,8 +403,8 @@ function mountMemoryCheckpointSection(container: HTMLElement): void {
       spike: 'frame-cache-memory-checkpoints',
       machine: 'local',
       fixture: fileInput.files?.[0]?.name ?? 'unknown',
-      metrics: { checkpoints },
-      notes: checkpoints.map((c) => `${c.label}: ${String(c.activityMonitorMB)}MB (Activity Monitor)`).join(' | '),
+      metrics: { denseWindowSeconds, checkpoints },
+      notes: `denseWindowSeconds=${String(denseWindowSeconds)} | ${checkpoints.map((c) => `${c.label}: ${String(c.activityMonitorMB)}MB (Activity Monitor)`).join(' | ')}`,
     });
     recordResult(result);
     log('checkpoints printed to console and downloaded as JSON.');

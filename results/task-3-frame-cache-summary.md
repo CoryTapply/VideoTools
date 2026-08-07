@@ -7,9 +7,11 @@ target fixture), including the OS-level Activity Monitor memory checkpoints** �
 `getNearest()`, dense build + cancellation, atlas round-trip, the 20-cycle leak check, and real
 memory-return-to-baseline after `clear()` all confirmed (see "Part 9 measurements" and "Part B"
 below). Three real WebCodecs integration bugs were found and fixed along the way — the Node-only
-test suite could not have caught any of them, since Node has no WebCodecs. **One follow-up worth
-tracking, not a blocker**: real measured coarse-tier memory (+121MB) ran ~2x over the naive
-estimate the ~96MB eviction budget was calibrated against — see Part B below.
+test suite could not have caught any of them, since Node has no WebCodecs. **Task 3.5's follow-up
+investigation is also closed (2026-08-07)**: the dense-warm-below-coarse-warm memory anomaly is
+confirmed NOT coarse-tier eviction (`evictionCount: 0`, `coarseResidentCount` unchanged, at both
+`denseWindowSeconds: 5` and `30`) — see Part B.2 below. `DEFAULT_BUDGET_BYTES`'s real/nominal
+multiplier is now measured at ~3.4x, still flagged as calibration data rather than acted on.
 
 This is a handoff/context summary for a future session. Full design rationale lives in
 `src/media/frames/README.md`; this file is about what was built, what was decided, and what's
@@ -180,6 +182,49 @@ independent signals agreeing is a real, confirmed result, not an assumption.
 Both of these are exactly the kind of finding this task's harness exists to surface — real
 numbers, not assumptions, including the inconvenient ones.
 
+## Part B.2 — Task 3.5 follow-up: eviction-vs-transient-buffers re-run (27gb.mp4, real Activity Monitor reads, 2026-08-07)
+
+Task 3.5 (`roadmap.md`) required repeating the Part B checkpoint run with new instrumentation
+(`FrameLru.evictionCount`, `FrameCache.stats()`'s per-tier resident counts, a 2s settle pause
+before each reading) at BOTH `denseWindowSeconds: 5` (reproduces the original setup) and `30`
+(production's actual default, never tested until now). Full JSON:
+`fixtures/frame-cache-memory-checkpoints_27gb.mp4_2026-08-07T15_03_18.361Z.json` (window=5) and
+`fixtures/frame-cache-memory-checkpoints_27gb.mp4_2026-08-07T15_05_50.379Z.json` (window=30).
+
+| Checkpoint | window=5: Activity Monitor | window=5: evictionCount / coarseResident | window=30: Activity Monitor | window=30: evictionCount / coarseResident |
+|---|---|---|---|---|
+| 1. Idle | 130MB | 0 / 0 | 151MB | 0 / 0 |
+| 2. Coarse warm | 329MB | 0 / 1015 | 353MB | 0 / 1015 |
+| 3. Dense warm | 158MB (**-171MB**) | 0 / **1015** | 187MB (**-166MB**) | 0 / **1015** |
+| 4. After `clear()` | 135MB | 0 / 0 | 161MB | 0 / 0 |
+
+**Verdict: not eviction.** `evictionCount` stayed 0 and `coarseResidentCount` never dropped
+(1015 → 1015 in both runs) across the coarse-warm → dense-warm transition — the cache's own
+bookkeeping proves coarse entries were never touched, and `totalBytes` only grew as dense frames
+were added (58.46MB → 63.07MB at window=5; 58.46MB → 86.11MB at window=30). This resolves
+Task 3.5's decision procedure: no conditional `coarseLru`/`denseLru` split is needed.
+
+**What the drop actually looks like:** the ~170MB dense-warm drop is nearly identical at both
+window sizes (-171MB vs. -166MB) despite a 6x difference in dense-tier work (20 vs. 120 dense
+frames added, `totalBytes` growing by 4.6MB vs. 27.6MB). If the drop were caused by eviction or by
+dense-tier growth, it would scale with window size — it doesn't. This is consistent with the
+original Part B section's leading theory (transient decode/atlas/GC buffers from the coarse warm's
+own pack/write/read/decode round trip, still live at the coarse-warm checkpoint, reclaimed by the
+time of the dense-warm reading) — the 2s settle pause added for this re-run wasn't enough to catch
+that reclaim before the coarse-warm reading itself. Confirmed by elimination via real numbers, not
+proven by directly observing the reclaim — a finer-grained checkpoint (reading again a few seconds
+after coarse-warm, before triggering dense) would isolate it further if anyone wants to chase it,
+but it's no longer load-bearing for this task's exit criterion.
+
+**Budget calibration, updated:** real coarse-tier cost (idle → coarse-warm) was +199MB (window=5)
+and +202MB (window=30) against a nominal `totalBytes` of 58.46MB — a **~3.4x** real/nominal ratio,
+higher than the original single-run ~2.1x (121MB/58MB) finding. `DEFAULT_BUDGET_BYTES` (96MB) is
+compared against nominal `totalBytes`, which stayed under 86MB in both runs even as real memory
+passed 350MB — so at today's production scale, the budget never engages at all; it isn't currently
+providing the protection its ~190MB "everything resident" ceiling math implies. Recorded here as
+calibration data for whoever re-tunes the constant next, rather than silently bumped from a
+two-run, single-machine sample.
+
 ## Real bugs found during verification
 
 Three genuine WebCodecs integration bugs were found and fixed via the first real browser run
@@ -241,14 +286,12 @@ kind of mistake that's easy to repeat:
 
 ## What's still open
 
-- **`DEFAULT_BUDGET_BYTES` (~96MB) should be revisited.** Part B's real Activity Monitor numbers
-  show the coarse tier alone costing ~121MB of real memory (vs. the ~58MB naive RGBA estimate the
-  budget was calibrated against) — a ~2x gap. The budget still functions (bounded is better than
-  unbounded), but its specific value is a rough starting point, not a validated cap, until this is
-  re-measured with a couple more real runs (ideally across machines/GPUs, not just one).
-- **The dense-warm-lower-than-coarse-warm anomaly in Part B is unexplained, only plausibly
-  inferred** (see Part B above) — worth a repeat run with longer pauses between checkpoints if
-  someone wants to nail down whether it's genuinely transient-buffer settling or something else.
+- **`DEFAULT_BUDGET_BYTES` (~96MB) should be revisited.** Part B.2's real Activity Monitor numbers
+  (two runs, 2026-08-07) now put the coarse tier's real memory cost at ~199-202MB (vs. the ~58MB
+  naive RGBA estimate the budget was calibrated against) — a ~3.4x gap, higher than the original
+  single-run ~2.1x estimate. The budget still functions (bounded is better than unbounded), but its
+  specific value remains a rough starting point, not a validated cap, until someone picks a new
+  number informed by this ratio (ideally across machines/GPUs, not just one).
 - **Part 0's job-descriptor decision is reasoned, not measured** (see above) — worth a real
   multi-worker timing comparison if a future task's profiling suggests the pool is bottlenecked on
   something this design didn't anticipate.

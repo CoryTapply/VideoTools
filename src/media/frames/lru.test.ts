@@ -52,6 +52,35 @@ describe('createFrameLru', () => {
     expect(lru.totalBytes).toBe(200);
   });
 
+  it('evictionCount increments once per budget-driven eviction, not per set() call', () => {
+    const lru = createFrameLru<number, FakeBitmap>(250); // room for ~2.5 entries of size 100
+    expect(lru.evictionCount).toBe(0);
+    lru.set(1, new FakeBitmap(), 100);
+    lru.set(2, new FakeBitmap(), 100);
+    expect(lru.evictionCount).toBe(0); // still under budget -- no eviction yet
+    lru.set(3, new FakeBitmap(), 100); // pushes total to 300 > 250 -- evicts entry 1
+    expect(lru.evictionCount).toBe(1);
+    lru.set(4, new FakeBitmap(), 100); // evicts entry 2
+    expect(lru.evictionCount).toBe(2);
+  });
+
+  it('evictionCount is NOT incremented by delete() or clear() -- it answers "was the budget the reason", not "was anything removed"', () => {
+    const lru = createFrameLru<number, FakeBitmap>(1_000_000); // budget never exceeded
+    lru.set(1, new FakeBitmap(), 100);
+    lru.set(2, new FakeBitmap(), 100);
+    lru.delete(1);
+    expect(lru.evictionCount).toBe(0);
+    lru.clear();
+    expect(lru.evictionCount).toBe(0);
+  });
+
+  it('evictionCount is NOT incremented by replacing an existing key (that removal is a replace, not a budget eviction)', () => {
+    const lru = createFrameLru<number, FakeBitmap>(1_000_000);
+    lru.set(1, new FakeBitmap(), 100);
+    lru.set(1, new FakeBitmap(), 100); // replaces key 1 -- old bitmap closed, but not via evictOne()
+    expect(lru.evictionCount).toBe(0);
+  });
+
   it('get() promotes an entry to most-recently-used, protecting it from the next eviction', () => {
     const lru = createFrameLru<number, FakeBitmap>(250);
     const a = new FakeBitmap();
