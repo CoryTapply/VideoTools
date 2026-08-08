@@ -1,13 +1,29 @@
 import { useEffect, useReducer } from 'react';
 import styles from './App.module.css';
 import { DegradedStrip } from './chrome/DegradedStrip.tsx';
+import { ExportOverlay } from './chrome/ExportOverlay.tsx';
+import { ExportToast } from './chrome/ExportToast.tsx';
+import { KeyboardOverlay } from './chrome/KeyboardOverlay.tsx';
 import { Splitter } from './chrome/Splitter.tsx';
 import { Stage } from './chrome/Stage.tsx';
 import { StatusBar } from './chrome/StatusBar.tsx';
 import { TimelineRegion } from './chrome/TimelineRegion.tsx';
 import { TitleBar } from './chrome/TitleBar.tsx';
 import { TransportBar } from './chrome/TransportBar.tsx';
-import { DEFAULT_IN_SECONDS, DEFAULT_OUT_SECONDS, FILE_NAME, FORMAT_CHIP, FPS, INDEX_LABEL, PLAYHEAD_SECONDS, THUMB_LABEL, ZOOM_LABEL } from './fixtures.ts';
+import {
+  DEFAULT_IN_SECONDS,
+  DEFAULT_OUT_SECONDS,
+  EXPORT_DURATION_LABEL,
+  EXPORT_OUT_PATH,
+  FILE_NAME,
+  FORMAT_CHIP,
+  FPS,
+  INDEX_LABEL,
+  PLAYHEAD_SECONDS,
+  THUMB_LABEL,
+  ZOOM_LABEL,
+  formatExportLine,
+} from './fixtures.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
 import { formatFrameNumber, formatTimecode } from './state/snap-notice.ts';
 import { appReducer, createInitialAppState } from './state/app-state.ts';
@@ -132,6 +148,30 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         onToggleTrack={(track) => {
           dispatch({ type: 'track/toggle', track });
         }}
+        overlay={
+          (state.screen === 'exporting' || state.screen === 'finalising') && (
+            <ExportOverlay
+              percent={state.exportPct}
+              phase={state.screen === 'finalising' ? 'finalising' : 'copy'}
+              line={formatExportLine(state.exportPct)}
+              onCancel={() => {
+                dispatch({ type: 'screen/set', screen: 'ready' });
+              }}
+            />
+          )
+        }
+        toast={
+          state.toast && (
+            <ExportToast
+              durationLabel={EXPORT_DURATION_LABEL}
+              outPath={EXPORT_OUT_PATH}
+              onShowInFolder={() => {}}
+              onTrimAnother={() => {
+                dispatch({ type: 'toast/set', show: false });
+              }}
+            />
+          )
+        }
       />
 
       <TransportBar
@@ -182,6 +222,14 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           }}
           exactAvailable={exactAvailable}
           fps={FPS}
+        />
+      )}
+
+      {state.shortcuts && (
+        <KeyboardOverlay
+          onClose={() => {
+            dispatch({ type: 'shortcuts/toggle' });
+          }}
         />
       )}
     </div>

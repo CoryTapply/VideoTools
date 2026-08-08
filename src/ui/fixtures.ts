@@ -69,6 +69,43 @@ export const INDEX_LABEL = 'index 862,401 frames · 3,422 keyframes';
 /** SourcePanel's TrackList is read-only and ignores selection, but still needs a value to pass. */
 export const ALL_TRACKS_SELECTED: TrackSelection = { V1: true, A1: true, A2: true, A3: true, A4: true, A5: true, A6: true };
 
+export interface KeyRowFixture {
+  chord: string;
+  description: string;
+}
+
+export const KEY_ROWS: readonly KeyRowFixture[] = [
+  { chord: 'Space / K', description: 'play · pause' },
+  { chord: 'J / L', description: 'shuttle (accelerates)' },
+  { chord: '← / →', description: 'step frame' },
+  { chord: 'Shift + ← / →', description: 'step second' },
+  { chord: 'I / O', description: 'set in · out' },
+  { chord: 'Shift + I / O', description: 'jump to in · out' },
+  { chord: 'Alt + I / O', description: 'clear in · out' },
+  { chord: '↑ / ↓', description: 'previous · next keyframe' },
+  { chord: '+ / −', description: 'zoom' },
+  { chord: 'Shift + Z', description: 'zoom to fit' },
+  { chord: 'Home / End', description: 'start · end' },
+  { chord: 'F', description: 'full-screen preview' },
+  { chord: '⌘ / Ctrl + E', description: 'export clip' },
+  { chord: '⌘ / Ctrl + Z', description: 'undo' },
+  { chord: 'Alt (drag)', description: 'disable snapping' },
+  { chord: '?', description: 'this overlay' },
+];
+
+/**
+ * Illustrative copy-phase export line, matching design/reference/Video Trimmer.dc.html's own
+ * synthetic formula so a screenshot taken mid-export lines up with the design references.
+ */
+export function formatExportLine(percent: number): string {
+  const mbWritten = Math.round((178.48 * percent) / 100);
+  const secondsLeft = Math.max(1, Math.round((100 - percent) / 12));
+  return `${mbWritten.toString()} MB written · 214 MB/s · ${secondsLeft.toString()} s left`;
+}
+
+export const EXPORT_OUT_PATH = '~/Recordings/session-4_clip.mp4';
+export const EXPORT_DURATION_LABEL = '2 m 02 s';
+
 export const PLAYHEAD_SECONDS = 6724.517;
 export const DEFAULT_IN_SECONDS = 6690;
 export const DEFAULT_OUT_SECONDS = 6812;

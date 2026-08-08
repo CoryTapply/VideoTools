@@ -7,6 +7,8 @@ export const color = {
   bgStage: '#0B0B0C',
   // The <video> element's own background before a frame has decoded.
   bgVideo: '#000000',
+  // Export progress overlay's own translucent backing -- design/reference/Video Trimmer.dc.html.
+  bgExportOverlay: 'rgba(19,19,21,.92)',
   // Empty-state drop-zone card and its hover fill -- design/reference/Video Trimmer.dc.html, not
   // in the main token table.
   bgEmptyState: '#111113',
