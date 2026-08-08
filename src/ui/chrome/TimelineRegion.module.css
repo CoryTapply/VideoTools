@@ -1,0 +1,41 @@
+.root {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg-base);
+  display: flex;
+  flex-direction: column;
+}
+
+.ruler {
+  flex: 0 0 22px;
+  height: 22px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  cursor: text;
+}
+
+.keyframes {
+  flex: 0 0 15px;
+  height: 15px;
+  background: var(--color-bg-keyframes);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.filmstrip {
+  flex: 1;
+  min-height: 60px;
+  background: var(--color-bg-timeline);
+  position: relative;
+}
+
+.indexingOverlay {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--color-bg-indexing-stripe-a) 0,
+    var(--color-bg-indexing-stripe-a) 10px,
+    var(--color-bg-indexing-stripe-b) 10px,
+    var(--color-bg-indexing-stripe-b) 20px
+  );
+  pointer-events: auto;
+}

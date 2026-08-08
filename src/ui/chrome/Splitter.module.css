@@ -1,0 +1,19 @@
+.root {
+  flex: 0 0 5px;
+  height: 5px;
+  cursor: row-resize;
+  background: var(--color-bg-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.root:hover {
+  background: var(--color-bg-splitter-hover);
+}
+
+.grip {
+  width: 44px;
+  height: 1px;
+  background: var(--color-border-base);
+}

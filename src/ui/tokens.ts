@@ -7,10 +7,19 @@ export const color = {
   bgStage: '#0B0B0C',
   bgPanel: '#1A1A1C',
   bgRaised: '#232326',
+  // A slightly lighter hover state used on top of bg/raised buttons -- "Keep exact frame" and
+  // "Show in folder" in design/reference/Video Trimmer.dc.html, not in the main token table.
+  bgRaisedHover: '#2A2A2E',
   bgTimeline: '#141416',
+  // Indexing-state stripe overlay -- design/README.md's Timeline "Indexing state" note.
+  bgIndexingStripeA: '#151517',
+  bgIndexingStripeB: '#121214',
   bgKeyframes: '#121215',
   bgWaveform: '#0F0F11',
   bgTileEmpty: '#1B1B1F',
+  // Splitter hover -- design/reference/Video Trimmer.dc.html's `style-hover` on the splitter row,
+  // not in the main token table.
+  bgSplitterHover: '#16161A',
 
   borderBase: '#2E2E32',
   borderSubtle: '#232326',
@@ -39,6 +48,10 @@ export const color = {
   warnBannerBorder: 'rgba(239,159,39,.35)',
   warnNoticeBg: 'rgba(239,159,39,.14)',
   warnNoticeBorder: 'rgba(239,159,39,.45)',
+  // The title-bar reconnect button's own border/hover -- a third, lighter amber pairing used only
+  // on that inline button, not the pill it sits inside.
+  warnButtonBorder: 'rgba(239,159,39,.5)',
+  warnButtonHoverBg: 'rgba(239,159,39,.16)',
 
   playhead: '#E2574F',
   dim: 'rgba(10,10,11,.72)',
