@@ -33,13 +33,17 @@ or drawing itself.
 
 ## Reconciling the state table
 
-`design/original-brief.md`'s state table lists nine states, including "permission lost" (a
-File System Access grant was revoked) and "degraded browser" (File System Access isn't available
-at all, so exports fall back to capped downloads). The prototype (`design/reference/Video
-Trimmer.dc.html`) collapses both into a single `isDegraded` boolean, because it only needed to
-render one screenshot per state. They're different failure modes with different messaging, so
-`app-state.ts` keeps them as two independent flags, `permissionLost` and `degradedBrowser`, even
-though only one boolean existed in the source prototype.
+`design/README.md`'s own State Management section already types `screen` with eight values
+including `'degraded'` -- that value is the "no File System Access API at all, exports fall back to
+capped downloads" case (the 22px `DegradedStrip`, gated in the row table on "the degraded state").
+`design/original-brief.md`'s fuller state table also lists "permission lost" (a previously-granted
+File System Access handle was revoked) as a distinct state, which is a different failure mode with
+different messaging -- the title-bar amber "Reconnect file" pill, not the 22px strip. The prototype
+(`design/reference/Video Trimmer.dc.html`) renders both off one `isDegraded` boolean, because it
+only needed one screenshot per state. `app-state.ts` instead reuses `screen === 'degraded'` for the
+first case and adds one new orthogonal flag, `permissionLost`, for the second -- they can occur
+independently (a file can lose its permission grant while the browser fully supports File System
+Access) and `screen` otherwise stays exactly the doc's eight-value union.
 
 ## Panel timers use an injectable scheduler
 
