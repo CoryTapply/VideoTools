@@ -14,6 +14,16 @@ export function formatTimecode(frame: number, fps: number): string {
   return `${pad(hh)}:${pad(mm)}:${pad(ss)}:${pad(ff)}`;
 }
 
+/** `HH:MM:SS` duration (no frame component) -- the export panel's `range` row. */
+export function formatDurationHMS(totalSeconds: number): string {
+  const seconds = Math.round(totalSeconds);
+  const hh = Math.floor(seconds / 3600);
+  const mm = Math.floor((seconds % 3600) / 60);
+  const ss = seconds % 60;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+}
+
 /** Comma-grouped frame number with the design doc's ` f` suffix, e.g. "402,153 f". */
 export function formatFrameNumber(frame: number): string {
   return `${Math.floor(frame).toLocaleString('en-US')} f`;

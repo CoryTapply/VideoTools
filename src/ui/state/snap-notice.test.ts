@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatDurationHMS,
   formatFrameNumber,
   formatKeyframeShiftMessage,
   formatNoticeDelta,
@@ -16,6 +17,16 @@ describe('formatTimecode', () => {
     // 1h 2m 3s and 4 frames at 60fps.
     const frame = (3600 + 2 * 60 + 3) * 60 + 4;
     expect(formatTimecode(frame, 60)).toBe('01:02:03:04');
+  });
+});
+
+describe('formatDurationHMS', () => {
+  it('formats 122 seconds as 00:02:02', () => {
+    expect(formatDurationHMS(122)).toBe('00:02:02');
+  });
+
+  it('rolls over hours', () => {
+    expect(formatDurationHMS(3661)).toBe('01:01:01');
   });
 });
 

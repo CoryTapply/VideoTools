@@ -1,0 +1,44 @@
+.root {
+  flex: 0 0 auto;
+  border-left: 1px solid var(--color-border-base);
+  background: var(--color-bg-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.header {
+  height: 28px;
+  flex: 0 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid var(--color-border-base);
+}
+
+.title {
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.unpinButton {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bodyWrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}

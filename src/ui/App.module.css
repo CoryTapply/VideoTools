@@ -5,10 +5,3 @@
   flex-direction: column;
   overflow: hidden;
 }
-
-.stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  background: var(--color-bg-stage);
-}

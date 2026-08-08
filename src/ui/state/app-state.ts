@@ -93,7 +93,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'screen/set':
       return { ...state, screen: action.screen };
     case 'panel/open':
-      return { ...state, panel: action.panel };
+      // Opening a rail panel closes the keyboard overlay, and vice versa (shortcuts/toggle
+      // below) -- design/reference/Video Trimmer.dc.html's rail button and keys-button handlers.
+      return { ...state, panel: action.panel, shortcuts: false };
     case 'panel/close':
       return { ...state, panel: null };
     case 'panel/pin':
@@ -119,7 +121,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'notice/keep-exact':
       return { ...state, trimMode: 'exact', notice: null, noticeOpen: false };
     case 'shortcuts/toggle':
-      return { ...state, shortcuts: !state.shortcuts };
+      return { ...state, shortcuts: !state.shortcuts, panel: null };
     case 'full/toggle':
       return { ...state, full: !state.full };
     case 'timeline-height/set':

@@ -5,6 +5,12 @@
 export const color = {
   bgBase: '#0E0E0F',
   bgStage: '#0B0B0C',
+  // The <video> element's own background before a frame has decoded.
+  bgVideo: '#000000',
+  // Empty-state drop-zone card and its hover fill -- design/reference/Video Trimmer.dc.html, not
+  // in the main token table.
+  bgEmptyState: '#111113',
+  bgEmptyStateHover: '#131317',
   bgPanel: '#1A1A1C',
   bgRaised: '#232326',
   // A slightly lighter hover state used on top of bg/raised buttons -- "Keep exact frame" and
@@ -17,6 +23,10 @@ export const color = {
   bgKeyframes: '#121215',
   bgWaveform: '#0F0F11',
   bgTileEmpty: '#1B1B1F',
+  // The preview stage's placeholder-frame stripe texture (stands in for a real decoded frame) --
+  // design/reference/Video Trimmer.dc.html's video-box background, not in the main token table.
+  bgPreviewTextureA: '#131418',
+  bgPreviewTextureB: '#0F1013',
   // Splitter hover -- design/reference/Video Trimmer.dc.html's `style-hover` on the splitter row,
   // not in the main token table.
   bgSplitterHover: '#16161A',

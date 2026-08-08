@@ -1,0 +1,107 @@
+import { ExportPanel } from '../panels/ExportPanel.tsx';
+import { JobsPanel } from '../panels/JobsPanel.tsx';
+import { SourcePanel } from '../panels/SourcePanel.tsx';
+import { FloatingPanel } from './FloatingPanel.tsx';
+import { PinnedPanel } from './PinnedPanel.tsx';
+import { PreviewSurface } from './PreviewSurface.tsx';
+import { Rail } from './Rail.tsx';
+import styles from './Stage.module.css';
+import type { ReactNode } from 'react';
+import type { PanelId, Screen, TrackId, TrackSelection } from '../state/app-state.ts';
+
+export interface StageProps {
+  screen: Screen;
+  showChrome: boolean;
+  panel: PanelId | null;
+  pinned: PanelId | null;
+  shortcuts: boolean;
+  sel: TrackSelection;
+  tin: number;
+  tout: number;
+  frameLabel: string;
+  timecode: string;
+  onOpenFile: () => void;
+  onOpenPanel: (id: PanelId) => void;
+  onClosePanel: () => void;
+  onPinPanel: (id: PanelId) => void;
+  onUnpinPanel: () => void;
+  onToggleShortcuts: () => void;
+  onToggleTrack: (id: TrackId) => void;
+  overlay?: ReactNode;
+  toast?: ReactNode;
+}
+
+const PANEL_TITLES: Record<PanelId, string> = { info: 'Source', export: 'Export', queue: 'Jobs' };
+
+export function Stage({
+  screen,
+  showChrome,
+  panel,
+  pinned,
+  shortcuts,
+  sel,
+  tin,
+  tout,
+  frameLabel,
+  timecode,
+  onOpenFile,
+  onOpenPanel,
+  onClosePanel,
+  onPinPanel,
+  onUnpinPanel,
+  onToggleShortcuts,
+  onToggleTrack,
+  overlay,
+  toast,
+}: StageProps) {
+  function renderPanelContent(id: PanelId) {
+    switch (id) {
+      case 'info':
+        return <SourcePanel />;
+      case 'export':
+        return <ExportPanel sel={sel} tin={tin} tout={tout} onToggleTrack={onToggleTrack} />;
+      case 'queue':
+        return <JobsPanel />;
+    }
+  }
+
+  const previewScreen = screen === 'empty' || screen === 'degraded' ? 'empty' : screen === 'unsupported' ? 'unsupported' : 'has-video';
+
+  return (
+    <div className={styles.root}>
+      <PreviewSurface screen={previewScreen} frameLabel={frameLabel} timecode={timecode} onOpen={onOpenFile}>
+        {overlay}
+        {toast}
+      </PreviewSurface>
+
+      {pinned !== null && (
+        <PinnedPanel title={PANEL_TITLES[pinned]} onUnpin={onUnpinPanel}>
+          {renderPanelContent(pinned)}
+        </PinnedPanel>
+      )}
+
+      {showChrome && (
+        <Rail
+          panel={panel}
+          pinned={pinned}
+          shortcuts={shortcuts}
+          onOpenPanel={onOpenPanel}
+          onClosePanel={onClosePanel}
+          onToggleShortcuts={onToggleShortcuts}
+        />
+      )}
+
+      {panel !== null && (
+        <FloatingPanel
+          title={PANEL_TITLES[panel]}
+          onPin={() => {
+            onPinPanel(panel);
+          }}
+          onClose={onClosePanel}
+        >
+          {renderPanelContent(panel)}
+        </FloatingPanel>
+      )}
+    </div>
+  );
+}

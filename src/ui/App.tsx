@@ -2,13 +2,14 @@ import { useEffect, useReducer } from 'react';
 import styles from './App.module.css';
 import { DegradedStrip } from './chrome/DegradedStrip.tsx';
 import { Splitter } from './chrome/Splitter.tsx';
+import { Stage } from './chrome/Stage.tsx';
 import { StatusBar } from './chrome/StatusBar.tsx';
 import { TimelineRegion } from './chrome/TimelineRegion.tsx';
 import { TitleBar } from './chrome/TitleBar.tsx';
 import { TransportBar } from './chrome/TransportBar.tsx';
 import { DEFAULT_IN_SECONDS, DEFAULT_OUT_SECONDS, FILE_NAME, FORMAT_CHIP, FPS, INDEX_LABEL, PLAYHEAD_SECONDS, THUMB_LABEL, ZOOM_LABEL } from './fixtures.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
-import { formatTimecode } from './state/snap-notice.ts';
+import { formatFrameNumber, formatTimecode } from './state/snap-notice.ts';
 import { appReducer, createInitialAppState } from './state/app-state.ts';
 import type { AppState } from './state/app-state.ts';
 
@@ -73,6 +74,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   const timelineHeight = state.full ? Math.min(state.timelineH, FULLSCREEN_TIMELINE_CAP_PX) : state.timelineH;
 
   const timecode = formatTimecode(PLAYHEAD_SECONDS * FPS, FPS);
+  const frameLabel = formatFrameNumber(PLAYHEAD_SECONDS * FPS);
   const inTc = formatTimecode(state.tin * FPS, FPS);
   const outTc = formatTimecode(state.tout * FPS, FPS);
   const durTc = formatTimecode((state.tout - state.tin) * FPS, FPS);
@@ -98,7 +100,39 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       )}
       {showChrome && state.screen === 'degraded' && <DegradedStrip />}
 
-      <div className={styles.stage} />
+      <Stage
+        screen={state.screen}
+        showChrome={showChrome}
+        panel={state.panel}
+        pinned={state.pinned}
+        shortcuts={state.shortcuts}
+        sel={state.sel}
+        tin={state.tin}
+        tout={state.tout}
+        frameLabel={frameLabel}
+        timecode={timecode}
+        onOpenFile={() => {
+          dispatch({ type: 'screen/set', screen: 'opening' });
+        }}
+        onOpenPanel={(panel) => {
+          dispatch({ type: 'panel/open', panel });
+        }}
+        onClosePanel={() => {
+          dispatch({ type: 'panel/close' });
+        }}
+        onPinPanel={(panel) => {
+          dispatch({ type: 'panel/pin', panel });
+        }}
+        onUnpinPanel={() => {
+          dispatch({ type: 'panel/unpin' });
+        }}
+        onToggleShortcuts={() => {
+          dispatch({ type: 'shortcuts/toggle' });
+        }}
+        onToggleTrack={(track) => {
+          dispatch({ type: 'track/toggle', track });
+        }}
+      />
 
       <TransportBar
         timecode={timecode}

@@ -89,6 +89,17 @@ describe('appReducer', () => {
     expect(state.full).toBe(true);
   });
 
+  it('panel/open and shortcuts/toggle mutually close each other', () => {
+    let state = appReducer(createInitialAppState(), { type: 'shortcuts/toggle' });
+    expect(state.shortcuts).toBe(true);
+    state = appReducer(state, { type: 'panel/open', panel: 'info' });
+    expect(state.panel).toBe('info');
+    expect(state.shortcuts).toBe(false);
+    state = appReducer(state, { type: 'shortcuts/toggle' });
+    expect(state.shortcuts).toBe(true);
+    expect(state.panel).toBeNull();
+  });
+
   it('timeline-height/set and export/progress store their values', () => {
     let state = createInitialAppState();
     state = appReducer(state, { type: 'timeline-height/set', height: 400 });

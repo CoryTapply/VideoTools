@@ -3,7 +3,7 @@
 // recording) -- not live data. Once Task 5/media wiring lands, this module goes away and these
 // fields come from the real index/track list instead.
 
-import type { TrackId } from './state/app-state.ts';
+import type { TrackId, TrackSelection } from './state/app-state.ts';
 
 export const FPS = 60;
 export const DURATION_SECONDS = 862401 / FPS;
@@ -31,29 +31,43 @@ export const TRACKS: readonly TrackFixture[] = [
   { id: 'A6', name: 'Alerts', meta: `aac · und · stereo · 44.1 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
 ];
 
-export const SOURCE_PANEL_ROWS: readonly { label: string; value: string }[] = [
-  { label: 'container', value: 'mp4' },
-  { label: 'codec', value: 'h264 / High' },
-  { label: 'resolution', value: '2560 × 1440' },
-  { label: 'frame rate', value: '60.00 fps' },
-  { label: 'frames', value: '862,401' },
-  { label: 'keyframes', value: '3,422' },
-  { label: 'GOP', value: '252 frames · 4.2 s' },
-  { label: 'bitrate', value: '11.6 Mb/s' },
-  { label: 'size', value: '19.4 GB' },
-  { label: 'heap', value: '147 MB in use' },
+/** Matches the value colors PanelRows renders -- see panels/PanelRows.tsx. */
+export type RowTone = 'neutral' | 'muted' | 'informational' | 'good' | 'warning';
+
+export interface PanelRowFixture {
+  label: string;
+  value: string;
+  tone: RowTone;
+}
+
+export const SOURCE_PANEL_ROWS: readonly PanelRowFixture[] = [
+  { label: 'container', value: 'mp4', tone: 'neutral' },
+  { label: 'codec', value: 'h264 / High', tone: 'muted' },
+  { label: 'resolution', value: '2560 × 1440', tone: 'muted' },
+  { label: 'frame rate', value: '60.00 fps', tone: 'muted' },
+  { label: 'frames', value: '862,401', tone: 'muted' },
+  { label: 'keyframes', value: '3,422', tone: 'muted' },
+  { label: 'GOP', value: '252 frames · 4.2 s', tone: 'muted' },
+  { label: 'bitrate', value: '11.6 Mb/s', tone: 'muted' },
+  { label: 'size', value: '19.4 GB', tone: 'muted' },
+  { label: 'heap', value: '147 MB in use', tone: 'good' },
 ];
 
-export const JOBS_PANEL_ROWS: readonly { label: string; value: string }[] = [
-  { label: 'index', value: 'done · 138 ms' },
-  { label: 'keyframe map', value: 'done · 41 ms' },
-  { label: 'thumbs', value: '68% · running' },
-  { label: 'waveform', value: 'queued' },
+export const JOBS_PANEL_ROWS: readonly PanelRowFixture[] = [
+  { label: 'index', value: 'done · 138 ms', tone: 'good' },
+  { label: 'keyframe map', value: 'done · 41 ms', tone: 'good' },
+  { label: 'thumbs', value: '68% · running', tone: 'informational' },
+  { label: 'waveform', value: 'queued', tone: 'muted' },
+  { label: 'clip_03.mp4', value: 'done · 212 MB', tone: 'good' },
+  { label: 'clip_02.mp4', value: 'canceled', tone: 'warning' },
 ];
 
 export const ZOOM_LABEL = '1 frame = 5px';
 export const THUMB_LABEL = 'thumbs 68%';
 export const INDEX_LABEL = 'index 862,401 frames · 3,422 keyframes';
+
+/** SourcePanel's TrackList is read-only and ignores selection, but still needs a value to pass. */
+export const ALL_TRACKS_SELECTED: TrackSelection = { V1: true, A1: true, A2: true, A3: true, A4: true, A5: true, A6: true };
 
 export const PLAYHEAD_SECONDS = 6724.517;
 export const DEFAULT_IN_SECONDS = 6690;
