@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // Toggle via `npm run dev:coi`. Needed for performance.measureUserAgentSpecificMemory();
 // `credentialless` (not `require-corp`) avoids needing CORP headers on local fixture files.
 const coiEnabled = process.env.COI === '1';
 
 export default defineConfig({
+  plugins: [react()],
   server: {
     headers: coiEnabled
       ? {
@@ -28,6 +30,8 @@ export default defineConfig({
         mediaIndex: 'media-index.html',
         playback: 'playback.html',
         frames: 'frames.html',
+        app: 'app.html',
+        uiHarness: 'ui-harness.html',
       },
     },
   },
