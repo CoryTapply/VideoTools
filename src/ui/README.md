@@ -51,3 +51,18 @@ Access) and `screen` otherwise stays exactly the doc's eight-value union.
 scheduler function rather than calling `setTimeout` directly, so its tests can drive it with
 `vi.useFakeTimers()` instead of real waits -- the same testability-seam pattern as `ByteSource`
 (`src/media/index/`) and `VideoElementLike` (`src/media/playback/`).
+
+## Where things are
+
+- `tokens.ts` / `tokens.css.ts` / `reset.css` -- the design system.
+- `state/` -- pure, DOM-free logic (reducer, chord matching, formatting, clamp math, timers).
+- `chrome/` -- the shell: title bar, transport bar, status bar, splitter, stage, rail, panels
+  (structural), preview surface, empty/unsupported states, overlays.
+- `panels/` -- panel *content* (Source/Export/Jobs, the shared row/track-list renderers).
+- `icons/` -- inline SVG set.
+- `fixtures.ts` -- static placeholder display data. Delete/replace as real data wiring lands.
+- `harness/` -- `ui-harness.html`'s dev-only state-variant switcher; not shipped product code.
+- `App.tsx` / `main.tsx` / `app.html` -- the real (non-harness) entry point.
+
+Full task writeup, including what was found reading the actual prototype file rather than just the
+written spec, and what's still open: `results/task-4a-app-shell-summary.md`.

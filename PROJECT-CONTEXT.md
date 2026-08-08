@@ -2,7 +2,7 @@
 
 Written for a session (human or model) picking this project up cold. Read this before the architecture document.
 
-**Last updated:** after M1 task 3 (frame cache) landed.
+**Last updated:** after M1 task 4a (app shell and design system) landed.
 
 ---
 
@@ -70,11 +70,17 @@ These emerged during the project and have repeatedly paid for themselves. Keep t
 
 ## Where things stand
 
-**Done:** M0 and M0.5 feasibility spikes. M1 task 1 (index), task 2 (playback), task 3 (frame cache). CI running typecheck, lint, and tests on every push.
+**Done:** M0 and M0.5 feasibility spikes. M1 task 1 (index), task 2 (playback), task 3 (frame
+cache), task 3.5 (budget re-tune), task 4a (app shell and design system — `src/ui/`, greenfield
+React 19 added to the toolchain). CI running typecheck, lint, and tests on every push.
 
-**Next:** task 4a (app shell and design system), task 4b (timeline renderer), task 5 (export).
+**Next:** task 4b (timeline renderer — the canvas layer stack task 4a deliberately left as a
+placeholder), task 5 (export).
 
-**Design:** a UI design exists from Claude Design; a revision request has been sent covering the MKV→MP4 correction, filmstrip/waveform proportions, the missing keyframe tick row, multi-track selection, and the index timing figure.
+**Design:** a UI design exists from Claude Design; the revision request covering the MKV→MP4
+correction, filmstrip/waveform proportions, the missing keyframe tick row, multi-track selection,
+and the index timing figure has been incorporated — `design/README.md` is the current, authoritative
+handoff doc and task 4a built directly from it.
 
 ## Document map
 

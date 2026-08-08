@@ -1,6 +1,6 @@
 # Roadmap
 
-**Last updated:** after M1 task 3.
+**Last updated:** after M1 task 4a.
 Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 
 ---
@@ -12,7 +12,7 @@ Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 | M0 | Feasibility spikes | ✔ complete |
 | M0.5 | Remux, index at scale, WebCodecs scrub | ✔ complete |
 | T0 | Export cost diagnosis + merged read pass | ✔ complete |
-| **M1** | **Walking skeleton — open, scrub, trim, export** | **3 of 5 tasks done** |
+| **M1** | **Walking skeleton — open, scrub, trim, export** | **4 of 5 tasks done** |
 | M2 | Timeline polish | not started |
 | M3 | Frame accuracy (smart render) | not started |
 | M4 | Production hardening | not started |
@@ -58,10 +58,24 @@ basis for picking a new production constant.
 **Exit: met.** The anomaly has an explanation backed by a number (`evictionCount: 0`,
 `coarseResidentCount` unchanged), not an inference.
 
-### ▸ Task 4a — app shell and design system (2–3 days)
+### ✔ Task 4a — app shell and design system
 React shell, layout regions, design tokens transcribed from the Claude Design output, rail and floating panels, transport bar, status bar, empty state, splitter. Consumes `design/README.md` and its deltas list.
 
-**Exit:** the shell renders every M1 state with placeholder content; tokens are the only source of colour in the codebase.
+**Status: done.** `src/ui/` — tokens (`tokens.ts`, sole hex-literal source, enforced by a
+`tokens.test.ts` scanner), six DOM-free state modules, the full chrome (title bar, transport bar,
+status bar, splitter, rail, floating/pinned panels, three panel bodies, empty/unsupported states,
+export overlay/toast, keyboard overlay), and a `ui-harness.html` dev harness for driving every
+screen/panel/notice variant. All eight `screen` states plus the split `permissionLost` flag render
+with placeholder content (real media/export data is still fixtures — later tasks' job). Manually
+verified in-browser against all 13 `design/screens/*.png` references via the harness; 341
+tests (`npm run typecheck && npm run lint && npm test` all clean). Full writeup:
+`results/task-4a-app-shell-summary.md`.
+
+The timeline canvas itself is untouched — `TimelineRegion` is a correctly-sized placeholder with
+no `<canvas>`, no zoom/pan/drag-scrub. That's Task 4b, next.
+
+**Exit: met.** The shell renders every M1 state with placeholder content; `tokens.ts` is the only
+source of colour in `src/ui/`.
 
 ### ▸ Task 4b — timeline renderer (1 week)
 Canvas layer stack. Viewport transform in presentation ticks, cursor-anchored zoom, kinetic pan. Ruler with adaptive tick density, keyframe tick row, filmstrip from `getRange()`, in/out handles with snapping, playhead on `onFrame`. Cache-backed drag scrub with a single settle seek on pointer-up.
