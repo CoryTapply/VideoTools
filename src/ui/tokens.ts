@@ -7,6 +7,9 @@ export const color = {
   bgStage: '#0B0B0C',
   // The <video> element's own background before a frame has decoded.
   bgVideo: '#000000',
+  // Dev-harness backdrop (src/ui/harness/) -- not part of the shipped app, but still routed
+  // through tokens.ts to keep tokens.test.ts's scanner honest.
+  bgHarnessBackdrop: '#050506',
   // Export progress overlay's own translucent backing -- design/reference/Video Trimmer.dc.html.
   bgExportOverlay: 'rgba(19,19,21,.92)',
   // Empty-state drop-zone card and its hover fill -- design/reference/Video Trimmer.dc.html, not
