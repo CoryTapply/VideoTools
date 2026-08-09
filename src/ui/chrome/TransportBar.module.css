@@ -1,0 +1,122 @@
+.root {
+  flex: 0 0 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 10px;
+  border-top: 1px solid var(--color-border-base);
+  border-bottom: 1px solid var(--color-border-base);
+  background: var(--color-bg-base);
+}
+
+.timecode {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  min-width: 118px;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.button {
+  width: 30px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.button:hover {
+  background: var(--color-bg-raised);
+  color: var(--color-text-primary);
+}
+
+.buttonActive {
+  background: var(--color-bg-raised);
+  color: var(--color-text-primary);
+}
+
+.readouts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+}
+
+.readout {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.readoutLabel {
+  color: var(--color-text-tertiary);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 11px;
+}
+
+.readoutValueAccent {
+  color: var(--color-accent);
+}
+
+.readoutValue {
+  color: var(--color-text-primary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.trimGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trimLabel {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.segmented {
+  display: flex;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-base);
+}
+
+.segment {
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font: 500 11.5px 'IBM Plex Sans', sans-serif;
+  cursor: pointer;
+}
+
+.segmentActive {
+  background: var(--color-bg-raised);
+  color: var(--color-text-primary);
+}
+
+.segmentDisabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+  opacity: 0.55;
+}

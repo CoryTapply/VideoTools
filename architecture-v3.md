@@ -2,7 +2,7 @@
 
 **Supersedes:** `architecture-v2.md`
 **Basis:** M0/M0.5 spikes plus M1 tasks 1–3, all measured against a 27 GB / 70-minute OBS recording on an M1 Max, Chrome 151
-**Status:** M1 half built. Tasks 4 and 5 remain.
+**Status:** M1 four of five tasks built. Task 4b (timeline canvas) and task 5 (export) remain.
 
 Read `PROJECT-CONTEXT.md` first if you're new. Per-module `README.md` files are authoritative for their own module; this document is the system view.
 
@@ -27,11 +27,11 @@ Everything else in v2 held.
 ```
 ┌─ MAIN THREAD ────────────────────────────────────────────────┐
 │  React shell            <video>            Timeline canvas    │
-│  (task 4a)              NativeVideoEngine  (task 4b)          │
+│  (task 4a) ✔ built      NativeVideoEngine  (task 4b)          │
 │                         ✔ built            │                  │
 │  ┌──────────────────────────────────────────────────────────┐ │
-│  │ Document state · command stack · viewport                │ │
-│  │ (task 4a)                                                 │ │
+│  │ Document state (task 4a ✔) · command stack · viewport    │ │
+│  │ (command stack/viewport: task 4b/5)                       │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │  SampleIndex ✔    FrameCache ✔    ExportStrategy (task 5)     │
 └──────────────────────────┬───────────────────────────────────┘

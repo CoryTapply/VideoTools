@@ -1,0 +1,107 @@
+.root {
+  flex: 0 0 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 10px;
+  border-top: 1px solid var(--color-border-base);
+  background: var(--color-bg-base);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.noticePill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: var(--color-warn-notice-bg);
+  border: 1px solid var(--color-warn-notice-border);
+  color: var(--color-warn);
+  cursor: default;
+}
+
+.noticeLabel {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+}
+
+.noticeDelta {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-warn-bright);
+}
+
+.popover {
+  position: absolute;
+  right: -1px;
+  bottom: 30px;
+  width: 262px;
+  padding: 11px;
+  border-radius: 8px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-base);
+  box-shadow: var(--shadow-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  color: var(--color-text-primary);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+  z-index: 60;
+}
+
+.popoverBody {
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}
+
+.popoverActions {
+  display: flex;
+  gap: 8px;
+}
+
+.keepExactButton {
+  flex: 1;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border-base);
+  background: var(--color-bg-raised);
+  color: var(--color-text-primary);
+  font: 500 11.5px 'IBM Plex Sans', sans-serif;
+  cursor: pointer;
+}
+
+.keepExactButton:hover {
+  background: var(--color-bg-raised-hover);
+}
+
+.dismissButton {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 5px;
+  border: 1px solid var(--color-border-base);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: 500 11.5px 'IBM Plex Sans', sans-serif;
+  cursor: pointer;
+}
+
+.dismissButton:hover {
+  color: var(--color-text-primary);
+}
+
+.popoverFootnote {
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+}

@@ -1,0 +1,38 @@
+.root {
+  flex: 0 0 34px;
+  width: 34px;
+  border-left: 1px solid var(--color-border-base);
+  background: var(--color-bg-base);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding-top: 6px;
+}
+
+.button {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.button:hover {
+  color: var(--color-text-primary);
+}
+
+.buttonRaised {
+  background: var(--color-bg-raised);
+  color: var(--color-text-primary);
+}
+
+.buttonOpen {
+  border-color: var(--color-border-base);
+}

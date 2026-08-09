@@ -1,0 +1,73 @@
+.root {
+  height: 100%;
+  display: flex;
+}
+
+.controls {
+  flex: 0 0 260px;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--color-bg-panel);
+  border-right: 1px solid var(--color-border-base);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+  color: var(--color-text-primary);
+}
+
+.controlsTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  margin: 6px 0 -2px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field label,
+.fieldRow label {
+  color: var(--color-text-secondary);
+}
+
+.field select,
+.field input[type='number'],
+.field input[type='text'] {
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-base);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+  background: var(--color-bg-harness-backdrop);
+  padding: 16px;
+}
+
+.viewport {
+  width: 924px;
+  height: 640px;
+  flex: 0 0 auto;
+  box-shadow: 0 0 0 1px var(--color-border-base);
+}

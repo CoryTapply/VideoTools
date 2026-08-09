@@ -1,0 +1,163 @@
+.body {
+  padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.rowLabel {
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.rowValue {
+  text-align: right;
+}
+
+.toneNeutral {
+  color: var(--color-text-primary);
+}
+
+.toneMuted {
+  color: var(--color-text-secondary);
+}
+
+.toneInformational {
+  color: var(--color-accent);
+}
+
+.toneGood {
+  color: var(--color-good);
+}
+
+.toneWarning {
+  color: var(--color-warn);
+}
+
+.trackListWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  order: -1;
+  margin-bottom: 8px;
+}
+
+.trackListHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--color-border-base);
+}
+
+.trackListTitle {
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.trackListCount {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  color: var(--color-text-tertiary);
+}
+
+.trackRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 4px;
+  border-radius: 4px;
+}
+
+.trackRow:hover {
+  background: var(--color-bg-raised);
+}
+
+.trackRowSelected {
+  background: var(--color-accent-selected-bg);
+}
+
+.trackRowInteractive {
+  cursor: pointer;
+}
+
+.trackRowInert {
+  cursor: default;
+}
+
+.checkbox {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border-radius: 3px;
+  border: 1px solid var(--color-border-base);
+  background: var(--color-bg-raised);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkboxOn {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.checkboxOff {
+  border-color: var(--color-border-checkbox);
+  background: transparent;
+}
+
+.trackId {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  width: 22px;
+  flex: 0 0 22px;
+}
+
+.trackIdVideo {
+  color: var(--color-good);
+}
+
+.trackIdAudio {
+  color: var(--color-accent);
+}
+
+.trackMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.trackName {
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trackNameOn {
+  color: var(--color-text-primary);
+}
+
+.trackNameOff {
+  color: var(--color-text-secondary);
+}
+
+.trackMetaLine {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
