@@ -1,9 +1,11 @@
 # `src/ui/` -- the app shell and design system
 
-M1 Task 4a. React shell consuming `design/README.md`'s handoff spec: layout regions, design
-tokens, rail and floating/pinned panels, transport bar, status bar, splitter, and every M1 screen
-state rendered with placeholder content. If you're new to this module: read this file, then
-`tokens.ts`, then `App.tsx`.
+M1 Task 4a, plus an immediate follow-up wiring it to real data. React shell consuming
+`design/README.md`'s handoff spec: layout regions, design tokens, rail and floating/pinned panels,
+transport bar, status bar, splitter, and every M1 screen state. `src/media/index/` (the parser) and
+`src/media/playback/` (the playback engine) are connected for real -- opening a file, dragging one
+onto the empty state, play/pause/step/keyframe-nav/set-in-out all work against real data. If you're
+new to this module: read this file, then `tokens.ts`, then `App.tsx`, then `state/media-session.ts`.
 
 ## Why tokens.ts is the sole hex-literal source
 
@@ -52,17 +54,51 @@ scheduler function rather than calling `setTimeout` directly, so its tests can d
 `vi.useFakeTimers()` instead of real waits -- the same testability-seam pattern as `ByteSource`
 (`src/media/index/`) and `VideoElementLike` (`src/media/playback/`).
 
+## Never import src/media/index/'s barrel from this module
+
+`src/media/index/index.ts` re-exports `NodeByteSource`, which top-level-imports `node:fs/promises`
+-- Vite externalizes that for the browser and it throws on load, crashing the whole app. The
+module's own comment already says this ("Test-only import surface -- never used from the browser
+bundle"), and every `src/media/*/harness.ts` already imports submodules directly. Do the same here:
+`'../../media/index/errors.ts'`, `.../time.ts`, `.../track-index.ts`, `.../query.ts`,
+`.../worker-client.ts` -- never `.../index.ts`. `src/media/playback/` has no barrel at all, so this
+only comes up for `media/index/`. Found the hard way (a blank white screen) while wiring
+`state/media-session.ts` -- see `results/task-4a-media-integration-summary.md`.
+
+## The fixture-fallback mechanism
+
+`state/media-session.ts`'s `useMediaSession()` hook holds `null` for every derived field (tracks,
+source rows, format chip, ...) until a real file is opened. `App.tsx` reads `media.X ?? fixtureX`
+everywhere -- `ui-harness.html`'s variant switcher never calls `openFile()`, so `media.X` stays
+`null` there and it keeps rendering exactly `fixtures.ts`'s static data, unaffected by any of this.
+This is *why* the harness needed zero changes when real data wiring landed: fixtures went from
+"the only source" to "the fallback when nothing is open," a one-line change per field in `App.tsx`,
+not a rewrite.
+
 ## Where things are
 
 - `tokens.ts` / `tokens.css.ts` / `reset.css` -- the design system.
-- `state/` -- pure, DOM-free logic (reducer, chord matching, formatting, clamp math, timers).
+- `state/` -- pure, DOM-free logic (reducer, chord matching, formatting, clamp math, timers) plus
+  `media-session.ts`, the one hook here that *does* touch the DOM/File/Worker APIs (real file
+  open, parsing, and playback) -- kept separate from `app-state.ts`'s reducer for the same reason
+  `timeline-controller-state.ts` is: resource-shaped state (a `File`, a `SampleIndex`, an engine
+  instance) doesn't belong in reducer state.
+- `media/` -- pure derivation from real parsed data to the UI's display shapes
+  (`derive-source-info.ts`), and the shared `TrackSummary`/`PanelRowFixture` types both real
+  derivation and `fixtures.ts` produce.
 - `chrome/` -- the shell: title bar, transport bar, status bar, splitter, stage, rail, panels
-  (structural), preview surface, empty/unsupported states, overlays.
-- `panels/` -- panel *content* (Source/Export/Jobs, the shared row/track-list renderers).
+  (structural), preview surface (real `<video>` once a file is open), empty/unsupported states
+  (real drag-and-drop, real error messages), overlays.
+- `panels/` -- panel *content* (Source/Export/Jobs, the shared row/track-list renderers) --
+  `tracks`/`rows` are always props now, never imported from `fixtures.ts` directly, so the same
+  components render real or fixture data depending on the caller.
 - `icons/` -- inline SVG set.
-- `fixtures.ts` -- static placeholder display data. Delete/replace as real data wiring lands.
+- `fixtures.ts` -- static placeholder display data; the fallback described above, and
+  `ui-harness.html`'s only data source.
 - `harness/` -- `ui-harness.html`'s dev-only state-variant switcher; not shipped product code.
 - `App.tsx` / `main.tsx` / `app.html` -- the real (non-harness) entry point.
 
-Full task writeup, including what was found reading the actual prototype file rather than just the
-written spec, and what's still open: `results/task-4a-app-shell-summary.md`.
+Full task writeups: `results/task-4a-app-shell-summary.md` (the original shell, what was found
+reading the actual prototype file rather than just the written spec) and
+`results/task-4a-media-integration-summary.md` (real file/parser/playback wiring, the barrel-import
+bug above, and what's still open).

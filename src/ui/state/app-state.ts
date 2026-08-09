@@ -1,6 +1,10 @@
 // The React half of the state split described in ../README.md: low-frequency, drives the DOM
 // shell. Never holds anything that changes at 60Hz -- see timeline-controller-state.ts for that.
 
+// Direct submodule import, not the barrel -- src/media/index/index.ts re-exports NodeByteSource,
+// which top-level-imports node:fs/promises and crashes when bundled for the browser.
+import type { IndexError } from '../../media/index/errors.ts';
+
 export type Screen =
   | 'ready'
   | 'empty'
@@ -15,7 +19,12 @@ export type TrimMode = 'copy' | 'exact';
 
 export type PanelId = 'info' | 'export' | 'queue';
 
-export type TrackId = 'V1' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'A6';
+/**
+ * Synthesized display id (e.g. "V1", "A1", "A2", ...), not an MP4 track id -- real files have an
+ * arbitrary number of tracks, so this can no longer be the closed 7-value union the design
+ * fixture used. See ../media/track-summary.ts.
+ */
+export type TrackId = string;
 
 export type TrackSelection = Record<TrackId, boolean>;
 
@@ -44,6 +53,8 @@ export interface AppState {
   toast: boolean;
   /** Orthogonal to `screen` -- see ../README.md's "Reconciling the state table". */
   permissionLost: boolean;
+  /** Set when the last real `openFile()` attempt failed to parse; cleared on the next attempt. */
+  openError: IndexError | null;
 }
 
 export const DEFAULT_TIMELINE_HEIGHT = 236;
@@ -65,6 +76,7 @@ export function createInitialAppState(overrides: Partial<AppState> = {}): AppSta
     exportPct: 0,
     toast: false,
     permissionLost: false,
+    openError: null,
     ...overrides,
   };
 }
@@ -77,7 +89,9 @@ export type AppAction =
   | { type: 'panel/unpin' }
   | { type: 'trim-mode/set'; mode: TrimMode }
   | { type: 'track/toggle'; track: TrackId }
+  | { type: 'sel/set'; sel: TrackSelection }
   | { type: 'in-out/set'; tin: number; tout: number }
+  | { type: 'open-error/set'; error: IndexError | null }
   | { type: 'notice/set'; notice: KeyframeShiftNotice | null }
   | { type: 'notice/open-set'; open: boolean }
   | { type: 'notice/keep-exact' }
@@ -107,13 +121,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       // enforcement section: "Switching manually to `exact` clears the notice."
       return { ...state, trimMode: action.mode, notice: null, noticeOpen: false };
     case 'track/toggle':
-      // V1 is locked (always-on video track) per design/README.md's track-list section.
-      if (action.track === 'V1') {
-        return state;
-      }
+      // Locking (the primary video track can't be deselected) is data-driven via each track
+      // summary's own `locked` flag -- TrackList.tsx only wires onClick when `!locked`, so the
+      // reducer trusts its caller rather than keeping its own copy of which id is locked.
       return { ...state, sel: { ...state.sel, [action.track]: !state.sel[action.track] } };
+    case 'sel/set':
+      return { ...state, sel: action.sel };
     case 'in-out/set':
       return { ...state, tin: action.tin, tout: action.tout };
+    case 'open-error/set':
+      return { ...state, openError: action.error };
     case 'notice/set':
       return { ...state, notice: action.notice, noticeOpen: action.notice === null ? false : state.noticeOpen };
     case 'notice/open-set':

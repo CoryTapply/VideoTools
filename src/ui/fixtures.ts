@@ -1,9 +1,11 @@
-// Static placeholder display data for M1's "renders every state with placeholder content" exit
-// criterion. Numbers are design/README.md's own example fixture (a 4-hour, 60fps OBS multi-track
-// recording) -- not live data. Once Task 5/media wiring lands, this module goes away and these
-// fields come from the real index/track list instead.
+// Static placeholder display data, used two ways: (1) `ui-harness.html`'s dev-only variant
+// switcher, which never has a real file; (2) App.tsx's fallback when no real file is open yet.
+// Numbers are design/README.md's own example fixture (a 4-hour, 60fps OBS multi-track recording)
+// -- not live data. Real data (once a file is actually opened) comes from media/derive-source-info.ts
+// instead -- see App.tsx's `media.X ?? fixtureX` pattern.
 
-import type { TrackId, TrackSelection } from './state/app-state.ts';
+import type { PanelRowFixture } from './media/panel-row.ts';
+import type { TrackSummary } from './media/track-summary.ts';
 
 export const FPS = 60;
 export const DURATION_SECONDS = 862401 / FPS;
@@ -11,17 +13,9 @@ export const DURATION_SECONDS = 862401 / FPS;
 export const FILE_NAME = 'session-4.mp4';
 export const FORMAT_CHIP = 'MP4 · H.264 · 19.4 GB';
 
-export interface TrackFixture {
-  id: TrackId;
-  name: string;
-  meta: string;
-  kind: 'video' | 'audio';
-  locked?: boolean;
-}
-
 const FULL_DURATION_LABEL = '4:00:00';
 
-export const TRACKS: readonly TrackFixture[] = [
+export const TRACKS: readonly TrackSummary[] = [
   { id: 'V1', name: 'Screen Capture', meta: `h264 · 2560×1440 · 60.00 fps · ${FULL_DURATION_LABEL}`, kind: 'video', locked: true },
   { id: 'A1', name: 'Mic — NT-USB', meta: `aac · eng · mono · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
   { id: 'A2', name: 'Desktop Audio', meta: `aac · eng · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
@@ -30,15 +24,6 @@ export const TRACKS: readonly TrackFixture[] = [
   { id: 'A5', name: 'Browser Media', meta: `aac · und · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
   { id: 'A6', name: 'Alerts', meta: `aac · und · stereo · 44.1 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
 ];
-
-/** Matches the value colors PanelRows renders -- see panels/PanelRows.tsx. */
-export type RowTone = 'neutral' | 'muted' | 'informational' | 'good' | 'warning';
-
-export interface PanelRowFixture {
-  label: string;
-  value: string;
-  tone: RowTone;
-}
 
 export const SOURCE_PANEL_ROWS: readonly PanelRowFixture[] = [
   { label: 'container', value: 'mp4', tone: 'neutral' },
@@ -65,9 +50,6 @@ export const JOBS_PANEL_ROWS: readonly PanelRowFixture[] = [
 export const ZOOM_LABEL = '1 frame = 5px';
 export const THUMB_LABEL = 'thumbs 68%';
 export const INDEX_LABEL = 'index 862,401 frames · 3,422 keyframes';
-
-/** SourcePanel's TrackList is read-only and ignores selection, but still needs a value to pass. */
-export const ALL_TRACKS_SELECTED: TrackSelection = { V1: true, A1: true, A2: true, A3: true, A4: true, A5: true, A6: true };
 
 export interface KeyRowFixture {
   chord: string;

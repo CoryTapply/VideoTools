@@ -1,5 +1,7 @@
-import { useEffect, useReducer } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import styles from './App.module.css';
+// Direct submodule import, not the barrel -- see state/app-state.ts's comment on why.
+import { formatIndexError } from '../media/index/errors.ts';
 import { DegradedStrip } from './chrome/DegradedStrip.tsx';
 import { ExportOverlay } from './chrome/ExportOverlay.tsx';
 import { ExportToast } from './chrome/ExportToast.tsx';
@@ -20,13 +22,17 @@ import {
   FPS,
   INDEX_LABEL,
   PLAYHEAD_SECONDS,
+  SOURCE_PANEL_ROWS,
   THUMB_LABEL,
+  TRACKS,
   ZOOM_LABEL,
   formatExportLine,
 } from './fixtures.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
+import { useMediaSession } from './state/media-session.ts';
 import { formatFrameNumber, formatTimecode } from './state/snap-notice.ts';
 import { appReducer, createInitialAppState } from './state/app-state.ts';
+import type { ChangeEvent } from 'react';
 import type { AppState } from './state/app-state.ts';
 
 export interface AppProps {
@@ -35,6 +41,7 @@ export interface AppProps {
 }
 
 const FULLSCREEN_TIMELINE_CAP_PX = 140;
+const OPEN_FILE_ACCEPT = 'video/mp4,video/quicktime,.mp4,.mov';
 
 export function App({ initialState, exactAvailable = true }: AppProps) {
   const [state, dispatch] = useReducer(
@@ -42,6 +49,32 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     initialState,
     (overrides) => createInitialAppState({ tin: DEFAULT_IN_SECONDS, tout: DEFAULT_OUT_SECONDS, ...overrides }),
   );
+  const media = useMediaSession(dispatch);
+  const { togglePlay, stepFrame, jumpToKeyframe, seekToSeconds } = media;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function triggerOpen() {
+    fileInputRef.current?.click();
+  }
+
+  // Kept fresh every render so the keydown handler below never closes over a stale tin/tout/
+  // currentSeconds -- without this, either the effect would need those in its deps (re-subscribing
+  // on every playhead tick) or set-in/set-out would silently use whatever values were current when
+  // the listener was first attached.
+  const latestRef = useRef({
+    tin: state.tin,
+    tout: state.tout,
+    currentSeconds: media.currentSeconds,
+    durationSeconds: media.durationSeconds,
+  });
+  useEffect(() => {
+    latestRef.current = {
+      tin: state.tin,
+      tout: state.tout,
+      currentSeconds: media.currentSeconds,
+      durationSeconds: media.durationSeconds,
+    };
+  });
 
   useEffect(() => {
     function handleKeyDown(evt: KeyboardEvent) {
@@ -49,8 +82,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       if (action === null) {
         return;
       }
-      // Only the shell-level actions have a real handler this task -- playback stepping, zoom,
-      // in/out, keyframe nav, and undo are matched but wait on later tasks' state to act on.
+      // shuttle, clear-in/out, zoom/zoom-fit, jump-start/end, and undo have no real handler yet --
+      // they need the timeline (Task 4b) or export (Task 5).
       switch (action) {
         case 'toggle-shortcuts':
           evt.preventDefault();
@@ -63,6 +96,61 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         case 'export':
           evt.preventDefault();
           dispatch({ type: 'screen/set', screen: 'exporting' });
+          break;
+        case 'play-pause':
+          evt.preventDefault();
+          togglePlay();
+          break;
+        case 'step-back-frame':
+          evt.preventDefault();
+          stepFrame(-1);
+          break;
+        case 'step-forward-frame':
+          evt.preventDefault();
+          stepFrame(1);
+          break;
+        case 'prev-keyframe':
+          evt.preventDefault();
+          jumpToKeyframe(-1);
+          break;
+        case 'next-keyframe':
+          evt.preventDefault();
+          jumpToKeyframe(1);
+          break;
+        case 'step-back-second':
+          evt.preventDefault();
+          seekToSeconds(Math.max(0, latestRef.current.currentSeconds - 1));
+          break;
+        case 'step-forward-second': {
+          evt.preventDefault();
+          const { currentSeconds, durationSeconds } = latestRef.current;
+          const target = currentSeconds + 1;
+          seekToSeconds(durationSeconds !== null ? Math.min(target, durationSeconds) : target);
+          break;
+        }
+        case 'set-in': {
+          evt.preventDefault();
+          const { tout, currentSeconds } = latestRef.current;
+          if (currentSeconds < tout) {
+            dispatch({ type: 'in-out/set', tin: currentSeconds, tout });
+          }
+          break;
+        }
+        case 'set-out': {
+          evt.preventDefault();
+          const { tin, currentSeconds } = latestRef.current;
+          if (currentSeconds > tin) {
+            dispatch({ type: 'in-out/set', tin, tout: currentSeconds });
+          }
+          break;
+        }
+        case 'jump-to-in':
+          evt.preventDefault();
+          seekToSeconds(latestRef.current.tin);
+          break;
+        case 'jump-to-out':
+          evt.preventDefault();
+          seekToSeconds(latestRef.current.tout);
           break;
         case 'close':
           evt.preventDefault();
@@ -82,30 +170,53 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [state.shortcuts, state.panel, state.full]);
+  }, [state.shortcuts, state.panel, state.full, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds]);
 
   const hasFile = state.screen !== 'empty' && state.screen !== 'degraded';
   const canExport = hasFile && state.screen !== 'exporting' && state.screen !== 'finalising';
   const showChrome = !state.full;
   const timelineHeight = state.full ? Math.min(state.timelineH, FULLSCREEN_TIMELINE_CAP_PX) : state.timelineH;
+  const displayFps = media.fps ?? FPS;
 
-  const timecode = formatTimecode(PLAYHEAD_SECONDS * FPS, FPS);
-  const frameLabel = formatFrameNumber(PLAYHEAD_SECONDS * FPS);
-  const inTc = formatTimecode(state.tin * FPS, FPS);
-  const outTc = formatTimecode(state.tout * FPS, FPS);
-  const durTc = formatTimecode((state.tout - state.tin) * FPS, FPS);
+  // Real once a file is open; otherwise the design fixture, used both by ui-harness.html's
+  // variant switcher (which never opens a real file) and by App before anything is opened.
+  const fileName = media.file?.name ?? (hasFile ? FILE_NAME : null);
+  const formatChip = media.formatChip ?? (hasFile ? FORMAT_CHIP : null);
+  const tracks = media.tracks ?? TRACKS;
+  const sourceRows = media.sourceRows ?? SOURCE_PANEL_ROWS;
+  const sourceFileName = media.file?.name ?? FILE_NAME;
+  const openErrorMessage = state.openError !== null ? formatIndexError(state.openError) : null;
+
+  const timecode = media.file !== null ? media.timecode : formatTimecode(PLAYHEAD_SECONDS * FPS, FPS);
+  const frameLabel = media.file !== null ? media.frameLabel : formatFrameNumber(PLAYHEAD_SECONDS * FPS);
+  const inTc = formatTimecode(state.tin * displayFps, displayFps);
+  const outTc = formatTimecode(state.tout * displayFps, displayFps);
+  const durTc = formatTimecode((state.tout - state.tin) * displayFps, displayFps);
+
+  function handleFileInputChange(evt: ChangeEvent<HTMLInputElement>) {
+    const file = evt.target.files?.[0];
+    evt.target.value = '';
+    if (file !== undefined) {
+      void media.openFile(file);
+    }
+  }
 
   return (
     <div className={styles.root}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={OPEN_FILE_ACCEPT}
+        style={{ display: 'none' }}
+        onChange={handleFileInputChange}
+      />
       {showChrome && (
         <TitleBar
-          fileName={hasFile ? FILE_NAME : null}
-          formatChip={hasFile ? FORMAT_CHIP : null}
+          fileName={fileName}
+          formatChip={formatChip}
           permissionLost={state.permissionLost}
           canExport={canExport}
-          onOpen={() => {
-            dispatch({ type: 'screen/set', screen: 'opening' });
-          }}
+          onOpen={triggerOpen}
           onExport={() => {
             dispatch({ type: 'screen/set', screen: 'exporting' });
           }}
@@ -122,13 +233,20 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         panel={state.panel}
         pinned={state.pinned}
         shortcuts={state.shortcuts}
+        tracks={tracks}
+        sourceRows={sourceRows}
+        sourceFileName={sourceFileName}
         sel={state.sel}
         tin={state.tin}
         tout={state.tout}
         frameLabel={frameLabel}
         timecode={timecode}
-        onOpenFile={() => {
-          dispatch({ type: 'screen/set', screen: 'opening' });
+        openErrorMessage={openErrorMessage}
+        unsupported={media.unsupported}
+        videoRef={media.file !== null ? media.videoRef : undefined}
+        onOpenFile={triggerOpen}
+        onFileDrop={(file) => {
+          void media.openFile(file);
         }}
         onOpenPanel={(panel) => {
           dispatch({ type: 'panel/open', panel });
@@ -176,12 +294,20 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
 
       <TransportBar
         timecode={timecode}
-        playing={false}
-        onTogglePlay={() => {}}
-        onStepBack={() => {}}
-        onStepForward={() => {}}
-        onPrevKeyframe={() => {}}
-        onNextKeyframe={() => {}}
+        playing={media.playing}
+        onTogglePlay={togglePlay}
+        onStepBack={() => {
+          stepFrame(-1);
+        }}
+        onStepForward={() => {
+          stepFrame(1);
+        }}
+        onPrevKeyframe={() => {
+          jumpToKeyframe(-1);
+        }}
+        onNextKeyframe={() => {
+          jumpToKeyframe(1);
+        }}
         inTc={inTc}
         outTc={outTc}
         durTc={durTc}

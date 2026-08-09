@@ -52,8 +52,15 @@ describe('matchShortcut', () => {
     expect(matchShortcut(key('Z', { shiftKey: true }))).toBe('zoom-fit');
   });
 
-  it('matches ? to toggle-shortcuts and Escape to close', () => {
+  it('matches ? to toggle-shortcuts even with shiftKey true -- how a real browser reports it', () => {
+    // '?' is Shift+/ on a US layout: a real KeyboardEvent for it has shiftKey: true. A version of
+    // this test that only checked shiftKey: false previously passed while the real shortcut was
+    // broken -- see keyboard-map.ts's comment on why '?' is checked before the shift-gated block.
+    expect(matchShortcut(key('?', { shiftKey: true }))).toBe('toggle-shortcuts');
     expect(matchShortcut(key('?'))).toBe('toggle-shortcuts');
+  });
+
+  it('matches Escape to close', () => {
     expect(matchShortcut(key('Escape'))).toBe('close');
   });
 
