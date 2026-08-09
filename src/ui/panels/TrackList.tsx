@@ -1,19 +1,22 @@
 import { CheckIcon } from '../icons/index.tsx';
-import { TRACKS } from '../fixtures.ts';
 import styles from './Panel.module.css';
 import type { TrackId, TrackSelection } from '../state/app-state.ts';
+import type { TrackSummary } from '../media/track-summary.ts';
 
 export interface TrackListProps {
   mode: 'source' | 'export';
+  tracks: readonly TrackSummary[];
   sel: TrackSelection;
   onToggle?: (id: TrackId) => void;
 }
 
-export function TrackList({ mode, sel, onToggle }: TrackListProps) {
+export function TrackList({ mode, tracks, sel, onToggle }: TrackListProps) {
   const count =
     mode === 'source'
-      ? '1 video · 6 audio'
-      : `${TRACKS.filter((t) => sel[t.id]).length.toString()} of ${TRACKS.length.toString()} selected`;
+      ? `${tracks.filter((t) => t.kind === 'video').length.toString()} video · ${tracks
+          .filter((t) => t.kind === 'audio')
+          .length.toString()} audio`
+      : `${tracks.filter((t) => sel[t.id]).length.toString()} of ${tracks.length.toString()} selected`;
 
   return (
     <div className={styles.trackListWrapper}>
@@ -21,7 +24,7 @@ export function TrackList({ mode, sel, onToggle }: TrackListProps) {
         <span className={styles.trackListTitle}>Tracks</span>
         <span className={styles.trackListCount}>{count}</span>
       </div>
-      {TRACKS.map((track) => {
+      {tracks.map((track) => {
         // The Source panel is read-only: it never shows a checkmark, even for the always-on V1
         // track -- design/reference/Video Trimmer.dc.html's trackRows('source') forces `on: false`
         // regardless of selection state.

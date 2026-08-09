@@ -1,13 +1,20 @@
-import { ALL_TRACKS_SELECTED, SOURCE_PANEL_ROWS } from '../fixtures.ts';
 import { PanelRows } from './PanelRows.tsx';
 import { TrackList } from './TrackList.tsx';
 import styles from './Panel.module.css';
+import type { PanelRowFixture } from '../media/panel-row.ts';
+import type { TrackSummary } from '../media/track-summary.ts';
 
-export function SourcePanel() {
+export interface SourcePanelProps {
+  tracks: readonly TrackSummary[];
+  rows: readonly PanelRowFixture[];
+}
+
+export function SourcePanel({ tracks, rows }: SourcePanelProps) {
   return (
     <div className={styles.body}>
-      <TrackList mode="source" sel={ALL_TRACKS_SELECTED} />
-      <PanelRows rows={SOURCE_PANEL_ROWS} />
+      {/* Read-only: TrackList never shows a checkmark in 'source' mode, so `sel` goes unused. */}
+      <TrackList mode="source" tracks={tracks} sel={{}} />
+      <PanelRows rows={rows} />
     </div>
   );
 }

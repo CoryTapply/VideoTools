@@ -20,7 +20,9 @@ import {
   FPS,
   INDEX_LABEL,
   PLAYHEAD_SECONDS,
+  SOURCE_PANEL_ROWS,
   THUMB_LABEL,
+  TRACKS,
   ZOOM_LABEL,
   formatExportLine,
 } from './fixtures.ts';
@@ -122,6 +124,9 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         panel={state.panel}
         pinned={state.pinned}
         shortcuts={state.shortcuts}
+        tracks={TRACKS}
+        sourceRows={SOURCE_PANEL_ROWS}
+        sourceFileName={FILE_NAME}
         sel={state.sel}
         tin={state.tin}
         tout={state.tout}

@@ -8,6 +8,8 @@ import { Rail } from './Rail.tsx';
 import styles from './Stage.module.css';
 import type { ReactNode } from 'react';
 import type { PanelId, Screen, TrackId, TrackSelection } from '../state/app-state.ts';
+import type { PanelRowFixture } from '../media/panel-row.ts';
+import type { TrackSummary } from '../media/track-summary.ts';
 
 export interface StageProps {
   screen: Screen;
@@ -15,6 +17,9 @@ export interface StageProps {
   panel: PanelId | null;
   pinned: PanelId | null;
   shortcuts: boolean;
+  tracks: readonly TrackSummary[];
+  sourceRows: readonly PanelRowFixture[];
+  sourceFileName: string;
   sel: TrackSelection;
   tin: number;
   tout: number;
@@ -39,6 +44,9 @@ export function Stage({
   panel,
   pinned,
   shortcuts,
+  tracks,
+  sourceRows,
+  sourceFileName,
   sel,
   tin,
   tout,
@@ -57,9 +65,11 @@ export function Stage({
   function renderPanelContent(id: PanelId) {
     switch (id) {
       case 'info':
-        return <SourcePanel />;
+        return <SourcePanel tracks={tracks} rows={sourceRows} />;
       case 'export':
-        return <ExportPanel sel={sel} tin={tin} tout={tout} onToggleTrack={onToggleTrack} />;
+        return (
+          <ExportPanel tracks={tracks} sel={sel} tin={tin} tout={tout} sourceFileName={sourceFileName} onToggleTrack={onToggleTrack} />
+        );
       case 'queue':
         return <JobsPanel />;
     }

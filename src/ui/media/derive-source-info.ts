@@ -1,0 +1,185 @@
+// Pure derivation from a real parsed file (src/media/index/'s TrackIndex[]) to the UI's display
+// shapes (PanelRowFixture[], TrackSummary[]). Every number here was previously faked in
+// ../fixtures.ts -- this module is where they become real formulas instead. No DOM, no File, no
+// Worker -- fully Node-testable against hand-built TrackIndex-shaped fixtures.
+
+import { ticksToSeconds } from '../../media/index/index.ts';
+import { formatDurationHMS } from '../state/snap-notice.ts';
+import type { TrackIndex } from '../../media/index/index.ts';
+import type { TrackId, TrackSelection } from '../state/app-state.ts';
+import type { PanelRowFixture } from './panel-row.ts';
+import type { TrackSummary } from './track-summary.ts';
+
+/** Codec-family short name, by RFC 6381 prefix. Profile decoding (e.g. "High") is not attempted. */
+export function friendlyCodecName(codec: string): string {
+  if (codec.startsWith('avc1') || codec.startsWith('avc3')) return 'h264';
+  if (codec.startsWith('hev1') || codec.startsWith('hvc1')) return 'hevc';
+  if (codec.startsWith('av01')) return 'av1';
+  if (codec.startsWith('mp4a')) return 'aac';
+  return codec || 'unknown';
+}
+
+/** Uppercase form used only by the title-bar format chip, e.g. "H.264", "HEVC". */
+function chipCodecName(codec: string): string {
+  const friendly = friendlyCodecName(codec);
+  if (friendly === 'h264') return 'H.264';
+  return friendly.toUpperCase();
+}
+
+/** Decimal (1000-based) units, matching the design fixture's own "19.4 GB" style. */
+export function formatFileSize(bytes: number): string {
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(1)} KB`;
+  return `${bytes.toString()} B`;
+}
+
+export interface Gop {
+  frames: number;
+  seconds: number;
+}
+
+/** Average GOP length. Real footage isn't assumed to have a constant GOP -- this is a mean. */
+export function computeGop(sampleCount: number, keyframeCount: number, fps: number): Gop {
+  if (keyframeCount <= 0 || fps <= 0) {
+    return { frames: sampleCount, seconds: 0 };
+  }
+  const frames = Math.round(sampleCount / keyframeCount);
+  return { frames, seconds: frames / fps };
+}
+
+/** Mb/s, from total file size and overall duration -- a whole-file average, not a per-track figure. */
+export function computeBitrate(fileSizeBytes: number, durationSeconds: number): string {
+  if (durationSeconds <= 0) {
+    return '0.0 Mb/s';
+  }
+  const megabitsPerSecond = (fileSizeBytes * 8) / durationSeconds / 1_000_000;
+  return `${megabitsPerSecond.toFixed(1)} Mb/s`;
+}
+
+function primaryVideoTrack(tracks: readonly TrackIndex[]): TrackIndex | undefined {
+  return tracks.find((t) => t.kind === 'video');
+}
+
+function keyframeCount(track: TrackIndex): number {
+  let count = 0;
+  for (let i = 0; i < track.isSync.length; i++) {
+    if (track.isSync[i] === 1) count++;
+  }
+  return count;
+}
+
+/** The title bar's "MP4 · H.264 · 19.4 GB" chip. Container is always "MP4" -- the parser only understands ISOBMFF. */
+export function deriveFormatChip(tracks: readonly TrackIndex[], fileSizeBytes: number): string {
+  const video = primaryVideoTrack(tracks);
+  const codecPart = video !== undefined ? ` · ${chipCodecName(video.codec)}` : '';
+  return `MP4${codecPart} · ${formatFileSize(fileSizeBytes)}`;
+}
+
+/**
+ * The Source panel's key/value rows. Deliberately has no "heap" row -- no reliable cross-browser
+ * in-page memory API exists; this project's own convention is OS-level measurement, not a
+ * fabricated number (see PROJECT-CONTEXT.md).
+ */
+export function deriveSourceRows(tracks: readonly TrackIndex[], fileSizeBytes: number): PanelRowFixture[] {
+  const video = primaryVideoTrack(tracks);
+  const rows: PanelRowFixture[] = [{ label: 'container', value: 'mp4', tone: 'neutral' }];
+  if (video?.video !== undefined) {
+    const meta = video.video;
+    const keyframes = keyframeCount(video);
+    const gop = computeGop(video.sampleCount, keyframes, meta.nominalFrameRate);
+    const durationSeconds = ticksToSeconds(video.duration, video.timescale);
+    rows.push(
+      { label: 'codec', value: friendlyCodecName(video.codec), tone: 'muted' },
+      { label: 'resolution', value: `${meta.displayWidth.toString()} × ${meta.displayHeight.toString()}`, tone: 'muted' },
+      { label: 'frame rate', value: `${meta.nominalFrameRate.toFixed(2)} fps`, tone: 'muted' },
+      { label: 'frames', value: video.sampleCount.toLocaleString('en-US'), tone: 'muted' },
+      { label: 'keyframes', value: keyframes.toLocaleString('en-US'), tone: 'muted' },
+      { label: 'GOP', value: `${gop.frames.toString()} frames · ${gop.seconds.toFixed(1)} s`, tone: 'muted' },
+      { label: 'bitrate', value: computeBitrate(fileSizeBytes, durationSeconds), tone: 'muted' },
+    );
+  }
+  rows.push({ label: 'size', value: formatFileSize(fileSizeBytes), tone: 'muted' });
+  return rows;
+}
+
+/** Synthesizes display ids (V1, V2, ..., A1, A2, ...) -- real MP4 track ids aren't meaningful to show. */
+export function deriveTrackSummaries(tracks: readonly TrackIndex[]): TrackSummary[] {
+  let videoIndex = 0;
+  let audioIndex = 0;
+  let sawPrimaryVideo = false;
+  const summaries: TrackSummary[] = [];
+  for (const track of tracks) {
+    if (track.kind === 'video' && track.video !== undefined) {
+      videoIndex++;
+      const id: TrackId = `V${videoIndex.toString()}`;
+      const durationSeconds = ticksToSeconds(track.duration, track.timescale);
+      summaries.push({
+        id,
+        name: 'Video',
+        meta: `${friendlyCodecName(track.codec)} · ${track.video.displayWidth.toString()}×${track.video.displayHeight.toString()} · ${track.video.nominalFrameRate.toFixed(2)} fps · ${formatDurationHMS(durationSeconds)}`,
+        kind: 'video',
+        locked: !sawPrimaryVideo,
+      });
+      sawPrimaryVideo = true;
+    } else if (track.kind === 'audio' && track.audio !== undefined) {
+      audioIndex++;
+      const id: TrackId = `A${audioIndex.toString()}`;
+      const durationSeconds = ticksToSeconds(track.duration, track.timescale);
+      const channels = track.audio.channelCount === 1 ? 'mono' : track.audio.channelCount === 2 ? 'stereo' : `${track.audio.channelCount.toString()} ch`;
+      const khz = track.audio.sampleRate % 1000 === 0 ? (track.audio.sampleRate / 1000).toFixed(0) : (track.audio.sampleRate / 1000).toFixed(1);
+      summaries.push({
+        id,
+        name: track.audio.handlerName !== '' ? track.audio.handlerName : `Audio ${audioIndex.toString()}`,
+        meta: `${friendlyCodecName(track.codec)} · ${track.audio.language !== '' ? track.audio.language : 'und'} · ${channels} · ${khz} kHz · ${formatDurationHMS(durationSeconds)}`,
+        kind: 'audio',
+      });
+    }
+  }
+  return summaries;
+}
+
+/** Default selection once a file has just been parsed: primary video + first audio track. */
+export function defaultTrackSelection(tracks: readonly TrackSummary[]): TrackSelection {
+  const sel: TrackSelection = {};
+  let sawAudio = false;
+  for (const track of tracks) {
+    if (track.kind === 'video') {
+      sel[track.id] = true;
+    } else {
+      sel[track.id] = !sawAudio;
+      sawAudio = true;
+    }
+  }
+  return sel;
+}
+
+/**
+ * The Export panel's rows. `est. size` and `folder` stay illustrative approximations (a real
+ * estimate needs per-track bitrate summed over the trimmed range; `folder` is unknowable before a
+ * save destination is actually chosen) -- flagged, not silently presented as measured.
+ */
+export function deriveExportRows(
+  tracks: readonly TrackSummary[],
+  sel: TrackSelection,
+  tin: number,
+  tout: number,
+  sourceFileName: string,
+): PanelRowFixture[] {
+  const audioSelected = tracks.filter((t) => t.kind === 'audio' && sel[t.id]).length;
+  const baseName = sourceFileName.replace(/\.[^.]+$/, '');
+  return [
+    { label: 'container', value: 'mp4', tone: 'neutral' },
+    { label: 'video', value: 'stream copy', tone: 'informational' },
+    {
+      label: 'audio',
+      value: audioSelected === 0 ? 'none selected' : `stream copy × ${audioSelected.toString()}`,
+      tone: audioSelected === 0 ? 'warning' : 'informational',
+    },
+    { label: 'range', value: formatDurationHMS(tout - tin), tone: 'neutral' },
+    { label: 'est. size', value: `${(178 + audioSelected * 29).toString()} MB`, tone: 'muted' },
+    { label: 'writer', value: 'file system access', tone: 'good' },
+    { label: 'folder', value: '~/Recordings', tone: 'muted' },
+    { label: 'name', value: `${baseName}_clip.mp4`, tone: 'muted' },
+  ];
+}

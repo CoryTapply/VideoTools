@@ -1,5 +1,5 @@
 import styles from './Panel.module.css';
-import type { PanelRowFixture, RowTone } from '../fixtures.ts';
+import type { PanelRowFixture, RowTone } from '../media/panel-row.ts';
 
 const TONE_CLASS: Record<RowTone, string> = {
   neutral: styles.toneNeutral,

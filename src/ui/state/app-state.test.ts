@@ -39,14 +39,16 @@ describe('appReducer', () => {
     expect(state.pinned).toBeNull();
   });
 
-  it('track/toggle flips a selectable track', () => {
-    const state = appReducer(createInitialAppState(), { type: 'track/toggle', track: 'A2' });
+  it('track/toggle flips any track by id -- locking is the UI layer\'s job, not the reducer\'s', () => {
+    let state = appReducer(createInitialAppState(), { type: 'track/toggle', track: 'A2' });
     expect(state.sel.A2).toBe(true);
+    state = appReducer(state, { type: 'track/toggle', track: 'V1' });
+    expect(state.sel.V1).toBe(false);
   });
 
-  it('track/toggle is a no-op on the locked V1 track', () => {
-    const state = appReducer(createInitialAppState(), { type: 'track/toggle', track: 'V1' });
-    expect(state.sel.V1).toBe(true);
+  it('sel/set bulk-replaces the whole selection, for a fresh parse\'s default', () => {
+    const state = appReducer(createInitialAppState(), { type: 'sel/set', sel: { V1: true, A1: true } });
+    expect(state.sel).toEqual({ V1: true, A1: true });
   });
 
   it('trim-mode/set to exact clears any pending notice', () => {
@@ -115,5 +117,12 @@ describe('appReducer', () => {
     });
     expect(state.permissionLost).toBe(true);
     expect(state.screen).toBe('ready');
+  });
+
+  it('open-error/set stores and clears a parse failure', () => {
+    let state = appReducer(createInitialAppState(), { type: 'open-error/set', error: { kind: 'not-isobmff' } });
+    expect(state.openError).toEqual({ kind: 'not-isobmff' });
+    state = appReducer(state, { type: 'open-error/set', error: null });
+    expect(state.openError).toBeNull();
   });
 });
