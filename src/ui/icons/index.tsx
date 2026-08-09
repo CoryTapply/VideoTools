@@ -139,8 +139,8 @@ export function WarningTriangleIcon(props: IconProps) {
 export function FileDropIcon(props: IconProps) {
   return (
     <svg
-      width={16}
-      height={16}
+      width={20}
+      height={20}
       viewBox="0 0 16 16"
       fill="none"
       stroke="var(--color-text-secondary)"

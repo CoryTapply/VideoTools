@@ -41,6 +41,20 @@ export const color = {
   // Track-list checkbox unchecked border -- design/README.md's track-list row description, not
   // the main token table.
   borderCheckbox: '#3A3A3E',
+  // Empty-state drop card's dashed border -- design/empty-state-changes.md.
+  borderEmptyCard: '#34343A',
+  // Rule under the empty-state Recent-files header -- design/empty-state-changes.md.
+  borderRecentRule: '#1F1F23',
+  // Empty-state Recent row hover fill -- design/empty-state-changes.md. Coincides with
+  // bg/timeline's hex value but is kept as its own token: the two are semantically unrelated.
+  bgRecentRowHover: '#141416',
+  // Empty-state panel skeleton bar tones (label = dimmer/left, value = brighter/right) --
+  // design/empty-state-changes.md's "Key/value skeleton rows" and "Track skeleton" sections.
+  skeletonBarLabel: '#202024',
+  skeletonBarValue: '#26262A',
+  // Empty-state track-skeleton's inert (non-pulsing) checkbox placeholder border --
+  // design/empty-state-changes.md's "Track skeleton" section.
+  borderSkeletonCheckbox: '#2A2A2E',
 
   textPrimary: '#E8E8E6',
   textSecondary: '#9A9A96',

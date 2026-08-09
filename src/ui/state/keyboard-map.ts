@@ -27,6 +27,7 @@ export type ShortcutAction =
   | 'jump-end'
   | 'toggle-fullscreen'
   | 'export'
+  | 'open-file'
   | 'undo'
   | 'toggle-shortcuts'
   | 'close';
@@ -48,6 +49,7 @@ export function matchShortcut(evt: KeyboardEventLike): ShortcutAction | null {
   // falls through to a plain "e" match.
   if (mod) {
     if (key === 'e') return 'export';
+    if (key === 'o') return 'open-file';
     if (key === 'z' && !evt.shiftKey) return 'undo';
     return null;
   }

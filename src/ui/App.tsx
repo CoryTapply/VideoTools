@@ -57,6 +57,11 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     fileInputRef.current?.click();
   }
 
+  // Computed here (rather than with the rest of the derived render values below) so the keydown
+  // effect's 'export' case can guard on it without re-deriving screen logic inline.
+  const hasFile = state.screen !== 'empty' && state.screen !== 'degraded';
+  const canExport = hasFile && state.screen !== 'exporting' && state.screen !== 'finalising';
+
   // Kept fresh every render so the keydown handler below never closes over a stale tin/tout/
   // currentSeconds -- without this, either the effect would need those in its deps (re-subscribing
   // on every playhead tick) or set-in/set-out would silently use whatever values were current when
@@ -95,7 +100,15 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           break;
         case 'export':
           evt.preventDefault();
-          dispatch({ type: 'screen/set', screen: 'exporting' });
+          if (canExport) {
+            dispatch({ type: 'screen/set', screen: 'exporting' });
+          }
+          break;
+        case 'open-file':
+          evt.preventDefault();
+          // fileInputRef is a stable ref object, so calling through it directly here (rather than
+          // via the `triggerOpen` closure) keeps this out of the effect's dependency array.
+          fileInputRef.current?.click();
           break;
         case 'play-pause':
           evt.preventDefault();
@@ -170,11 +183,14 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [state.shortcuts, state.panel, state.full, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds]);
+  }, [state.shortcuts, state.panel, state.full, canExport, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds]);
 
-  const hasFile = state.screen !== 'empty' && state.screen !== 'degraded';
-  const canExport = hasFile && state.screen !== 'exporting' && state.screen !== 'finalising';
   const showChrome = !state.full;
+  // Title bar, status bar, transport bar, splitter, and timeline all have nothing to report with
+  // no file open -- design/empty-state-changes.md's "Top bar and status bar are hidden" section
+  // (extended to the transport/timeline row per the design screenshot). The rail stays under
+  // `showChrome` alone: it's the explanation surface for what the app is about to do.
+  const showFileChrome = showChrome && state.screen !== 'empty';
   const timelineHeight = state.full ? Math.min(state.timelineH, FULLSCREEN_TIMELINE_CAP_PX) : state.timelineH;
   const displayFps = media.fps ?? FPS;
 
@@ -210,7 +226,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         style={{ display: 'none' }}
         onChange={handleFileInputChange}
       />
-      {showChrome && (
+      {showFileChrome && (
         <TitleBar
           fileName={fileName}
           formatChip={formatChip}
@@ -292,42 +308,48 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         }
       />
 
-      <TransportBar
-        timecode={timecode}
-        playing={media.playing}
-        onTogglePlay={togglePlay}
-        onStepBack={() => {
-          stepFrame(-1);
-        }}
-        onStepForward={() => {
-          stepFrame(1);
-        }}
-        onPrevKeyframe={() => {
-          jumpToKeyframe(-1);
-        }}
-        onNextKeyframe={() => {
-          jumpToKeyframe(1);
-        }}
-        inTc={inTc}
-        outTc={outTc}
-        durTc={durTc}
-        trimMode={state.trimMode}
-        exactAvailable={exactAvailable}
-        onSetTrimMode={(mode) => {
-          dispatch({ type: 'trim-mode/set', mode });
-        }}
-      />
+      {showFileChrome && (
+        <TransportBar
+          timecode={timecode}
+          playing={media.playing}
+          onTogglePlay={togglePlay}
+          onStepBack={() => {
+            stepFrame(-1);
+          }}
+          onStepForward={() => {
+            stepFrame(1);
+          }}
+          onPrevKeyframe={() => {
+            jumpToKeyframe(-1);
+          }}
+          onNextKeyframe={() => {
+            jumpToKeyframe(1);
+          }}
+          inTc={inTc}
+          outTc={outTc}
+          durTc={durTc}
+          trimMode={state.trimMode}
+          exactAvailable={exactAvailable}
+          onSetTrimMode={(mode) => {
+            dispatch({ type: 'trim-mode/set', mode });
+          }}
+        />
+      )}
 
-      <Splitter
-        timelineHeight={state.timelineH}
-        onResize={(height) => {
-          dispatch({ type: 'timeline-height/set', height });
-        }}
-      />
+      {showFileChrome && (
+        <Splitter
+          timelineHeight={state.timelineH}
+          onResize={(height) => {
+            dispatch({ type: 'timeline-height/set', height });
+          }}
+        />
+      )}
 
-      <TimelineRegion heightPx={timelineHeight} indexing={state.screen === 'indexing' || state.screen === 'opening'} />
+      {showFileChrome && (
+        <TimelineRegion heightPx={timelineHeight} indexing={state.screen === 'indexing' || state.screen === 'opening'} />
+      )}
 
-      {showChrome && (
+      {showFileChrome && (
         <StatusBar
           zoomLabel={ZOOM_LABEL}
           thumbLabel={THUMB_LABEL}

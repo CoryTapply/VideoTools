@@ -13,6 +13,7 @@ import { formatPlaybackError } from '../../media/playback/errors.ts';
 import { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.ts';
 import { RealVideoElement } from '../../media/playback/RealVideoElement.ts';
 import { defaultTrackSelection, deriveFormatChip, deriveSourceRows, deriveTrackSummaries, friendlyCodecName } from '../media/derive-source-info.ts';
+import { recordRecentFile } from './recent-files.ts';
 import { formatFrameNumber, formatTimecode } from './snap-notice.ts';
 import type { Dispatch, RefObject } from 'react';
 import type { TrackIndex } from '../../media/index/track-index.ts';
@@ -120,6 +121,7 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
 
       sampleIndexRef.current = sampleIndex;
       videoTrackRef.current = videoTrack ?? null;
+      recordRecentFile(selected.name);
       setFile(selected);
       setTracks(summaries);
       setSourceRows(rows);
