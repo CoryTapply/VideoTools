@@ -77,6 +77,13 @@ no `<canvas>`, no zoom/pan/drag-scrub. That's Task 4b, next.
 **Exit: met.** The shell renders every M1 state with placeholder content; `tokens.ts` is the only
 source of colour in `src/ui/`.
 
+**Follow-up, done immediately after:** real file selection (input + drag-and-drop), real parsing
+(`IndexWorkerClient`), and real playback (`NativeVideoEngine`) wired into the shell — Task 1 and
+Task 2's modules connected to the UI for the first time. Every panel number that was fixture-only
+above is now real once a file is open; `ui-harness.html` is unaffected (fixture data is now the
+*fallback* when no file is open, not the only source). Full writeup:
+`results/task-4a-media-integration-summary.md`.
+
 ### ▸ Task 4b — timeline renderer (1 week)
 Canvas layer stack. Viewport transform in presentation ticks, cursor-anchored zoom, kinetic pan. Ruler with adaptive tick density, keyframe tick row, filmstrip from `getRange()`, in/out handles with snapping, playhead on `onFrame`. Cache-backed drag scrub with a single settle seek on pointer-up.
 

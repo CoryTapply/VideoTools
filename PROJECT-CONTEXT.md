@@ -72,7 +72,10 @@ These emerged during the project and have repeatedly paid for themselves. Keep t
 
 **Done:** M0 and M0.5 feasibility spikes. M1 task 1 (index), task 2 (playback), task 3 (frame
 cache), task 3.5 (budget re-tune), task 4a (app shell and design system — `src/ui/`, greenfield
-React 19 added to the toolchain). CI running typecheck, lint, and tests on every push.
+React 19 added to the toolchain), plus an immediate follow-up wiring task 1's parser and task 2's
+playback engine into that shell for real (real file selection/drag-and-drop, real parsing, real
+playback — `results/task-4a-media-integration-summary.md`). CI running typecheck, lint, and tests
+on every push.
 
 **Next:** task 4b (timeline renderer — the canvas layer stack task 4a deliberately left as a
 placeholder), task 5 (export).
