@@ -3,9 +3,10 @@
 // ../fixtures.ts -- this module is where they become real formulas instead. No DOM, no File, no
 // Worker -- fully Node-testable against hand-built TrackIndex-shaped fixtures.
 
-import { ticksToSeconds } from '../../media/index/index.ts';
+// Direct submodule imports, not the barrel -- see app-state.ts's comment on why.
+import { ticksToSeconds } from '../../media/index/time.ts';
 import { formatDurationHMS } from '../state/snap-notice.ts';
-import type { TrackIndex } from '../../media/index/index.ts';
+import type { TrackIndex } from '../../media/index/track-index.ts';
 import type { TrackId, TrackSelection } from '../state/app-state.ts';
 import type { PanelRowFixture } from './panel-row.ts';
 import type { TrackSummary } from './track-summary.ts';

@@ -11,7 +11,8 @@
   cursor: pointer;
 }
 
-.root:hover {
+.root:hover,
+.rootDragActive {
   border-color: var(--color-accent);
   background: var(--color-bg-empty-state-hover);
 }
@@ -34,6 +35,13 @@
 .subtitle {
   font-size: 12px;
   color: var(--color-text-tertiary);
+  text-align: center;
+  text-wrap: pretty;
+}
+
+.errorSubtitle {
+  font-size: 12px;
+  color: var(--color-warn);
   text-align: center;
   text-wrap: pretty;
 }

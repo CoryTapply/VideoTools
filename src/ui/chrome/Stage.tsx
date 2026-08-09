@@ -6,8 +6,9 @@ import { PinnedPanel } from './PinnedPanel.tsx';
 import { PreviewSurface } from './PreviewSurface.tsx';
 import { Rail } from './Rail.tsx';
 import styles from './Stage.module.css';
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import type { PanelId, Screen, TrackId, TrackSelection } from '../state/app-state.ts';
+import type { UnsupportedInfo } from '../state/media-session.ts';
 import type { PanelRowFixture } from '../media/panel-row.ts';
 import type { TrackSummary } from '../media/track-summary.ts';
 
@@ -25,7 +26,11 @@ export interface StageProps {
   tout: number;
   frameLabel: string;
   timecode: string;
+  openErrorMessage?: string | null;
+  unsupported?: UnsupportedInfo | null;
+  videoRef?: RefObject<HTMLVideoElement | null>;
   onOpenFile: () => void;
+  onFileDrop: (file: File) => void;
   onOpenPanel: (id: PanelId) => void;
   onClosePanel: () => void;
   onPinPanel: (id: PanelId) => void;
@@ -52,7 +57,11 @@ export function Stage({
   tout,
   frameLabel,
   timecode,
+  openErrorMessage,
+  unsupported,
+  videoRef,
   onOpenFile,
+  onFileDrop,
   onOpenPanel,
   onClosePanel,
   onPinPanel,
@@ -79,7 +88,16 @@ export function Stage({
 
   return (
     <div className={styles.root}>
-      <PreviewSurface screen={previewScreen} frameLabel={frameLabel} timecode={timecode} onOpen={onOpenFile}>
+      <PreviewSurface
+        screen={previewScreen}
+        frameLabel={frameLabel}
+        timecode={timecode}
+        onOpen={onOpenFile}
+        onFileDrop={onFileDrop}
+        openErrorMessage={openErrorMessage}
+        unsupported={unsupported}
+        videoRef={videoRef}
+      >
         {overlay}
         {toast}
       </PreviewSurface>

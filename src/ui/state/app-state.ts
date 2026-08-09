@@ -1,7 +1,9 @@
 // The React half of the state split described in ../README.md: low-frequency, drives the DOM
 // shell. Never holds anything that changes at 60Hz -- see timeline-controller-state.ts for that.
 
-import type { IndexError } from '../../media/index/index.ts';
+// Direct submodule import, not the barrel -- src/media/index/index.ts re-exports NodeByteSource,
+// which top-level-imports node:fs/promises and crashes when bundled for the browser.
+import type { IndexError } from '../../media/index/errors.ts';
 
 export type Screen =
   | 'ready'

@@ -1,17 +1,26 @@
 import styles from './UnsupportedState.module.css';
 
-export function UnsupportedState() {
+export interface UnsupportedStateProps {
+  message?: string;
+  codec?: string;
+  resolution?: string;
+  fps?: string;
+}
+
+const DEFAULT_MESSAGE = "This file's codec can't be previewed in your browser, but it can still be trimmed.";
+
+export function UnsupportedState({ message = DEFAULT_MESSAGE, codec = 'hevc / Main 10', resolution = '3840 × 2160', fps = '59.94 fps' }: UnsupportedStateProps) {
   return (
     <div className={styles.root}>
-      <div className={styles.headline}>This file's codec can't be previewed in your browser, but it can still be trimmed.</div>
+      <div className={styles.headline}>{message}</div>
       <div className={styles.body}>
         The container index, keyframe map and waveform all read normally — set in and out on the timeline and export with
-        stream copy. Preview needs a browser build with HEVC decode.
+        stream copy.
       </div>
       <div className={styles.facts}>
-        <span>hevc / Main 10</span>
-        <span>3840 × 2160</span>
-        <span>59.94 fps</span>
+        <span>{codec}</span>
+        <span>{resolution}</span>
+        <span>{fps}</span>
       </div>
     </div>
   );

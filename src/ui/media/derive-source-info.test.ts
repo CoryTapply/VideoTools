@@ -10,7 +10,7 @@ import {
   formatFileSize,
   friendlyCodecName,
 } from './derive-source-info.ts';
-import type { TrackIndex } from '../../media/index/index.ts';
+import type { TrackIndex } from '../../media/index/track-index.ts';
 
 function makeIsSync(sampleCount: number, keyframeEvery: number): Uint8Array {
   const arr = new Uint8Array(sampleCount);
