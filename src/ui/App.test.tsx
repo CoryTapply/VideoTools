@@ -25,4 +25,18 @@ describe('App', () => {
     const { queryByText } = render(<App initialState={{ screen: 'ready' }} />);
     expect(queryByText('Saves via download — capped at 2 GB in this browser')).toBeNull();
   });
+
+  it('hides the title bar, status bar, and transport bar for screen === empty', () => {
+    const { queryByText, queryByTitle } = render(<App initialState={{ screen: 'empty' }} />);
+    expect(queryByText('No file open')).toBeNull();
+    // StatusBar's zoom label comes from fixtures.ts's ZOOM_LABEL.
+    expect(queryByText('1 frame = 5px')).toBeNull();
+    // TransportBar's play/pause button, identified by its title attribute.
+    expect(queryByTitle('Play · pause (Space)')).toBeNull();
+  });
+
+  it('shows the title bar and status bar for screen === ready', () => {
+    const { queryByText } = render(<App initialState={{ screen: 'ready' }} />);
+    expect(queryByText('1 frame = 5px')).toBeTruthy();
+  });
 });

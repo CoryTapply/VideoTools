@@ -43,6 +43,12 @@ describe('matchShortcut', () => {
     expect(matchShortcut(key('e'))).toBeNull();
   });
 
+  it('matches Cmd/Ctrl+O to open-file, distinct from the plain O (set-out) chord', () => {
+    expect(matchShortcut(key('o', { metaKey: true }))).toBe('open-file');
+    expect(matchShortcut(key('o', { ctrlKey: true }))).toBe('open-file');
+    expect(matchShortcut(key('o'))).toBe('set-out');
+  });
+
   it('matches Cmd/Ctrl+Z to undo, but not with Shift held', () => {
     expect(matchShortcut(key('z', { metaKey: true }))).toBe('undo');
     expect(matchShortcut(key('z', { metaKey: true, shiftKey: true }))).toBeNull();

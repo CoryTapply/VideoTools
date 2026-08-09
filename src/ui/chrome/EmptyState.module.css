@@ -1,8 +1,17 @@
-.root {
-  width: min(520px, 80%);
-  padding: 40px 32px;
-  border: 1px dashed var(--color-border-base);
-  border-radius: 8px;
+.container {
+  width: min(560px, 78%);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 26px;
+}
+
+.card {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 52px 40px;
+  border: 1px dashed var(--color-border-empty-card);
+  border-radius: 10px;
   background: var(--color-bg-empty-state);
   display: flex;
   flex-direction: column;
@@ -11,16 +20,16 @@
   cursor: pointer;
 }
 
-.root:hover,
-.rootDragActive {
+.card:hover,
+.cardDragActive {
   border-color: var(--color-accent);
   background: var(--color-bg-empty-state-hover);
 }
 
 .iconTile {
-  width: 34px;
-  height: 34px;
-  border-radius: 6px;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
   border: 1px solid var(--color-border-base);
   background: var(--color-bg-panel);
   display: flex;
@@ -29,14 +38,15 @@
 }
 
 .title {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .subtitle {
-  font-size: 12px;
+  font-size: 12.5px;
   color: var(--color-text-tertiary);
   text-align: center;
-  text-wrap: pretty;
+  max-width: 340px;
+  line-height: 1.5;
 }
 
 .errorSubtitle {
@@ -44,4 +54,78 @@
   color: var(--color-warn);
   text-align: center;
   text-wrap: pretty;
+}
+
+.buttonRow {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chooseButton {
+  height: 30px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-on);
+  font: 600 12.5px 'IBM Plex Sans', sans-serif;
+  cursor: pointer;
+}
+
+.chooseButton:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
+
+.chooseHint {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--color-text-disabled);
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.recentHeader {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-disabled);
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--color-border-recent-rule);
+}
+
+.recentRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 6px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.recentRow:hover {
+  background: var(--color-bg-recent-row-hover);
+}
+
+.recentName {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11.5px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recentWhen {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--color-text-disabled);
+  white-space: nowrap;
 }

@@ -1,5 +1,6 @@
 import { ExportPanel } from '../panels/ExportPanel.tsx';
 import { JobsPanel } from '../panels/JobsPanel.tsx';
+import { PanelSkeleton } from '../panels/PanelSkeleton.tsx';
 import { SourcePanel } from '../panels/SourcePanel.tsx';
 import { FloatingPanel } from './FloatingPanel.tsx';
 import { PinnedPanel } from './PinnedPanel.tsx';
@@ -72,6 +73,20 @@ export function Stage({
   toast,
 }: StageProps) {
   function renderPanelContent(id: PanelId) {
+    // No file open: panels still open (they're the explanation surface for what the app is about
+    // to do), but their bodies are skeletons, not fixtures.ts's TRACKS/SOURCE_PANEL_ROWS rendered
+    // as if they were live data -- design/empty-state-changes.md's "Panels show skeletons" section.
+    if (screen === 'empty') {
+      switch (id) {
+        case 'info':
+          return <PanelSkeleton trackRows={5} kvRows={8} note="Container, codec and track list are read once a file is open." />;
+        case 'export':
+          return <PanelSkeleton trackRows={5} kvRows={8} note="Export settings unlock when a file is open." />;
+        case 'queue':
+          return <PanelSkeleton kvRows={5} note="No jobs yet — indexing starts when a file is open." />;
+      }
+    }
+
     switch (id) {
       case 'info':
         return <SourcePanel tracks={tracks} rows={sourceRows} />;
