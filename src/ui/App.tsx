@@ -50,11 +50,21 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     (overrides) => createInitialAppState({ tin: DEFAULT_IN_SECONDS, tout: DEFAULT_OUT_SECONDS, ...overrides }),
   );
   const media = useMediaSession(dispatch);
+  const { togglePlay, stepFrame, jumpToKeyframe, seekToSeconds } = media;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   function triggerOpen() {
     fileInputRef.current?.click();
   }
+
+  // Kept fresh every render so the keydown handler below never closes over a stale tin/tout/
+  // currentSeconds -- without this, either the effect would need those in its deps (re-subscribing
+  // on every playhead tick) or set-in/set-out would silently use whatever values were current when
+  // the listener was first attached.
+  const latestRef = useRef({ tin: state.tin, tout: state.tout, currentSeconds: media.currentSeconds });
+  useEffect(() => {
+    latestRef.current = { tin: state.tin, tout: state.tout, currentSeconds: media.currentSeconds };
+  });
 
   useEffect(() => {
     function handleKeyDown(evt: KeyboardEvent) {
@@ -62,8 +72,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       if (action === null) {
         return;
       }
-      // Only the shell-level actions have a real handler this task -- playback stepping, zoom,
-      // in/out, keyframe nav, and undo are matched but wait on later tasks' state to act on.
+      // zoom/zoom-fit/undo/disable-snapping have no real handler yet -- they need the timeline
+      // (Task 4b) or export (Task 5).
       switch (action) {
         case 'toggle-shortcuts':
           evt.preventDefault();
@@ -76,6 +86,50 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         case 'export':
           evt.preventDefault();
           dispatch({ type: 'screen/set', screen: 'exporting' });
+          break;
+        case 'play-pause':
+          evt.preventDefault();
+          togglePlay();
+          break;
+        case 'step-back-frame':
+          evt.preventDefault();
+          stepFrame(-1);
+          break;
+        case 'step-forward-frame':
+          evt.preventDefault();
+          stepFrame(1);
+          break;
+        case 'prev-keyframe':
+          evt.preventDefault();
+          jumpToKeyframe(-1);
+          break;
+        case 'next-keyframe':
+          evt.preventDefault();
+          jumpToKeyframe(1);
+          break;
+        case 'set-in': {
+          evt.preventDefault();
+          const { tout, currentSeconds } = latestRef.current;
+          if (currentSeconds < tout) {
+            dispatch({ type: 'in-out/set', tin: currentSeconds, tout });
+          }
+          break;
+        }
+        case 'set-out': {
+          evt.preventDefault();
+          const { tin, currentSeconds } = latestRef.current;
+          if (currentSeconds > tin) {
+            dispatch({ type: 'in-out/set', tin, tout: currentSeconds });
+          }
+          break;
+        }
+        case 'jump-to-in':
+          evt.preventDefault();
+          seekToSeconds(latestRef.current.tin);
+          break;
+        case 'jump-to-out':
+          evt.preventDefault();
+          seekToSeconds(latestRef.current.tout);
           break;
         case 'close':
           evt.preventDefault();
@@ -95,7 +149,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [state.shortcuts, state.panel, state.full]);
+  }, [state.shortcuts, state.panel, state.full, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds]);
 
   const hasFile = state.screen !== 'empty' && state.screen !== 'degraded';
   const canExport = hasFile && state.screen !== 'exporting' && state.screen !== 'finalising';
@@ -219,12 +273,20 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
 
       <TransportBar
         timecode={timecode}
-        playing={false}
-        onTogglePlay={() => {}}
-        onStepBack={() => {}}
-        onStepForward={() => {}}
-        onPrevKeyframe={() => {}}
-        onNextKeyframe={() => {}}
+        playing={media.playing}
+        onTogglePlay={togglePlay}
+        onStepBack={() => {
+          stepFrame(-1);
+        }}
+        onStepForward={() => {
+          stepFrame(1);
+        }}
+        onPrevKeyframe={() => {
+          jumpToKeyframe(-1);
+        }}
+        onNextKeyframe={() => {
+          jumpToKeyframe(1);
+        }}
         inTc={inTc}
         outTc={outTc}
         durTc={durTc}

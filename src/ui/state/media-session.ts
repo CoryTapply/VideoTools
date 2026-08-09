@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // Direct submodule imports, not the barrel -- see app-state.ts's comment on why.
 import { IndexWorkerClient } from '../../media/index/worker-client.ts';
 import { SampleIndex } from '../../media/index/query.ts';
-import { ticksToSeconds } from '../../media/index/time.ts';
+import { secondsToTicks, ticksToSeconds } from '../../media/index/time.ts';
 import { formatPlaybackError } from '../../media/playback/errors.ts';
 import { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.ts';
 import { RealVideoElement } from '../../media/playback/RealVideoElement.ts';
@@ -47,6 +47,7 @@ export interface MediaSession {
   togglePlay: () => void;
   stepFrame: (n: number) => void;
   jumpToKeyframe: (dir: 1 | -1) => void;
+  seekToSeconds: (seconds: number) => void;
 }
 
 /** Pure, so it's directly testable without a real engine/video element. */
@@ -186,6 +187,13 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
     void engine.seek(targetTicks, 'accurate');
   }, []);
 
+  const seekToSeconds = useCallback((seconds: number) => {
+    const engine = engineRef.current;
+    const track = videoTrackRef.current;
+    if (engine === null || track === null) return;
+    void engine.seek(secondsToTicks(seconds, track.timescale), 'accurate');
+  }, []);
+
   const trackFps = videoTrackRef.current?.video?.nominalFrameRate ?? null;
   const formattingFps = trackFps ?? 60;
 
@@ -206,5 +214,6 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
     togglePlay,
     stepFrame,
     jumpToKeyframe,
+    seekToSeconds,
   };
 }
