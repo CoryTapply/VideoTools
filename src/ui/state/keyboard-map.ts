@@ -58,6 +58,11 @@ export function matchShortcut(evt: KeyboardEventLike): ShortcutAction | null {
     return null;
   }
 
+  // '?' is Shift+/ on a US keyboard layout, so evt.shiftKey is true when it's pressed -- checked
+  // here, before the shift-gated block below, so it isn't swallowed by that block's `return null`
+  // for every shifted key it doesn't otherwise recognize.
+  if (key === '?') return 'toggle-shortcuts';
+
   if (evt.shiftKey) {
     if (key === 'i') return 'jump-to-in';
     if (key === 'o') return 'jump-to-out';
@@ -98,8 +103,6 @@ export function matchShortcut(evt: KeyboardEventLike): ShortcutAction | null {
       return 'jump-end';
     case 'f':
       return 'toggle-fullscreen';
-    case '?':
-      return 'toggle-shortcuts';
     case 'escape':
       return 'close';
     default:

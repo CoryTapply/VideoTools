@@ -61,9 +61,19 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   // currentSeconds -- without this, either the effect would need those in its deps (re-subscribing
   // on every playhead tick) or set-in/set-out would silently use whatever values were current when
   // the listener was first attached.
-  const latestRef = useRef({ tin: state.tin, tout: state.tout, currentSeconds: media.currentSeconds });
+  const latestRef = useRef({
+    tin: state.tin,
+    tout: state.tout,
+    currentSeconds: media.currentSeconds,
+    durationSeconds: media.durationSeconds,
+  });
   useEffect(() => {
-    latestRef.current = { tin: state.tin, tout: state.tout, currentSeconds: media.currentSeconds };
+    latestRef.current = {
+      tin: state.tin,
+      tout: state.tout,
+      currentSeconds: media.currentSeconds,
+      durationSeconds: media.durationSeconds,
+    };
   });
 
   useEffect(() => {
@@ -72,8 +82,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       if (action === null) {
         return;
       }
-      // zoom/zoom-fit/undo/disable-snapping have no real handler yet -- they need the timeline
-      // (Task 4b) or export (Task 5).
+      // shuttle, clear-in/out, zoom/zoom-fit, jump-start/end, and undo have no real handler yet --
+      // they need the timeline (Task 4b) or export (Task 5).
       switch (action) {
         case 'toggle-shortcuts':
           evt.preventDefault();
@@ -107,6 +117,17 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           evt.preventDefault();
           jumpToKeyframe(1);
           break;
+        case 'step-back-second':
+          evt.preventDefault();
+          seekToSeconds(Math.max(0, latestRef.current.currentSeconds - 1));
+          break;
+        case 'step-forward-second': {
+          evt.preventDefault();
+          const { currentSeconds, durationSeconds } = latestRef.current;
+          const target = currentSeconds + 1;
+          seekToSeconds(durationSeconds !== null ? Math.min(target, durationSeconds) : target);
+          break;
+        }
         case 'set-in': {
           evt.preventDefault();
           const { tout, currentSeconds } = latestRef.current;
