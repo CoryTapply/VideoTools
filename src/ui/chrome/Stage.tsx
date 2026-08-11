@@ -30,6 +30,7 @@ export interface StageProps {
   openErrorMessage?: string | null;
   unsupported?: UnsupportedInfo | null;
   videoRef?: RefObject<HTMLVideoElement | null>;
+  scrubOverlayRef?: RefObject<HTMLCanvasElement | null>;
   onOpenFile: () => void;
   onFileDrop: (file: File) => void;
   onOpenPanel: (id: PanelId) => void;
@@ -61,6 +62,7 @@ export function Stage({
   openErrorMessage,
   unsupported,
   videoRef,
+  scrubOverlayRef,
   onOpenFile,
   onFileDrop,
   onOpenPanel,
@@ -112,6 +114,7 @@ export function Stage({
         openErrorMessage={openErrorMessage}
         unsupported={unsupported}
         videoRef={videoRef}
+        scrubOverlayRef={scrubOverlayRef}
       >
         {overlay}
         {toast}

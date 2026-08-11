@@ -86,6 +86,21 @@ export const color = {
   dim: 'rgba(10,10,11,.72)',
   // Keyboard-overlay full-screen scrim -- design/README.md's Keyboard overlay section.
   scrim: 'rgba(8,8,9,.72)',
+
+  // Ruler row (canvas draw code, Task 4b) -- design/README.md's Ruler section. Major ticks reuse
+  // textDisabled (#4A4A4E) and labels reuse textTertiary (#6B6B68), both already named above.
+  tickMinor: '#2A2A2E',
+  // Keyframe row's two density bands (>=16px full-height, 3-16px short) -- same section.
+  keyframeTickFull: '#8A8A92',
+  keyframeTickShort: '#6E6E76',
+  // Filmstrip tile seam -- design/README.md's Filmstrip `box-shadow` seam, drawn as two 1px lines
+  // rather than a CSS box-shadow since tiles are canvas-drawn, not DOM nodes.
+  filmstripSeamDark: 'rgba(0,0,0,.55)',
+  filmstripSeamLight: 'rgba(255,255,255,.05)',
+  // In/out region -- design/README.md's In/out region: the selected span's top/bottom borders,
+  // and the handle's grip line (drawn over the accent-colored bar).
+  selectionBorder: 'rgba(76,141,246,.55)',
+  handleGrip: 'rgba(11,18,32,.55)',
 } as const;
 
 export const type = {

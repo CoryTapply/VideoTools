@@ -9,6 +9,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { IndexWorkerClient } from '../../media/index/worker-client.ts';
 import { SampleIndex } from '../../media/index/query.ts';
 import { secondsToTicks, ticksToSeconds } from '../../media/index/time.ts';
+import { FrameCache, defaultWorkerCount } from '../../media/frames/FrameCache.ts';
+import { FrameWorkerClient } from '../../media/frames/worker-client.ts';
+import { FrameWorkerPool } from '../../media/frames/worker-pool.ts';
 import { formatPlaybackError } from '../../media/playback/errors.ts';
 import { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.ts';
 import { RealVideoElement } from '../../media/playback/RealVideoElement.ts';
@@ -33,6 +36,18 @@ export interface UnsupportedInfo {
 
 export interface MediaSession {
   videoRef: RefObject<HTMLVideoElement | null>;
+  /** The live playback engine, exposed so useTimelineController (Task 4b) can subscribe to
+   * onFrame at 60Hz via a ref write and issue the drag-scrub settle seek directly -- see
+   * timeline-controller-state.ts's ticks-vs-seconds note. Null until a file is loaded. */
+  engineRef: RefObject<NativeVideoEngine | null>;
+  /** Same reasoning as engineRef: the timeline needs direct, synchronous access for keyframe
+   * queries (keyframePresentationTimes, nearestSyncAtOrBeforePresentation, ...), not just the
+   * derived display fields below. */
+  sampleIndexRef: RefObject<SampleIndex | null>;
+  videoTrackRef: RefObject<TrackIndex | null>;
+  /** The two-tier frame cache backing the filmstrip and cache-only drag-scrub preview. Built and
+   * warmCoarse()'d once per file open; null until then. */
+  frameCacheRef: RefObject<FrameCache | null>;
   file: File | null;
   tracks: TrackSummary[] | null;
   sourceRows: PanelRowFixture[] | null;
@@ -50,6 +65,14 @@ export interface MediaSession {
   jumpToKeyframe: (dir: 1 | -1) => void;
   seekToSeconds: (seconds: number) => void;
 }
+
+/** setCurrentSeconds only needs to be fresh enough for the transport bar's fallback text and the
+ * harness -- the real 60Hz playhead reader is useTimelineController's ref-based onFrame
+ * subscription (Task 4b), added on top of this one. Gating this one to ~4Hz keeps the existing
+ * per-frame onFrame callback from re-rendering the whole App tree during playback, which
+ * architecture-v3.md's "React re-renders only on discrete state changes, never on playhead
+ * movement" rule forbids. */
+const CURRENT_SECONDS_UPDATE_INTERVAL_MS = 250;
 
 /** Pure, so it's directly testable without a real engine/video element. */
 export function nextScreenForLoadOutcome(result: Result<void, PlaybackError>): 'ready' | 'unsupported' {
@@ -77,6 +100,8 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
   const engineRef = useRef<NativeVideoEngine | null>(null);
   const sampleIndexRef = useRef<SampleIndex | null>(null);
   const videoTrackRef = useRef<TrackIndex | null>(null);
+  const frameCacheRef = useRef<FrameCache | null>(null);
+  const lastCurrentSecondsUpdateMsRef = useRef(0);
 
   const [file, setFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackSummary[] | null>(null);
@@ -90,6 +115,7 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
   useEffect(
     () => () => {
       engineRef.current?.dispose();
+      frameCacheRef.current?.dispose();
     },
     [],
   );
@@ -128,9 +154,20 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
       setFormatChip(chip);
       setDurationSeconds(durationSecondsValue);
       setCurrentSeconds(0);
+      lastCurrentSecondsUpdateMsRef.current = 0;
 
       dispatch({ type: 'sel/set', sel });
       dispatch({ type: 'in-out/set', tin: 0, tout: durationSecondsValue });
+
+      frameCacheRef.current?.dispose();
+      frameCacheRef.current = null;
+      if (videoTrack?.video !== undefined) {
+        const workerCount = defaultWorkerCount(navigator.hardwareConcurrency);
+        const pool = new FrameWorkerPool(Array.from({ length: workerCount }, () => new FrameWorkerClient(selected)));
+        const frameCache = new FrameCache({ sampleIndex, videoTrackId: videoTrack.trackId, pool });
+        frameCacheRef.current = frameCache;
+        void frameCache.warmCoarse();
+      }
 
       engineRef.current?.dispose();
       const videoEl = await waitForVideoElement(videoRef);
@@ -141,9 +178,16 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
       });
       engine.onFrame((t) => {
         const track = videoTrackRef.current;
-        if (track !== null) {
-          setCurrentSeconds(ticksToSeconds(t, track.timescale));
+        if (track === null) return;
+        // Only throttle while actively playing -- that's the 60Hz case this guards against. A
+        // single seek/step's onFrame (the common case while paused) must update immediately, or
+        // frame-stepping and jump-to-keyframe would look laggy by up to the throttle interval.
+        if (engineRef.current?.state === 'playing') {
+          const now = performance.now();
+          if (now - lastCurrentSecondsUpdateMsRef.current < CURRENT_SECONDS_UPDATE_INTERVAL_MS) return;
+          lastCurrentSecondsUpdateMsRef.current = now;
         }
+        setCurrentSeconds(ticksToSeconds(t, track.timescale));
       });
 
       const loadResult = await engine.load(selected, sampleIndex);
@@ -201,6 +245,10 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
 
   return {
     videoRef,
+    engineRef,
+    sampleIndexRef,
+    videoTrackRef,
+    frameCacheRef,
     file,
     tracks,
     sourceRows,

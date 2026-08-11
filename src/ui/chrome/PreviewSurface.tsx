@@ -14,6 +14,11 @@ export interface PreviewSurfaceProps {
   unsupported?: UnsupportedInfo | null;
   /** When provided, a real <video> is mounted instead of the placeholder texture -- see App.tsx. */
   videoRef?: RefObject<HTMLVideoElement | null>;
+  /** Cache-only drag-scrub preview -- design/README.md: "the preview shows the nearest cached
+   * filmstrip tile" while dragging, since a real <video> seek is 281ms p50, 17x too slow for 60Hz.
+   * Task 4b's TimelineController draws onto this canvas only while scrubActive; otherwise it's
+   * cleared so the real <video> shows through. See state/useTimelineController.ts. */
+  scrubOverlayRef?: RefObject<HTMLCanvasElement | null>;
   /** Export overlay/toast, positioned absolutely inside this surface -- see chrome/Stage.tsx. */
   children?: ReactNode;
 }
@@ -27,6 +32,7 @@ export function PreviewSurface({
   openErrorMessage,
   unsupported,
   videoRef,
+  scrubOverlayRef,
   children,
 }: PreviewSurfaceProps) {
   return (
@@ -50,6 +56,7 @@ export function PreviewSurface({
               <div className={styles.stageLabel}>decoded frame</div>
             </>
           )}
+          {videoRef !== undefined && <canvas ref={scrubOverlayRef} className={styles.scrubOverlay} />}
           <div className={styles.frameOverlay}>
             <span>{frameLabel}</span>
             <span>{timecode}</span>

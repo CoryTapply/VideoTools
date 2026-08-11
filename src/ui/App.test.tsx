@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { App } from './App.tsx';
 import type { Screen } from './state/app-state.ts';
 
@@ -38,5 +38,29 @@ describe('App', () => {
   it('shows the title bar and status bar for screen === ready', () => {
     const { queryByText } = render(<App initialState={{ screen: 'ready' }} />);
     expect(queryByText('1 frame = 5px')).toBeTruthy();
+  });
+
+  it('Alt+I (clear-in) resets the in point to 00:00:00:00', () => {
+    const { getByText } = render(<App initialState={{ screen: 'ready' }} />);
+    fireEvent.keyDown(window, { key: 'i', altKey: true });
+    expect(getByText('00:00:00:00')).toBeTruthy();
+  });
+
+  it('Alt+O (clear-out) is a no-op without a real file open (no known duration)', () => {
+    const { queryByText } = render(<App initialState={{ screen: 'ready', tout: 6812 }} />);
+    fireEvent.keyDown(window, { key: 'o', altKey: true });
+    // 6812s at the fixture's 60fps -- unchanged, since media.durationSeconds is null pre-file-open.
+    expect(queryByText('01:53:32:00')).toBeTruthy();
+  });
+
+  it('"Keep exact frame" restores the pre-enforcement in point and switches to exact mode', () => {
+    // notice.at (6690.5s) is the keyframe-enforced value; notice.delta (0.5s) is enforced-minus-
+    // original, so the restored value should be 6690.5 - 0.5 = 6690s.
+    const { getByText } = render(
+      <App initialState={{ screen: 'ready', tin: 6690.5, tout: 6812, notice: { delta: 0.5, at: 6690.5, which: 'in' }, noticeOpen: true }} />,
+    );
+    fireEvent.click(getByText('Keep exact frame'));
+    // 6690s at the fixture's 60fps -- HH:MM:SS:FF.
+    expect(getByText('01:51:30:00')).toBeTruthy();
   });
 });

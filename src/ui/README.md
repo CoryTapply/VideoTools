@@ -33,6 +33,13 @@ the *type* and an inert factory for the 60Hz-mutable fields (`t`, `viewStart`, `
 ...) -- establishing the seam Task 4b implements against, without this task building any rAF loop
 or drawing itself.
 
+`design/README.md`'s State Management table types `t`/`viewStart`/`viewSpan` as seconds;
+`timeline-controller-state.ts` types them as presentation ticks instead. Every real API Task 4b
+calls (`FrameCache`, `SampleIndex`'s presentation-native queries, `PlaybackEngine`) is tick-native,
+so converting once at the React boundary (`tin`/`tout` stay seconds in `app-state.ts`) is cheaper
+and safer than float-converting on every 60Hz cache lookup -- see `src/media/index/README.md`'s
+"never float seconds outside the index module" rule.
+
 ## Reconciling the state table
 
 `design/README.md`'s own State Management section already types `screen` with eight values
