@@ -71,6 +71,14 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   // J/L shuttle rate, ticks/sec-multiplier-style (see state/shuttle.ts) -- a plain ref, not React
   // state, since it changes on every OS key-repeat and never needs to trigger a render.
   const shuttleRateRef = useRef(0);
+  // Reverse shuttle (J) can't use <video>.playbackRate the way forward shuttle (L) does --
+  // browsers don't support negative playback rates, so the video element just sits frozen. This
+  // drives reverse manually: an rAF loop tracks a "virtual" position and repeatedly calls
+  // engine.seek(), relying on NativeVideoEngine's own seek-coalescing (the same mechanism
+  // drag-scrub's settle-seek uses) rather than fighting it.
+  const reverseShuttleHandleRef = useRef<number | undefined>(undefined);
+  const reverseShuttleVirtualTicksRef = useRef(0);
+  const reverseShuttleLastTimeRef = useRef(0);
 
   function triggerOpen() {
     fileInputRef.current?.click();
@@ -101,6 +109,30 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   });
 
   useEffect(() => {
+    function stopReverseShuttle() {
+      if (reverseShuttleHandleRef.current !== undefined) {
+        cancelAnimationFrame(reverseShuttleHandleRef.current);
+        reverseShuttleHandleRef.current = undefined;
+      }
+    }
+
+    function reverseShuttleTick() {
+      const engine = media.engineRef.current;
+      const videoTrack = media.videoTrackRef.current;
+      if (engine === null || videoTrack === null || shuttleRateRef.current >= 0) {
+        stopReverseShuttle();
+        return;
+      }
+      const now = performance.now();
+      const dtSeconds = (now - reverseShuttleLastTimeRef.current) / 1000;
+      reverseShuttleLastTimeRef.current = now;
+      const deltaTicks = Math.abs(shuttleRateRef.current) * dtSeconds * videoTrack.timescale;
+      reverseShuttleVirtualTicksRef.current = Math.max(0, reverseShuttleVirtualTicksRef.current - deltaTicks);
+      timelineControllerRef.current.t = reverseShuttleVirtualTicksRef.current;
+      void engine.seek(reverseShuttleVirtualTicksRef.current, 'accurate');
+      reverseShuttleHandleRef.current = requestAnimationFrame(reverseShuttleTick);
+    }
+
     function handleKeyDown(evt: KeyboardEvent) {
       const action = matchShortcut(evt);
       if (action === null) {
@@ -108,12 +140,29 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       }
       // undo has no real handler yet -- it needs Task 5/M5's command stack.
       switch (action) {
-        case 'shuttle-back':
+        case 'shuttle-back': {
+          evt.preventDefault();
+          const engine = media.engineRef.current;
+          if (engine === null) return;
+          const alreadyRunning = reverseShuttleHandleRef.current !== undefined;
+          shuttleRateRef.current = nextShuttleRate(shuttleRateRef.current, -1);
+          // <video>.playbackRate can't go negative in any browser, so L's native-rate approach
+          // doesn't work for reverse -- see reverseShuttleTick's own comment above.
+          engine.setPlaybackRate(1);
+          if (!alreadyRunning) {
+            engine.pause();
+            reverseShuttleVirtualTicksRef.current = engine.currentTime;
+            reverseShuttleLastTimeRef.current = performance.now();
+            reverseShuttleHandleRef.current = requestAnimationFrame(reverseShuttleTick);
+          }
+          break;
+        }
         case 'shuttle-forward': {
           evt.preventDefault();
           const engine = media.engineRef.current;
           if (engine === null) return;
-          shuttleRateRef.current = nextShuttleRate(shuttleRateRef.current, action === 'shuttle-back' ? -1 : 1);
+          stopReverseShuttle();
+          shuttleRateRef.current = nextShuttleRate(shuttleRateRef.current, 1);
           engine.setPlaybackRate(shuttleRateRef.current);
           if (engine.state !== 'playing') engine.play();
           break;
@@ -267,6 +316,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       const key = evt.key.toLowerCase();
       if (key !== 'j' && key !== 'l') return;
       shuttleRateRef.current = 0;
+      stopReverseShuttle();
       const engine = media.engineRef.current;
       if (engine === null) return;
       engine.setPlaybackRate(1);
@@ -277,6 +327,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      stopReverseShuttle();
     };
   }, [state.shortcuts, state.panel, state.full, canExport, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds, media.videoTrackRef, media.engineRef, timelineControllerRef]);
 
