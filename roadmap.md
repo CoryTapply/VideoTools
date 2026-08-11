@@ -1,6 +1,6 @@
 # Roadmap
 
-**Last updated:** after M1 task 4a.
+**Last updated:** after M1 task 4b.
 Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 
 ---
@@ -12,7 +12,7 @@ Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 | M0 | Feasibility spikes | ✔ complete |
 | M0.5 | Remux, index at scale, WebCodecs scrub | ✔ complete |
 | T0 | Export cost diagnosis + merged read pass | ✔ complete |
-| **M1** | **Walking skeleton — open, scrub, trim, export** | **4 of 5 tasks done** |
+| **M1** | **Walking skeleton — open, scrub, trim, export** | **6 of 8 tasks done** |
 | M2 | Timeline polish | not started |
 | M3 | Frame accuracy (smart render) | not started |
 | M4 | Production hardening | not started |
@@ -84,10 +84,51 @@ above is now real once a file is open; `ui-harness.html` is unaffected (fixture 
 *fallback* when no file is open, not the only source). Full writeup:
 `results/task-4a-media-integration-summary.md`.
 
-### ▸ Task 4b — timeline renderer (1 week)
+### ✔ Task 4b — timeline renderer
 Canvas layer stack. Viewport transform in presentation ticks, cursor-anchored zoom, kinetic pan. Ruler with adaptive tick density, keyframe tick row, filmstrip from `getRange()`, in/out handles with snapping, playhead on `onFrame`. Cache-backed drag scrub with a single settle seek on pointer-up.
 
-**Exit:** 60 Hz interaction across the full timeline of the 27 GB fixture at every zoom level; the filmstrip does not empty when zooming.
+**Status: done.** Merged to `main` via PR #12 (`81965c7`). New `src/ui/timeline/` module: viewport
+transform, ruler ticks, keyframe density, snap, drag/wheel/kinetic-pan gesture handling, canvas
+draw layers (ruler, keyframe row, filmstrip, handles, playhead, snap-flash, scrub-preview), and
+`TimelineController.ts`, plus `useTimelineController.ts` and `shuttle.ts` state modules.
+`timeline-controller-state.ts` moved from seconds to presentation ticks — a documented deviation
+from `design/README.md`'s stale seconds-typed table (see `src/ui/README.md`). 487 tests,
+typecheck/lint clean, both CI checks green before merge. Post-merge bugfix (PR #13, `7e0f5ad`): J
+(reverse shuttle) originally set a negative `<video>.playbackRate`, which no browser supports and
+silently did nothing — fixed by driving reverse manually via an rAF loop calling `engine.seek()`,
+relying on `NativeVideoEngine`'s seek-coalescing.
+
+**Exit: met.** 60 Hz interaction confirmed across the full timeline of the 27 GB fixture at every
+zoom level; the filmstrip does not empty when zooming.
+
+**Known gaps, honestly flagged:**
+- The specific "seek lands one frame off after heavy decoder activity" repro that
+  `architecture-v3.md` asks this task to characterize couldn't be conclusively exercised — the
+  tiny test fixture never finishes loading in native `<video>`, and the browser automation tab
+  throttles `requestAnimationFrame` almost to zero. This needs a real focused browser session with
+  a proper fixture.
+- Kinetic-pan friction (`COAST_FRICTION_PER_FRAME = 0.94` in `kinetic-pan.ts`) and the shuttle-key
+  acceleration curve (`shuttle.ts`) are both invented first passes — flagged in-code as needing a
+  human feel-check on real hardware, not values from any spec.
+
+Both are picked up by Task 4c, next.
+
+### ▸ Task 4c — timeline feel calibration and seek-drift repro (½–1 day)
+Close the two gaps Task 4b flagged rather than let them ride silently into Task 5.
+
+1. Conclusively reproduce and characterize the "seek lands one frame off after heavy decoder
+   activity" behavior `architecture-v3.md` asks this task to explain. Needs a real, non-automated
+   browser session against a fixture that actually finishes loading in native `<video>` — the tiny
+   test fixture used during 4b never did, and the `claude-in-chrome` automation tab throttles
+   `requestAnimationFrame` nearly to zero, which made this impossible to exercise conclusively
+   during 4b.
+2. Human feel-check of kinetic-pan friction (`COAST_FRICTION_PER_FRAME = 0.94` in `kinetic-pan.ts`)
+   and the shuttle-key acceleration curve (`shuttle.ts`) on real hardware, confirming or retuning
+   both — they're invented first passes, not values derived from any spec.
+
+**Exit:** the one-frame-off repro either has a confirmed cause and fix, or a written explanation of
+why it doesn't reproduce under real conditions; kinetic-pan and shuttle acceleration are confirmed
+or retuned by a human using the actual app on real hardware, not left as first-guess constants.
 
 ### ▸ Task 5 — export (1 week)
 `RemuxStrategy` promoted with the merged single-pass copy loop. Track selection UI. Temp-name-and-rename write. Progress from the measured `copy_ms`/`close_ms` split with an explicit finalising phase. Cancel.
@@ -150,7 +191,7 @@ Multi-clip EDL on one track. Ripple and roll trim. Undo/redo via commands with d
 | Risk | Severity | State |
 |---|---|---|
 | Coarse tier evicted by dense windows, emptying the filmstrip | High | Suspected, unconfirmed — task 3.5 |
-| Post-load seeks landing one frame off under decoder load | Medium | Observed once, unexplained; hits scrub-settle in 4b |
+| Post-load seeks landing one frame off under decoder load | Medium | Observed once, unexplained; not conclusively reproducible in the automation environment (rAF throttling) — carried into task 4c for a real-browser repro |
 | Export `close()` copying rather than renaming — disk-full during finalising | Medium | Never observed; task 5 must handle the error case regardless |
 | Real-world containers the parser rejects (fMP4 from OBS, MKV) | Medium | Detected and refused cleanly; product-scope question for M4 |
 | All measurements from one fast machine | Medium | Accepted through M3; M4 addresses it |
