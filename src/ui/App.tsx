@@ -30,7 +30,11 @@ import {
 } from './fixtures.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
 import { useMediaSession } from './state/media-session.ts';
+import { nextShuttleRate } from './state/shuttle.ts';
 import { formatFrameNumber, formatTimecode } from './state/snap-notice.ts';
+import { useTimelineControllerRef } from './state/timeline-controller-state.ts';
+import { useTimelineController } from './state/useTimelineController.ts';
+import { fitToDuration, zoomAtPlayhead } from './timeline/viewport.ts';
 import { appReducer, createInitialAppState } from './state/app-state.ts';
 import type { ChangeEvent } from 'react';
 import type { AppState } from './state/app-state.ts';
@@ -42,6 +46,9 @@ export interface AppProps {
 
 const FULLSCREEN_TIMELINE_CAP_PX = 140;
 const OPEN_FILE_ACCEPT = 'video/mp4,video/quicktime,.mp4,.mov';
+// Not specified by design/README.md (which only names the "+"/"-"/Shift+Z chords, not a step
+// size) -- 20% per keypress is a reasonable default, isolated here so it's a one-line tune.
+const KEYBOARD_ZOOM_IN_FACTOR = 0.8;
 
 export function App({ initialState, exactAvailable = true }: AppProps) {
   const [state, dispatch] = useReducer(
@@ -51,7 +58,19 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   );
   const media = useMediaSession(dispatch);
   const { togglePlay, stepFrame, jumpToKeyframe, seekToSeconds } = media;
+  const timelineControllerRef = useTimelineControllerRef();
+  const { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef } = useTimelineController(
+    media,
+    timelineControllerRef,
+    dispatch,
+    state.trimMode,
+    state.tin,
+    state.tout,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // J/L shuttle rate, ticks/sec-multiplier-style (see state/shuttle.ts) -- a plain ref, not React
+  // state, since it changes on every OS key-repeat and never needs to trigger a render.
+  const shuttleRateRef = useRef(0);
 
   function triggerOpen() {
     fileInputRef.current?.click();
@@ -87,9 +106,18 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       if (action === null) {
         return;
       }
-      // shuttle, clear-in/out, zoom/zoom-fit, jump-start/end, and undo have no real handler yet --
-      // they need the timeline (Task 4b) or export (Task 5).
+      // undo has no real handler yet -- it needs Task 5/M5's command stack.
       switch (action) {
+        case 'shuttle-back':
+        case 'shuttle-forward': {
+          evt.preventDefault();
+          const engine = media.engineRef.current;
+          if (engine === null) return;
+          shuttleRateRef.current = nextShuttleRate(shuttleRateRef.current, action === 'shuttle-back' ? -1 : 1);
+          engine.setPlaybackRate(shuttleRateRef.current);
+          if (engine.state !== 'playing') engine.play();
+          break;
+        }
         case 'toggle-shortcuts':
           evt.preventDefault();
           dispatch({ type: 'shortcuts/toggle' });
@@ -165,6 +193,58 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           evt.preventDefault();
           seekToSeconds(latestRef.current.tout);
           break;
+        case 'clear-in':
+          evt.preventDefault();
+          dispatch({ type: 'in-out/set', tin: 0, tout: latestRef.current.tout });
+          break;
+        case 'clear-out': {
+          evt.preventDefault();
+          const { tin, durationSeconds } = latestRef.current;
+          if (durationSeconds !== null) {
+            dispatch({ type: 'in-out/set', tin, tout: durationSeconds });
+          }
+          break;
+        }
+        case 'jump-start':
+          evt.preventDefault();
+          seekToSeconds(0);
+          break;
+        case 'jump-end':
+          evt.preventDefault();
+          if (latestRef.current.durationSeconds !== null) {
+            seekToSeconds(latestRef.current.durationSeconds);
+          }
+          break;
+        case 'zoom-in':
+        case 'zoom-out': {
+          evt.preventDefault();
+          const videoTrack = media.videoTrackRef.current;
+          const controller = timelineControllerRef.current;
+          if (videoTrack?.video === undefined || controller.viewSpan <= 0) break;
+          const ticksPerFrame = videoTrack.video.nominalFrameRate > 0 ? videoTrack.timescale / videoTrack.video.nominalFrameRate : 0;
+          const factor = action === 'zoom-in' ? KEYBOARD_ZOOM_IN_FACTOR : 1 / KEYBOARD_ZOOM_IN_FACTOR;
+          const zoomed = zoomAtPlayhead(
+            { viewStart: controller.viewStart, viewSpan: controller.viewSpan, widthPx: controller.tlW },
+            controller.t,
+            factor,
+            ticksPerFrame,
+            videoTrack.duration,
+          );
+          controller.viewStart = zoomed.viewStart;
+          controller.viewSpan = zoomed.viewSpan;
+          controller.panVelocityTicksPerMs = 0;
+          break;
+        }
+        case 'zoom-fit': {
+          evt.preventDefault();
+          const videoTrack = media.videoTrackRef.current;
+          if (videoTrack === null) break;
+          const fit = fitToDuration(videoTrack.duration);
+          timelineControllerRef.current.viewStart = fit.viewStart;
+          timelineControllerRef.current.viewSpan = fit.viewSpan;
+          timelineControllerRef.current.panVelocityTicksPerMs = 0;
+          break;
+        }
         case 'close':
           evt.preventDefault();
           if (state.shortcuts) {
@@ -179,11 +259,26 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           break;
       }
     }
+    // J/L don't repeat via keydown's own evt.repeat forever without a release signal -- keyup is
+    // the only place that knows the shuttle key stopped being held, so it's the only place that
+    // can reset the rate and pause. matchShortcut has no keyup counterpart (it's keydown-chord
+    // shaped), so this checks the raw key directly rather than routing through it.
+    function handleKeyUp(evt: KeyboardEvent) {
+      const key = evt.key.toLowerCase();
+      if (key !== 'j' && key !== 'l') return;
+      shuttleRateRef.current = 0;
+      const engine = media.engineRef.current;
+      if (engine === null) return;
+      engine.setPlaybackRate(1);
+      engine.pause();
+    }
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [state.shortcuts, state.panel, state.full, canExport, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds]);
+  }, [state.shortcuts, state.panel, state.full, canExport, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds, media.videoTrackRef, media.engineRef, timelineControllerRef]);
 
   const showChrome = !state.full;
   // Title bar, status bar, transport bar, splitter, and timeline all have nothing to report with
@@ -260,6 +355,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         openErrorMessage={openErrorMessage}
         unsupported={media.unsupported}
         videoRef={media.file !== null ? media.videoRef : undefined}
+        scrubOverlayRef={media.file !== null ? scrubOverlayCanvasRef : undefined}
         onOpenFile={triggerOpen}
         onFileDrop={(file) => {
           void media.openFile(file);
@@ -311,6 +407,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       {showFileChrome && (
         <TransportBar
           timecode={timecode}
+          timecodeRef={transportTimecodeRef}
           playing={media.playing}
           onTogglePlay={togglePlay}
           onStepBack={() => {
@@ -346,7 +443,11 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       )}
 
       {showFileChrome && (
-        <TimelineRegion heightPx={timelineHeight} indexing={state.screen === 'indexing' || state.screen === 'opening'} />
+        <TimelineRegion
+          heightPx={timelineHeight}
+          indexing={state.screen === 'indexing' || state.screen === 'opening'}
+          canvasRef={timelineCanvasRef}
+        />
       )}
 
       {showFileChrome && (
@@ -363,6 +464,18 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
             dispatch({ type: 'notice/open-set', open: false });
           }}
           onKeepExact={() => {
+            // design/README.md: "Keep exact frame restores the user's original position and
+            // switches the mode to exact." The pre-enforcement value is recoverable from the
+            // notice itself: notice.at is the enforced (keyframe-snapped) seconds, notice.delta
+            // is enforced-minus-original, so original = at - delta.
+            if (state.notice !== null) {
+              const restoredSeconds = state.notice.at - state.notice.delta;
+              dispatch({
+                type: 'in-out/set',
+                tin: state.notice.which === 'in' ? restoredSeconds : state.tin,
+                tout: state.notice.which === 'out' ? restoredSeconds : state.tout,
+              });
+            }
             dispatch({ type: 'notice/keep-exact' });
           }}
           onDismissNotice={() => {

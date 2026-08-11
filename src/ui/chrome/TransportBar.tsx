@@ -1,13 +1,17 @@
 import { NextKeyframeIcon, PauseIcon, PlayIcon, PrevKeyframeIcon, StepBackIcon, StepForwardIcon } from '../icons/index.tsx';
 import styles from './TransportBar.module.css';
+import type { RefObject } from 'react';
 import type { TrimMode } from '../state/app-state.ts';
 
 export interface TransportBarProps {
   /**
-   * Static for now -- design/README.md's transport-bar spec has this written directly to the DOM
-   * from the 4b rAF loop, bypassing React. 4a just reserves the slot.
+   * The harness/initial fallback value -- state/useTimelineController.ts's TimelineController
+   * overwrites `timecodeRef`'s textContent directly from its rAF loop once a real file is open
+   * (design/README.md's transport-bar spec), bypassing React so playhead movement never
+   * re-renders. `timecode` stays the only source in ui-harness.html, which never opens a file.
    */
   timecode: string;
+  timecodeRef?: RefObject<HTMLDivElement | null>;
   playing: boolean;
   onTogglePlay: () => void;
   onStepBack: () => void;
@@ -24,6 +28,7 @@ export interface TransportBarProps {
 
 export function TransportBar({
   timecode,
+  timecodeRef,
   playing,
   onTogglePlay,
   onStepBack,
@@ -39,7 +44,9 @@ export function TransportBar({
 }: TransportBarProps) {
   return (
     <div className={styles.root}>
-      <div className={styles.timecode}>{timecode}</div>
+      <div ref={timecodeRef} className={styles.timecode}>
+        {timecode}
+      </div>
       <div className={styles.buttons}>
         <button type="button" className={styles.button} title="Previous keyframe (↑)" onClick={onPrevKeyframe}>
           <PrevKeyframeIcon />

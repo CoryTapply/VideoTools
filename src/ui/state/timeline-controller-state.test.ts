@@ -10,14 +10,17 @@ describe('createTimelineControllerState', () => {
       viewSpan: 0,
       playing: false,
       drag: null,
+      dragValueTicks: null,
+      scrubActive: false,
+      panVelocityTicksPerMs: 0,
       snapFlash: null,
       tlW: 0,
     });
   });
 
   it('accepts overrides', () => {
-    const state = createTimelineControllerState({ t: 12.5, playing: true });
-    expect(state.t).toBe(12.5);
+    const state = createTimelineControllerState({ t: 90000, playing: true });
+    expect(state.t).toBe(90000);
     expect(state.playing).toBe(true);
     expect(state.viewSpan).toBe(0);
   });
