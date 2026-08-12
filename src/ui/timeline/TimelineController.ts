@@ -18,6 +18,7 @@ import { drawRuler } from './draw/ruler.ts';
 import { drawScrubPreview } from './draw/scrub-preview.ts';
 import { drawSnapFlash, snapFlashOpacity } from './draw/snap-flash.ts';
 import { decayVelocity, isCoastingDone, updateVelocity } from './kinetic-pan.ts';
+import { describeSeekDrift } from './seek-drift.ts';
 import { snapToViewport } from './snap.ts';
 import { fitToDuration, panByPixels, timeToX, zoomAtCursor } from './viewport.ts';
 import { isZoomGesture, wheelPanDeltaPx, wheelZoomFactor } from './wheel-gesture.ts';
@@ -30,6 +31,7 @@ import type { Unsubscribe } from '../../media/playback/PlaybackEngine.ts';
 import type { RefObject } from 'react';
 import type { TrimMode } from '../state/app-state.ts';
 import type { TimelineControllerState } from '../state/timeline-controller-state.ts';
+import type { SeekDriftReport } from './seek-drift.ts';
 import type { Time, Viewport } from './types.ts';
 
 /** In/out points, seconds -- the same shape app-state.ts's tin/tout live in. */
@@ -206,8 +208,33 @@ export class TimelineController {
     if (!state.scrubActive) return;
     state.scrubActive = false;
     const engine = this.engineRef.current;
-    if (engine !== null) void engine.seek(state.t, 'accurate');
+    if (engine === null) return;
+    const requestedTicks = state.t;
+    void engine.seek(requestedTicks, 'accurate').then(() => {
+      this.logSeekDrift(requestedTicks, engine.currentTime);
+    });
   };
+
+  /** Task 4c diagnostic: architecture-v3.md flags settle-seeks occasionally landing one frame off
+   * "after heavy decoder activity" but it was never conclusively reproduced (roadmap.md's Task 4c)
+   * -- automation throttles rAF and the committed tiny fixture never finishes loading in a real
+   * <video>. Rather than eyeball it, every real settle-seek self-reports here. Dev-only: Vite
+   * dead-code-eliminates the whole block (and this.seekDriftLog's cost) from production builds. */
+  private logSeekDrift(requestedTicks: Time, landedTicks: Time): void {
+    if (!import.meta.env.DEV) return;
+    const index = this.sampleIndexRef.current;
+    const videoTrack = this.videoTrackRef.current;
+    if (index === null || videoTrack === null) return;
+    const report = describeSeekDrift(requestedTicks, landedTicks, index, videoTrack.trackId);
+    const w = window as unknown as { __seekDriftLog?: SeekDriftReport[] };
+    w.__seekDriftLog ??= [];
+    w.__seekDriftLog.push(report);
+    if (report.framesOff !== 0) {
+      console.warn(
+        `[seek-drift] settle-seek landed ${String(report.framesOff)} frame(s) off -- requested frame ${String(report.requestedFrame)} (${String(requestedTicks)} ticks), landed frame ${String(report.landedFrame)} (${String(landedTicks)} ticks)`,
+      );
+    }
+  }
 
   private updateScrubTime(evt: PointerEvent): void {
     const videoTrack = this.videoTrackRef.current;
