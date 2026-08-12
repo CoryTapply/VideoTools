@@ -1,8 +1,12 @@
-import { useEffect, useReducer, useRef } from 'react';
+import { useEffect, useMemo, useReducer, useRef } from 'react';
 import styles from './App.module.css';
-// Direct submodule import, not the barrel -- see state/app-state.ts's comment on why.
+// Direct submodule imports, not the barrel -- see state/app-state.ts's comment on why.
 import { formatIndexError } from '../media/index/errors.ts';
+import { estimateExportBytes } from '../media/export/estimate.ts';
+import { resolveExportSelection } from '../media/export/select.ts';
+import { formatExportError } from '../media/export/types.ts';
 import { DegradedStrip } from './chrome/DegradedStrip.tsx';
+import { ExportErrorToast } from './chrome/ExportErrorToast.tsx';
 import { ExportOverlay } from './chrome/ExportOverlay.tsx';
 import { ExportToast } from './chrome/ExportToast.tsx';
 import { KeyboardOverlay } from './chrome/KeyboardOverlay.tsx';
@@ -28,6 +32,8 @@ import {
   ZOOM_LABEL,
   formatExportLine,
 } from './fixtures.ts';
+import { selectedRealTrackIds } from './media/derive-source-info.ts';
+import { useExportSession } from './state/export-session.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
 import { useMediaSession } from './state/media-session.ts';
 import { nextShuttleRate } from './state/shuttle.ts';
@@ -50,6 +56,15 @@ const OPEN_FILE_ACCEPT = 'video/mp4,video/quicktime,.mp4,.mov';
 // size) -- 20% per keypress is a reasonable default, isolated here so it's a one-line tune.
 const KEYBOARD_ZOOM_IN_FACTOR = 0.8;
 
+/** Real progress line once a real estimate is available -- deliberately doesn't fabricate
+ * throughput/ETA the way fixtures.ts's formatExportLine does; "N / M MB" is exactly what's known. */
+function formatExportProgressLine(percent: number, totalBytesEstimate: number): string {
+  if (totalBytesEstimate <= 0) return `${percent.toString()}%`;
+  const writtenMb = Math.round((totalBytesEstimate * percent) / 100 / (1024 * 1024));
+  const totalMb = Math.round(totalBytesEstimate / (1024 * 1024));
+  return `${writtenMb.toString()} / ${totalMb.toString()} MB`;
+}
+
 export function App({ initialState, exactAvailable = true }: AppProps) {
   const [state, dispatch] = useReducer(
     appReducer,
@@ -57,7 +72,13 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     (overrides) => createInitialAppState({ tin: DEFAULT_IN_SECONDS, tout: DEFAULT_OUT_SECONDS, ...overrides }),
   );
   const media = useMediaSession(dispatch);
+  const exportSession = useExportSession(dispatch, media);
   const { togglePlay, stepFrame, jumpToKeyframe, seekToSeconds } = media;
+  // Real once a file is open; otherwise the design fixture -- moved up from the other derived
+  // render values below so latestRef (just below) can keep the keydown handler's 'export' case
+  // fresh without a stale closure.
+  const tracks = media.tracks ?? TRACKS;
+  const sourceFileName = media.file?.name ?? FILE_NAME;
   const timelineControllerRef = useTimelineControllerRef();
   const { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef } = useTimelineController(
     media,
@@ -98,6 +119,10 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     tout: state.tout,
     currentSeconds: media.currentSeconds,
     durationSeconds: media.durationSeconds,
+    sel: state.sel,
+    tracks,
+    sourceFileName,
+    startExport: exportSession.startExport,
   });
   useEffect(() => {
     latestRef.current = {
@@ -105,6 +130,10 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       tout: state.tout,
       currentSeconds: media.currentSeconds,
       durationSeconds: media.durationSeconds,
+      sel: state.sel,
+      tracks,
+      sourceFileName,
+      startExport: exportSession.startExport,
     };
   });
 
@@ -178,7 +207,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         case 'export':
           evt.preventDefault();
           if (canExport) {
-            dispatch({ type: 'screen/set', screen: 'exporting' });
+            const { tin, tout, sel, tracks: latestTracks, sourceFileName: latestSourceFileName, startExport } = latestRef.current;
+            void startExport({ tin, tout, sel, tracks: latestTracks, sourceFileName: latestSourceFileName });
           }
           break;
         case 'open-file':
@@ -342,12 +372,28 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
 
   // Real once a file is open; otherwise the design fixture, used both by ui-harness.html's
   // variant switcher (which never opens a real file) and by App before anything is opened.
+  // (tracks/sourceFileName themselves are computed earlier, alongside latestRef.)
   const fileName = media.file?.name ?? (hasFile ? FILE_NAME : null);
   const formatChip = media.formatChip ?? (hasFile ? FORMAT_CHIP : null);
-  const tracks = media.tracks ?? TRACKS;
   const sourceRows = media.sourceRows ?? SOURCE_PANEL_ROWS;
-  const sourceFileName = media.file?.name ?? FILE_NAME;
   const openErrorMessage = state.openError !== null ? formatIndexError(state.openError) : null;
+  const exportErrorMessage = state.exportError !== null ? formatExportError(state.exportError) : null;
+
+  // Cheap, no-I/O real estimate for the Export panel's "est. size" row -- null (falls back to an
+  // illustrative formula) until a real file/index is open.
+  const estimatedExportBytes = useMemo(() => {
+    const sampleIndex = media.sampleIndexRef.current;
+    if (sampleIndex === null) return null;
+    const tracksRaw = sampleIndex.tracks();
+    const selection = resolveExportSelection(sampleIndex, tracksRaw, selectedRealTrackIds(tracks, state.sel), state.tin, state.tout);
+    if ('error' in selection) return null;
+    const tracksById = new Map(tracksRaw.map((t) => [t.trackId, t]));
+    return estimateExportBytes(selection, tracksById);
+    // media.sampleIndexRef is a stable ref object; its `.current` mutation always coincides with
+    // one of these other deps changing (openFile dispatches sel/in-out right after setting it), so
+    // it doesn't need to be listed itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [media.file, tracks, state.sel, state.tin, state.tout]);
 
   const timecode = media.file !== null ? media.timecode : formatTimecode(PLAYHEAD_SECONDS * FPS, FPS);
   const frameLabel = media.file !== null ? media.frameLabel : formatFrameNumber(PLAYHEAD_SECONDS * FPS);
@@ -380,7 +426,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           canExport={canExport}
           onOpen={triggerOpen}
           onExport={() => {
-            dispatch({ type: 'screen/set', screen: 'exporting' });
+            void exportSession.startExport({ tin: state.tin, tout: state.tout, sel: state.sel, tracks, sourceFileName });
           }}
           onReconnect={() => {
             dispatch({ type: 'permission-lost/set', lost: false });
@@ -401,6 +447,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         sel={state.sel}
         tin={state.tin}
         tout={state.tout}
+        estimatedExportBytes={estimatedExportBytes}
         frameLabel={frameLabel}
         timecode={timecode}
         openErrorMessage={openErrorMessage}
@@ -434,23 +481,36 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
             <ExportOverlay
               percent={state.exportPct}
               phase={state.screen === 'finalising' ? 'finalising' : 'copy'}
-              line={formatExportLine(state.exportPct)}
+              line={
+                estimatedExportBytes !== null
+                  ? formatExportProgressLine(state.exportPct, estimatedExportBytes)
+                  : formatExportLine(state.exportPct)
+              }
               onCancel={() => {
-                dispatch({ type: 'screen/set', screen: 'ready' });
+                exportSession.cancelExport();
               }}
             />
           )
         }
         toast={
-          state.toast && (
+          state.toast ? (
             <ExportToast
-              durationLabel={EXPORT_DURATION_LABEL}
-              outPath={EXPORT_OUT_PATH}
+              durationLabel={exportSession.lastResult?.durationLabel ?? EXPORT_DURATION_LABEL}
+              outPath={exportSession.lastResult?.outPath ?? EXPORT_OUT_PATH}
               onShowInFolder={() => {}}
               onTrimAnother={() => {
                 dispatch({ type: 'toast/set', show: false });
               }}
             />
+          ) : (
+            exportErrorMessage !== null && (
+              <ExportErrorToast
+                message={exportErrorMessage}
+                onDismiss={() => {
+                  dispatch({ type: 'export-error/set', error: null });
+                }}
+              />
+            )
           )
         }
       />

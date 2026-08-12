@@ -9,6 +9,7 @@ import {
   deriveTrackSummaries,
   formatFileSize,
   friendlyCodecName,
+  selectedRealTrackIds,
 } from './derive-source-info.ts';
 import type { TrackIndex } from '../../media/index/track-index.ts';
 
@@ -161,7 +162,7 @@ describe('deriveExportRows', () => {
   it('reflects selection count and derives the output name from the source filename', () => {
     const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
     const sel = defaultTrackSelection(summaries);
-    const rows = deriveExportRows(summaries, sel, 0, 10, 'session-4.mp4');
+    const rows = deriveExportRows(summaries, sel, 0, 10, 'session-4.mp4', null);
     const byLabel = Object.fromEntries(rows.map((r) => [r.label, r.value]));
     expect(byLabel.audio).toBe('stream copy × 1');
     expect(byLabel.name).toBe('session-4_clip.mp4');
@@ -170,8 +171,28 @@ describe('deriveExportRows', () => {
 
   it('flags "none selected" in warning tone when no audio track is picked', () => {
     const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
-    const rows = deriveExportRows(summaries, { V1: true, A1: false }, 0, 10, 'x.mp4');
+    const rows = deriveExportRows(summaries, { V1: true, A1: false }, 0, 10, 'x.mp4', null);
     const audioRow = rows.find((r) => r.label === 'audio');
     expect(audioRow).toEqual({ label: 'audio', value: 'none selected', tone: 'warning' });
+  });
+
+  it('falls back to the illustrative formula when no real estimate is available', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
+    const rows = deriveExportRows(summaries, { V1: true, A1: true }, 0, 10, 'x.mp4', null);
+    expect(rows.find((r) => r.label === 'est. size')?.value).toBe('207 MB');
+  });
+
+  it('uses a real, formatted byte count when an estimate is provided', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
+    const rows = deriveExportRows(summaries, { V1: true, A1: true }, 0, 10, 'x.mp4', 512_000_000);
+    expect(rows.find((r) => r.label === 'est. size')?.value).toBe('512.0 MB');
+  });
+});
+
+describe('selectedRealTrackIds', () => {
+  it('maps selected display ids back to real MP4 track ids', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack({ trackId: 3 }), makeAudioTrack({ trackId: 7 })]);
+    // V1 -> trackId 1, A1 -> trackId 3, A2 -> trackId 7 (construction order, see deriveTrackSummaries)
+    expect(selectedRealTrackIds(summaries, { V1: true, A1: false, A2: true })).toEqual(new Set([1, 7]));
   });
 });

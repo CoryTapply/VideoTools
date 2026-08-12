@@ -117,6 +117,7 @@ export function deriveTrackSummaries(tracks: readonly TrackIndex[]): TrackSummar
       const durationSeconds = ticksToSeconds(track.duration, track.timescale);
       summaries.push({
         id,
+        trackId: track.trackId,
         name: 'Video',
         meta: `${friendlyCodecName(track.codec)} · ${track.video.displayWidth.toString()}×${track.video.displayHeight.toString()} · ${track.video.nominalFrameRate.toFixed(2)} fps · ${formatDurationHMS(durationSeconds)}`,
         kind: 'video',
@@ -131,6 +132,7 @@ export function deriveTrackSummaries(tracks: readonly TrackIndex[]): TrackSummar
       const khz = track.audio.sampleRate % 1000 === 0 ? (track.audio.sampleRate / 1000).toFixed(0) : (track.audio.sampleRate / 1000).toFixed(1);
       summaries.push({
         id,
+        trackId: track.trackId,
         name: track.audio.handlerName !== '' ? track.audio.handlerName : `Audio ${audioIndex.toString()}`,
         meta: `${friendlyCodecName(track.codec)} · ${track.audio.language !== '' ? track.audio.language : 'und'} · ${channels} · ${khz} kHz · ${formatDurationHMS(durationSeconds)}`,
         kind: 'audio',
@@ -155,10 +157,18 @@ export function defaultTrackSelection(tracks: readonly TrackSummary[]): TrackSel
   return sel;
 }
 
+/** Maps selected display ids (TrackList/ExportPanel's `TrackSelection`) back to real MP4 track
+ * ids -- what export needs to call `SampleIndex.sampleRange`/`resolveExportSelection` with. */
+export function selectedRealTrackIds(tracks: readonly TrackSummary[], sel: TrackSelection): Set<number> {
+  return new Set(tracks.filter((t) => sel[t.id]).map((t) => t.trackId));
+}
+
 /**
- * The Export panel's rows. `est. size` and `folder` stay illustrative approximations (a real
- * estimate needs per-track bitrate summed over the trimmed range; `folder` is unknowable before a
- * save destination is actually chosen) -- flagged, not silently presented as measured.
+ * The Export panel's rows. `folder` stays an illustrative approximation (unknowable before a save
+ * destination is actually chosen) -- flagged, not silently presented as measured. `est. size` is a
+ * real sum of selected sample sizes over the trimmed range when `estimatedBytes` is available
+ * (i.e. a real file is open); otherwise (ui-harness.html's fixture-only variants) it falls back to
+ * the same illustrative formula design/README.md's own mock uses.
  */
 export function deriveExportRows(
   tracks: readonly TrackSummary[],
@@ -166,9 +176,11 @@ export function deriveExportRows(
   tin: number,
   tout: number,
   sourceFileName: string,
+  estimatedBytes: number | null,
 ): PanelRowFixture[] {
   const audioSelected = tracks.filter((t) => t.kind === 'audio' && sel[t.id]).length;
   const baseName = sourceFileName.replace(/\.[^.]+$/, '');
+  const estSize = estimatedBytes !== null ? formatFileSize(estimatedBytes) : `${(178 + audioSelected * 29).toString()} MB`;
   return [
     { label: 'container', value: 'mp4', tone: 'neutral' },
     { label: 'video', value: 'stream copy', tone: 'informational' },
@@ -178,7 +190,7 @@ export function deriveExportRows(
       tone: audioSelected === 0 ? 'warning' : 'informational',
     },
     { label: 'range', value: formatDurationHMS(tout - tin), tone: 'neutral' },
-    { label: 'est. size', value: `${(178 + audioSelected * 29).toString()} MB`, tone: 'muted' },
+    { label: 'est. size', value: estSize, tone: 'muted' },
     { label: 'writer', value: 'file system access', tone: 'good' },
     { label: 'folder', value: '~/Recordings', tone: 'muted' },
     { label: 'name', value: `${baseName}_clip.mp4`, tone: 'muted' },

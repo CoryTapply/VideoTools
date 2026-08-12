@@ -9,6 +9,7 @@ export default defineConfig({
       'src/media/index/**/*.test.ts',
       'src/media/playback/**/*.test.ts',
       'src/media/frames/**/*.test.ts',
+      'src/media/export/**/*.test.ts',
       'src/ui/**/*.test.{ts,tsx}',
     ],
     globals: false,
