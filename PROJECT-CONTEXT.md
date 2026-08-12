@@ -2,7 +2,7 @@
 
 Written for a session (human or model) picking this project up cold. Read this before the architecture document.
 
-**Last updated:** after M1 task 4a (app shell and design system) landed.
+**Last updated:** after M1 task 5 (export) landed — M1 complete.
 
 ---
 
@@ -49,6 +49,7 @@ Everything below is real, from a 27 GB / 70-minute OBS recording (7 tracks, 253,
 | Atlas decode-once | 23.4 ms per atlas (matches spike C's 23.81 ms) |
 | Export, post-merged-read-pass | read amplification 1.00×, copy 1.7–3× faster than the per-track version |
 | Export model (pre-merge fit) | `total_ms ≈ 13.2 + size_MB / 178.5`, R² ≈ 1 across 3 MB–4 GB |
+| Export peak process memory | 460 MB real (Activity Monitor), under the 500 MB M1 ceiling |
 | Memory, coarse warm | +121 MB real (Activity Monitor), ~2× the naive RGBA estimate |
 | Memory after `clear()` | +5 MB over idle (~3%), confirmed by two independent signals |
 
@@ -58,7 +59,7 @@ These emerged during the project and have repeatedly paid for themselves. Keep t
 
 **Testability seams, one per module.** `ByteSource` for the parser, `VideoElementLike` for playback, `FrameDecoder` for the cache. Each has a real implementation and a Node-testable fake. The pattern makes edge cases cheap to construct — a malformed `stsc` is twelve bytes — and it means all the *logic* is proven before a browser is involved.
 
-**But run it in a browser anyway.** Every single module has produced real bugs that no Node test could catch, because they were browser-behaviour bugs. Task 2: a seek to the current position never fires `seeked`, which would have permanently stalled the coalescing pipeline. Task 3: the `avcC` box header must be stripped from `VideoDecoderConfig.description`, decode chains were being split at flush boundaries in two separate places, and a decode error left the worker's decoder wedged for all subsequent requests. The seam proves the logic; the browser pass proves the integration. Both are mandatory.
+**But run it in a browser anyway.** Every single module has produced real bugs that no Node test could catch, because they were browser-behaviour bugs. Task 2: a seek to the current position never fires `seeked`, which would have permanently stalled the coalescing pipeline. Task 3: the `avcC` box header must be stripped from `VideoDecoderConfig.description`, decode chains were being split at flush boundaries in two separate places, and a decode error left the worker's decoder wedged for all subsequent requests. Task 5: `createWritable()`/`abort()` does not protect an existing destination file from a cancelled write, despite the WHATWG spec text reading as though it should — confirmed by reproducing it directly against real Chrome, not by re-reading the spec more carefully. A checksum comparison taken immediately after cancelling looked like proof of safety and was wrong; the file was corrupt a few minutes later. The seam proves the logic; the browser pass proves the integration, and *only* the browser pass can prove a claim about what the browser actually does. Both are mandatory.
 
 **Differential oracles.** The parser is checked against both mediabunny and the original spike parser; the export copy loop keeps its pre-merge implementation alongside the merged one for the same purpose. Two independent implementations disagreeing is how three real mediabunny bugs were found.
 
@@ -70,15 +71,23 @@ These emerged during the project and have repeatedly paid for themselves. Keep t
 
 ## Where things stand
 
-**Done:** M0 and M0.5 feasibility spikes. M1 task 1 (index), task 2 (playback), task 3 (frame
-cache), task 3.5 (budget re-tune), task 4a (app shell and design system — `src/ui/`, greenfield
-React 19 added to the toolchain), plus an immediate follow-up wiring task 1's parser and task 2's
-playback engine into that shell for real (real file selection/drag-and-drop, real parsing, real
-playback — `results/task-4a-media-integration-summary.md`). CI running typecheck, lint, and tests
-on every push.
+**M1 is complete — 8 of 8 tasks done.** M0 and M0.5 feasibility spikes; M1 task 1 (index), task 2
+(playback), task 3 (frame cache), task 3.5 (budget re-tune), task 4a (app shell and design system
+— `src/ui/`, greenfield React 19 added to the toolchain, plus an immediate follow-up wiring task
+1's parser and task 2's playback engine into that shell for real —
+`results/task-4a-media-integration-summary.md`), task 4b (timeline renderer — canvas layer stack,
+drag-scrub), task 4c (feel calibration — no seek-drift repro found, kinetic-pan retuned), and task
+5 (export — `src/media/export/`, real-browser verification found and fixed a `createWritable()`/
+`abort()` safety gap; full writeup `results/task-5-export-summary.md`). CI running typecheck,
+lint, and tests on every push.
 
-**Next:** task 4b (timeline renderer — the canvas layer stack task 4a deliberately left as a
-placeholder), task 5 (export).
+M1 exit criteria are met with two flagged, non-blocking gaps (roadmap.md has the detail): VLC
+playback is untested (not installed on the verification machine), and the primary video track is
+locked in the track-selection UI so a literal video-free export isn't reachable through the
+product UI today, only through the pipeline directly.
+
+**Next:** M2 (timeline polish — waveform, dense-tier zoom tuning, drop-frame timecode, full
+keyboard map, metadata inspector).
 
 **Design:** a UI design exists from Claude Design; the revision request covering the MKV→MP4
 correction, filmstrip/waveform proportions, the missing keyframe tick row, multi-track selection,
