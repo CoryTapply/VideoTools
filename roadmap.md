@@ -1,6 +1,6 @@
 # Roadmap
 
-**Last updated:** after M1 task 4b.
+**Last updated:** after M1 task 4c.
 Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 
 ---
@@ -12,7 +12,7 @@ Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 | M0 | Feasibility spikes | ✔ complete |
 | M0.5 | Remux, index at scale, WebCodecs scrub | ✔ complete |
 | T0 | Export cost diagnosis + merged read pass | ✔ complete |
-| **M1** | **Walking skeleton — open, scrub, trim, export** | **6 of 8 tasks done** |
+| **M1** | **Walking skeleton — open, scrub, trim, export** | **7 of 8 tasks done** |
 | M2 | Timeline polish | not started |
 | M3 | Frame accuracy (smart render) | not started |
 | M4 | Production hardening | not started |
@@ -113,7 +113,7 @@ zoom level; the filmstrip does not empty when zooming.
 
 Both are picked up by Task 4c, next.
 
-### ▸ Task 4c — timeline feel calibration and seek-drift repro (½–1 day)
+### ✔ Task 4c — timeline feel calibration and seek-drift repro (½–1 day)
 Close the two gaps Task 4b flagged rather than let them ride silently into Task 5.
 
 1. Conclusively reproduce and characterize the "seek lands one frame off after heavy decoder
@@ -126,9 +126,35 @@ Close the two gaps Task 4b flagged rather than let them ride silently into Task 
    and the shuttle-key acceleration curve (`shuttle.ts`) on real hardware, confirming or retuning
    both — they're invented first passes, not values derived from any spec.
 
-**Exit:** the one-frame-off repro either has a confirmed cause and fix, or a written explanation of
-why it doesn't reproduce under real conditions; kinetic-pan and shuttle acceleration are confirmed
-or retuned by a human using the actual app on real hardware, not left as first-guess constants.
+**Status: done.** Since neither half of this task can be exercised by automation (rAF throttling;
+the tiny fixture never loads), the app was instrumented so one real-hardware session could answer
+both self-sufficiently rather than relying on eyeballing: `src/ui/timeline/seek-drift.ts` compares
+every real settle-seek's requested vs. landed frame index (via `TimelineController`'s existing
+settle-seek call site) and logs to `window.__seekDriftLog`/`console.warn`, dev-only, fully
+dead-code-eliminated from production builds; `kinetic-pan.ts`'s and `shuttle.ts`'s constants became
+live-editable via `window.__tuning` so values could be tried without rebuilding. Session guide:
+`results/task-4c-session-guide.md`.
+
+**1. Seek-drift repro: did not reproduce.** ~1 minute of real mixed scrubbing/scrolling/zooming on
+each of `fixtures/mid-1080p.mp4` and `fixtures/27gb.mp4` produced 51 real settle-seeks total,
+including several tight clusters of rapid re-scrubs in the same region (e.g. eight settle-seeks
+within a ~250k-tick span on the 27GB fixture) — the kind of repeated decoder pressure
+`architecture-v3.md`'s "heavy decoder activity" points at. `framesOff` was 0 on every single one;
+`video.currentTime` landed on the requested frame every time. Not exhaustive (short session,
+one machine), but zero drift across real, non-automated interaction including the specific
+decoder-pressure pattern the risk register described is a real result, not an absence of trying.
+Left instrumented (dev-only, zero prod cost) rather than removed, in case it resurfaces under
+longer or different real usage.
+
+**2. Kinetic-pan/shuttle: confirmed and retuned by a human on real hardware.**
+`coastFrictionPerFrame` retuned **0.94 → 0.1** — the original guess coasted far too long on a real
+trackpad; 0.1 kills velocity almost immediately after the gesture ends, closer to the reference
+prototype's original 1:1-no-momentum feel than to real inertial coasting. Shuttle's doubling curve
+(`BASE_RATE = 1`, `MAX_RATE = 8`, `shuttle.ts`) confirmed as-is, no change.
+
+**Exit: met.** The one-frame-off repro has a written explanation of why it doesn't reproduce under
+real, non-automated conditions (above); kinetic-pan and shuttle acceleration are confirmed/retuned
+by a human using the actual app on real hardware, not left as first-guess constants.
 
 ### ▸ Task 5 — export (1 week)
 `RemuxStrategy` promoted with the merged single-pass copy loop. Track selection UI. Temp-name-and-rename write. Progress from the measured `copy_ms`/`close_ms` split with an explicit finalising phase. Cancel.
@@ -191,7 +217,7 @@ Multi-clip EDL on one track. Ripple and roll trim. Undo/redo via commands with d
 | Risk | Severity | State |
 |---|---|---|
 | Coarse tier evicted by dense windows, emptying the filmstrip | High | Suspected, unconfirmed — task 3.5 |
-| Post-load seeks landing one frame off under decoder load | Medium | Observed once, unexplained; not conclusively reproducible in the automation environment (rAF throttling) — carried into task 4c for a real-browser repro |
+| Post-load seeks landing one frame off under decoder load | Low | Task 4c: did not reproduce across 51 real settle-seeks (mixed scrub/scroll/zoom, incl. rapid re-scrub clusters) on two real fixtures in a real, non-automated browser session. Not exhaustive (~1 min/fixture) — dev-only drift diagnostic left in place (`window.__seekDriftLog`) in case it resurfaces |
 | Export `close()` copying rather than renaming — disk-full during finalising | Medium | Never observed; task 5 must handle the error case regardless |
 | Real-world containers the parser rejects (fMP4 from OBS, MKV) | Medium | Detected and refused cleanly; product-scope question for M4 |
 | All measurements from one fast machine | Medium | Accepted through M3; M4 addresses it |
