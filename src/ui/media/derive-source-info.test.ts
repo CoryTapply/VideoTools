@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeBitrate,
   computeGop,
+  defaultExportFileName,
   defaultTrackSelection,
   deriveExportRows,
   deriveFormatChip,
@@ -158,33 +159,39 @@ describe('defaultTrackSelection', () => {
   });
 });
 
+describe('defaultExportFileName', () => {
+  it('appends _clip to the source basename, swapping in .mp4', () => {
+    expect(defaultExportFileName('session-4.mp4')).toBe('session-4_clip.mp4');
+    expect(defaultExportFileName('session-4.mov')).toBe('session-4_clip.mp4');
+  });
+});
+
 describe('deriveExportRows', () => {
-  it('reflects selection count and derives the output name from the source filename', () => {
+  it('reflects selection count', () => {
     const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
     const sel = defaultTrackSelection(summaries);
-    const rows = deriveExportRows(summaries, sel, 0, 10, 'session-4.mp4', null);
+    const rows = deriveExportRows(summaries, sel, 0, 10, null);
     const byLabel = Object.fromEntries(rows.map((r) => [r.label, r.value]));
     expect(byLabel.audio).toBe('stream copy × 1');
-    expect(byLabel.name).toBe('session-4_clip.mp4');
     expect(byLabel.range).toBe('00:00:10');
   });
 
   it('flags "none selected" in warning tone when no audio track is picked', () => {
     const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
-    const rows = deriveExportRows(summaries, { V1: true, A1: false }, 0, 10, 'x.mp4', null);
+    const rows = deriveExportRows(summaries, { V1: true, A1: false }, 0, 10, null);
     const audioRow = rows.find((r) => r.label === 'audio');
     expect(audioRow).toEqual({ label: 'audio', value: 'none selected', tone: 'warning' });
   });
 
   it('falls back to the illustrative formula when no real estimate is available', () => {
     const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
-    const rows = deriveExportRows(summaries, { V1: true, A1: true }, 0, 10, 'x.mp4', null);
+    const rows = deriveExportRows(summaries, { V1: true, A1: true }, 0, 10, null);
     expect(rows.find((r) => r.label === 'est. size')?.value).toBe('207 MB');
   });
 
   it('uses a real, formatted byte count when an estimate is provided', () => {
     const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
-    const rows = deriveExportRows(summaries, { V1: true, A1: true }, 0, 10, 'x.mp4', 512_000_000);
+    const rows = deriveExportRows(summaries, { V1: true, A1: true }, 0, 10, 512_000_000);
     expect(rows.find((r) => r.label === 'est. size')?.value).toBe('512.0 MB');
   });
 });

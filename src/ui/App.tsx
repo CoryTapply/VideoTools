@@ -122,6 +122,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     sel: state.sel,
     tracks,
     sourceFileName,
+    exportFileName: state.exportFileName,
     startExport: exportSession.startExport,
   });
   useEffect(() => {
@@ -133,6 +134,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       sel: state.sel,
       tracks,
       sourceFileName,
+      exportFileName: state.exportFileName,
       startExport: exportSession.startExport,
     };
   });
@@ -207,8 +209,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         case 'export':
           evt.preventDefault();
           if (canExport) {
-            const { tin, tout, sel, tracks: latestTracks, sourceFileName: latestSourceFileName, startExport } = latestRef.current;
-            void startExport({ tin, tout, sel, tracks: latestTracks, sourceFileName: latestSourceFileName });
+            const { tin, tout, sel, tracks: latestTracks, sourceFileName: latestSourceFileName, exportFileName, startExport } = latestRef.current;
+            void startExport({ tin, tout, sel, tracks: latestTracks, sourceFileName: latestSourceFileName, exportFileName });
           }
           break;
         case 'open-file':
@@ -426,7 +428,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           canExport={canExport}
           onOpen={triggerOpen}
           onExport={() => {
-            void exportSession.startExport({ tin: state.tin, tout: state.tout, sel: state.sel, tracks, sourceFileName });
+            void exportSession.startExport({ tin: state.tin, tout: state.tout, sel: state.sel, tracks, sourceFileName, exportFileName: state.exportFileName });
           }}
           onReconnect={() => {
             dispatch({ type: 'permission-lost/set', lost: false });
@@ -448,6 +450,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         tin={state.tin}
         tout={state.tout}
         estimatedExportBytes={estimatedExportBytes}
+        exportFileName={state.exportFileName}
         frameLabel={frameLabel}
         timecode={timecode}
         openErrorMessage={openErrorMessage}
@@ -475,6 +478,9 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         }}
         onToggleTrack={(track) => {
           dispatch({ type: 'track/toggle', track });
+        }}
+        onChangeExportFileName={(name) => {
+          dispatch({ type: 'export-filename/set', name });
         }}
         overlay={
           (state.screen === 'exporting' || state.screen === 'finalising') && (
