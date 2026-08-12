@@ -98,6 +98,14 @@ export class TimelineController {
   private cachedKeyframeTimes: Float64Array = new Float64Array(0);
   private lastWheelPanTime: number | undefined;
   private lastCoastTickTime: number | undefined;
+  /** Non-null while a settle-seek (pointer-up's real <video> seek) is in flight -- keeps the cache
+   * preview overlay showing the released frame so it doesn't flash back to the pre-drag frame
+   * while the real seek (281ms p50, per onPointerUp's doc comment) is still catching up. */
+  private settleSeekTicks: Time | null = null;
+  private settleSeekGeneration = 0;
+  /** True when a playhead scrub paused mid-playback engine -- so onPointerUp's settle-seek knows
+   * to resume playing afterward instead of leaving it paused. */
+  private scrubResumePlayback = false;
 
   constructor(deps: TimelineControllerDeps) {
     const ctx2d = deps.canvas.getContext('2d');
@@ -185,6 +193,14 @@ export class TimelineController {
       return;
     }
     state.scrubActive = true;
+    // A live <video> keeps advancing currentTime (and thus, via onFrame, state.t) while playing --
+    // fighting the pointer-driven state.t writes updateScrubTime makes below, which is why scrub
+    // "doesn't work properly" while playing. Pause for the gesture's duration and resume on
+    // release only if it was actually playing.
+    const engine = this.engineRef.current;
+    const wasPlaying = engine !== null && engine.state === 'playing';
+    this.scrubResumePlayback = wasPlaying;
+    if (wasPlaying) engine.pause();
     this.updateScrubTime(evt);
   };
 
@@ -210,8 +226,19 @@ export class TimelineController {
     const engine = this.engineRef.current;
     if (engine === null) return;
     const requestedTicks = state.t;
+    this.settleSeekTicks = requestedTicks;
+    const generation = ++this.settleSeekGeneration;
+    const resumePlayback = this.scrubResumePlayback;
+    this.scrubResumePlayback = false;
     void engine.seek(requestedTicks, 'accurate').then(() => {
       this.logSeekDrift(requestedTicks, engine.currentTime);
+      // Only the most recent settle-seek gets to act -- an overlapping earlier one resolving late
+      // (e.g. a quick second scrub started before the first settled) must not reveal the real
+      // <video> before its own, newer, target frame has landed, nor resume playback on the newer
+      // gesture's behalf.
+      if (generation !== this.settleSeekGeneration) return;
+      this.settleSeekTicks = null;
+      if (resumePlayback) engine.play();
     });
   };
 
@@ -492,7 +519,7 @@ export class TimelineController {
     const playheadX = timeToX(state.t, viewport.viewStart, viewport.viewSpan, widthPx);
     drawPlayhead(this.ctx, playheadX, 0, heightPx);
 
-    this.drawPreviewOverlay(state.scrubActive ? state.t : null);
+    this.drawPreviewOverlay(state.scrubActive ? state.t : this.settleSeekTicks);
 
     // Bypasses React entirely -- TransportBar.tsx's own doc comment; playhead movement must never
     // trigger a re-render.
@@ -503,7 +530,7 @@ export class TimelineController {
   }
 
   /** Draws the cached frame nearest `scrubTime` over the real <video>, or clears the overlay
-   * (letting the video show through) when not scrubbing. */
+   * (letting the video show through) once neither actively scrubbing nor waiting on a settle-seek. */
   private drawPreviewOverlay(scrubTime: number | null): void {
     const widthPx = this.previewCanvas.clientWidth;
     const heightPx = this.previewCanvas.clientHeight;
