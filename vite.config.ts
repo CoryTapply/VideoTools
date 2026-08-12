@@ -5,7 +5,13 @@ import react from '@vitejs/plugin-react';
 // `credentialless` (not `require-corp`) avoids needing CORP headers on local fixture files.
 const coiEnabled = process.env.COI === '1';
 
+// GitHub Pages serves project sites from https://<user>.github.io/<repo>/, so
+// asset URLs need that subpath prefix. Set by the deploy workflow; local dev
+// and preview stay at the root.
+const base = process.env.GH_PAGES_BASE ?? '/';
+
 export default defineConfig({
+  base,
   plugins: [react()],
   server: {
     headers: coiEnabled
