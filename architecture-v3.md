@@ -2,7 +2,8 @@
 
 **Supersedes:** `architecture-v2.md`
 **Basis:** M0/M0.5 spikes plus M1 tasks 1–3, all measured against a 27 GB / 70-minute OBS recording on an M1 Max, Chrome 151
-**Status:** M1 four of five tasks built. Task 4b (timeline canvas) and task 5 (export) remain.
+**Status:** M1 complete, 8 of 8 tasks built. Task 5 (export) was the last, landed via PR #17 — see
+`results/task-5-export-summary.md` for what it found and changed.
 
 Read `PROJECT-CONTEXT.md` first if you're new. Per-module `README.md` files are authoritative for their own module; this document is the system view.
 
@@ -33,13 +34,13 @@ Everything else in v2 held.
 │  │ Document state (task 4a ✔) · command stack · viewport    │ │
 │  │ (command stack/viewport: task 4b/5)                       │ │
 │  └──────────────────────────────────────────────────────────┘ │
-│  SampleIndex ✔    FrameCache ✔    ExportStrategy (task 5)     │
+│  SampleIndex ✔    FrameCache ✔    RemuxStrategy ✔             │
 └──────────────────────────┬───────────────────────────────────┘
                            │ job descriptors, transferables
 ┌──────────────────────────┴───────────────────────────────────┐
 │  WORKERS                                                      │
 │  index.worker ✔        frame decode pool ✔ (2–4)             │
-│  export.worker (task 5)                                       │
+│  export.worker ✔                                               │
 └──────────────────────────┬───────────────────────────────────┘
 ┌──────────────────────────┴───────────────────────────────────┐
 │  STORAGE                                                      │
@@ -99,17 +100,32 @@ Decode batches 16 per flush, and **never splits a decode chain across a flush** 
 
 Atlases: 100 tiles per WebP, decoded **once per atlas per session** then cropped from the in-memory bitmap. Measured 23.4 ms per `createImageBitmap` against an atlas blob regardless of crop size, so per-tile calls would cost ~950 ms per filmstrip repaint.
 
-### 3.4 Timeline — task 4b, not built
+### 3.4 Timeline — `src/ui/timeline/` ✔ built
 
 Canvas layer stack. Rendering, hit-testing, zoom and pan in a rational-time viewport transform. Draws the filmstrip from `getRange()`, keyframe ticks from `keyframePresentationTimes()`, playhead from the engine's `onFrame`.
 
 **Not DOM.** A four-hour 60 fps source has 862,401 frames.
 
-### 3.5 Export — task 5, not built
+Kinetic-pan friction and shuttle acceleration were invented first passes at task 4b, confirmed/
+retuned by a human on real hardware at task 4c (`coastFrictionPerFrame` 0.94 → 0.1). The
+"seek lands one frame off after heavy decoder activity" risk task 4c set out to characterize did
+not reproduce across 51 real settle-seeks in a real browser session — left instrumented
+(`window.__seekDriftLog`), dev-only, in case it resurfaces.
+
+### 3.5 Export — `src/media/export/` ✔ built
 
 `RemuxStrategy` promoted from spike A, with the merged single-pass copy loop. Track selection. Temp-name-and-rename write. Progress driven by the measured model with an explicit finalising phase.
 
-**Must use `query.ts`'s `sampleRange`, not port `select.ts`.** The spike's out-point selection does a decode-order forward scan, which diverges from presentation-order selection under B-frame reordering. That divergence was the 1-frame discrepancy, and promotion is exactly where it would sneak back in.
+**Used `query.ts`'s `sampleRange`, not a port of `select.ts`** — `select.ts` in this module is a
+from-scratch rewrite. The spike's out-point selection did a decode-order forward scan, which
+diverges from presentation-order selection under B-frame reordering; that divergence was the
+1-frame discrepancy from task 1, and `sampleRange` inherits the fix rather than reintroducing it.
+
+Real-browser verification found `createWritable()`/`abort()` does not protect an existing
+destination file the way the WHATWG spec text suggests — confirmed directly against Chrome, not
+assumed from the spec. Temp-name-and-rename is real and application-level here (a scratch
+`<name>.crswap` file, `FileSystemFileHandle.move()` on success), not delegated to that guarantee.
+Full writeup: `results/task-5-export-summary.md`.
 
 ---
 
@@ -137,7 +153,7 @@ Packing exists to make the *second* open of a file fast. It doesn't need to be o
 
 - **Post-load seek accuracy.** Accurate seeks occasionally land one frame off after heavy decoder activity. Watch for it in task 4b's scrub-settle: coarse cache warm, drag, release, and see whether the preview jumps.
 - **Index build-time delta.** 107 ms spike vs 165 ms production, same browser, unprofiled.
-- **`.crswap` copy-vs-rename.** Never observed. Determines whether a 10 GB export transiently needs 20 GB free — a disk-full failure arriving during finalising, which task 5 must handle.
+- ~~**`.crswap` copy-vs-rename.**~~ Resolved by task 5: it's real, application-level rename now, not left to the browser. A scratch `<name>.crswap` file is written in full inside the destination directory, then `FileSystemFileHandle.move()` atomically replaces the target on success — so yes, an overwriting export transiently needs roughly (existing target size + new output size) free, confirmed by design rather than left an open question.
 - **HEVC codec strings** untested against a real HEVC file.
 - **Dense-tier kept-frame count** isn't reported alongside the 1.61 s build time, which makes that number hard to interpret. Worth adding to the harness output.
 

@@ -12,7 +12,7 @@ Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 | M0 | Feasibility spikes | ✔ complete |
 | M0.5 | Remux, index at scale, WebCodecs scrub | ✔ complete |
 | T0 | Export cost diagnosis + merged read pass | ✔ complete |
-| **M1** | **Walking skeleton — open, scrub, trim, export** | **7 of 8 tasks done** |
+| **M1** | **Walking skeleton — open, scrub, trim, export** | **✔ 8 of 8 tasks done — exit criteria met, two gaps flagged** |
 | M2 | Timeline polish | not started |
 | M3 | Frame accuracy (smart render) | not started |
 | M4 | Production hardening | not started |
@@ -156,21 +156,54 @@ prototype's original 1:1-no-momentum feel than to real inertial coasting. Shuttl
 real, non-automated conditions (above); kinetic-pan and shuttle acceleration are confirmed/retuned
 by a human using the actual app on real hardware, not left as first-guess constants.
 
-### ▸ Task 5 — export (1 week)
+### ✔ Task 5 — export (1 week)
 `RemuxStrategy` promoted with the merged single-pass copy loop. Track selection UI. Temp-name-and-rename write. Progress from the measured `copy_ms`/`close_ms` split with an explicit finalising phase. Cancel.
 
 Must use `sampleRange` from `query.ts`, never port `select.ts`.
 
-**Exit:** all M1 exit criteria below.
+**Status: done.** Shipped via PR #17. New `src/media/export/` module mirroring the index/
+playback/frames pattern — selection, box rewriting, the merged copy loop, and orchestration are
+all Node-tested, including a differential round-trip test (export a synthetic file, reparse it
+through the production parser). `select.ts` is a deliberate rewrite of the spike's `select.ts`,
+not a port, for exactly the reason the task spec calls out: that file's decode-order forward scan
+is the B-frame-reordering bug `sampleRange` already fixed once, in Task 1. Full writeup:
+`results/task-5-export-summary.md`.
+
+**A real-browser finding changed the write strategy mid-task.** The plan (and the WHATWG spec
+text) assumed `createWritable()`/`abort()` already protects an existing destination file from a
+cancelled write. Measured directly against real Chrome, it does not — `createWritable()`
+truncates the target immediately, and `abort()` never restores it (confirmed four ways: main
+thread and Worker, with and without `keepExistingData: true`). Export now does real,
+application-level temp-name-and-rename instead: `showDirectoryPicker()` for the destination, all
+writes go to a scratch `<name>.crswap` file, and only a successful `close()` calls
+`FileSystemFileHandle.move()` to atomically place it at the final name, overwriting any existing
+file there in one step. Cancelling never opens the real destination at all, so nothing is at risk
+by construction — not by trusting browser behavior. `src/media/export/README.md`'s
+"Temp-name-and-rename" section has the full story.
+
+**Exit: met, with two flagged gaps** — see the M1 exit criteria below.
 
 ### M1 exit criteria
 
-- Trim a 30-second clip from the 27 GB fixture; output plays in VLC, QuickTime, and Chrome
-- Peak process memory under 500 MB, measured at OS level
-- Drag-scrub sustains 60 Hz across the full timeline once coarse is warm
-- Coarse cache warms in under 15 s (currently 5.19 s)
-- Multi-track audio selection works; exporting only the mic track produces a valid file
-- Cancelling an export never damages an existing file
+All checked against the real 27GB fixture in a real, non-automated browser session
+(`results/task-5-export-summary.md` has the full session notes for the export-specific items).
+
+- **Trim a 30-second clip from the 27 GB fixture; output plays in VLC, QuickTime, and Chrome.**
+  Partially met: a real trim played correctly in QuickTime and Chrome. **VLC is not installed on
+  the machine this was verified on — untested**, flagged rather than silently assumed.
+- ✔ Peak process memory under 500 MB, measured at OS level — 460MB measured during a real export.
+- ✔ Drag-scrub sustains 60 Hz across the full timeline once coarse is warm (Task 4b).
+- ✔ Coarse cache warms in under 15 s (currently 5.19 s) (Task 3).
+- **Multi-track audio selection works; exporting only the mic track produces a valid file.** Met
+  for "video + only one audio track selected, others dropped" (verified via `ffprobe`: correct
+  streams and duration). **Caveat**: the primary video track is locked in the track-selection UI
+  (a Task 4a decision, unchanged here) and can't be deselected via the checkboxes, so a literal
+  video-free export isn't reachable through the product UI today — only through the pipeline
+  directly, which does support it (unit-tested). Worth a product decision on which reading of this
+  criterion is intended.
+- ✔ Cancelling an export never damages an existing file — checksum-verified byte-for-byte
+  untouched at real scale (a 10.6GB target), after a real-browser finding required changing the
+  write strategy (see Task 5 above).
 
 ---
 
@@ -218,11 +251,13 @@ Multi-clip EDL on one track. Ripple and roll trim. Undo/redo via commands with d
 |---|---|---|
 | Coarse tier evicted by dense windows, emptying the filmstrip | High | Suspected, unconfirmed — task 3.5 |
 | Post-load seeks landing one frame off under decoder load | Low | Task 4c: did not reproduce across 51 real settle-seeks (mixed scrub/scroll/zoom, incl. rapid re-scrub clusters) on two real fixtures in a real, non-automated browser session. Not exhaustive (~1 min/fixture) — dev-only drift diagnostic left in place (`window.__seekDriftLog`) in case it resurfaces |
-| Export `close()` copying rather than renaming — disk-full during finalising | Medium | Never observed; task 5 must handle the error case regardless |
+| `createWritable()`/`abort()` doesn't protect an existing destination file from a cancelled write | High | Confirmed against real Chrome (task 5) — `abort()` does not restore a truncated file, contradicting the spec text. Fixed: real temp-name-and-rename via `FileSystemFileHandle.move()`, checksum-verified safe at real scale |
 | Real-world containers the parser rejects (fMP4 from OBS, MKV) | Medium | Detected and refused cleanly; product-scope question for M4 |
 | All measurements from one fast machine | Medium | Accepted through M3; M4 addresses it |
 | Smart render parameter matching proving harder than budgeted | Medium | M3; mitigated by being genuinely optional |
 | HEVC path untested | Low | Flagged since task 1 |
+| VLC playback of exported clips untested | Low | VLC isn't installed on the machine task 5's verification session ran on; QuickTime and Chrome both confirmed. Revisit when available |
+| Primary video track locked in track-selection UI — no video-free export reachable through the product UI | Low | Pre-existing task 4a decision; the export pipeline itself supports it (unit-tested). Product-scope question: does M1's "only the mic track" criterion require this? |
 
 ---
 
