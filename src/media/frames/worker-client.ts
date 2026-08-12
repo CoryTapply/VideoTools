@@ -10,8 +10,8 @@ export class FrameWorkerClient implements WorkerHandle {
   private readonly worker: Worker;
   private readonly pending = new Map<number, (result: WorkerDecodeResult) => void>();
 
-  constructor(file: File, workerUrl: URL = new URL('./worker.ts', import.meta.url)) {
-    this.worker = new Worker(workerUrl, { type: 'module' });
+  constructor(file: File) {
+    this.worker = new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (e: MessageEvent<FrameWorkerResponse>) => {
       this.handleMessage(e.data);
     };
