@@ -170,8 +170,10 @@ export function selectedRealTrackIds(tracks: readonly TrackSummary[], sel: Track
  * (i.e. a real file is open); otherwise (ui-harness.html's fixture-only variants) it falls back to
  * the same illustrative formula design/README.md's own mock uses.
  */
-/** The auto-generated export name for a given source file, used whenever the user hasn't typed a
- * name of their own -- see ExportPanel.tsx's editable "name" field. */
+/** The auto-generated export name for a given source file -- shown as a preview in the Export
+ * panel, and used to pre-fill the native Save dialog's suggested name (see
+ * state/export-session.ts's `startExport`). The actual saved name is whatever the user confirms in
+ * that dialog, which may differ from this. */
 export function defaultExportFileName(sourceFileName: string): string {
   const baseName = sourceFileName.replace(/\.[^.]+$/, '');
   return `${baseName}_clip.mp4`;
@@ -182,6 +184,7 @@ export function deriveExportRows(
   sel: TrackSelection,
   tin: number,
   tout: number,
+  sourceFileName: string,
   estimatedBytes: number | null,
 ): PanelRowFixture[] {
   const audioSelected = tracks.filter((t) => t.kind === 'audio' && sel[t.id]).length;
@@ -197,6 +200,6 @@ export function deriveExportRows(
     { label: 'range', value: formatDurationHMS(tout - tin), tone: 'neutral' },
     { label: 'est. size', value: estSize, tone: 'muted' },
     { label: 'writer', value: 'file system access', tone: 'good' },
-    { label: 'folder', value: '~/Recordings', tone: 'muted' },
+    { label: 'name', value: defaultExportFileName(sourceFileName), tone: 'muted' },
   ];
 }

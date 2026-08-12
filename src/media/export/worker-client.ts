@@ -9,8 +9,7 @@ import type { ExportWorkerRequest, ExportWorkerResponse } from './worker-protoco
 
 export interface ExportJob {
   file: File;
-  directoryHandle: FileSystemDirectoryHandle;
-  fileName: string;
+  fileHandle: FileSystemFileHandle;
   tracks: readonly TrackIndex[];
   selectedTrackIds: ReadonlySet<number>;
   requestedInSec: number;
@@ -52,8 +51,7 @@ export class ExportWorkerClient {
         type: 'start',
         requestId,
         file: job.file,
-        directoryHandle: job.directoryHandle,
-        fileName: job.fileName,
+        fileHandle: job.fileHandle,
         tracks: serialized,
         selectedTrackIds: [...job.selectedTrackIds],
         requestedInSec: job.requestedInSec,
