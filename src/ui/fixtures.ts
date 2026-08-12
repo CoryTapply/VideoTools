@@ -16,13 +16,13 @@ export const FORMAT_CHIP = 'MP4 · H.264 · 19.4 GB';
 const FULL_DURATION_LABEL = '4:00:00';
 
 export const TRACKS: readonly TrackSummary[] = [
-  { id: 'V1', name: 'Screen Capture', meta: `h264 · 2560×1440 · 60.00 fps · ${FULL_DURATION_LABEL}`, kind: 'video', locked: true },
-  { id: 'A1', name: 'Mic — NT-USB', meta: `aac · eng · mono · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
-  { id: 'A2', name: 'Desktop Audio', meta: `aac · eng · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
-  { id: 'A3', name: 'Game Capture', meta: `aac · eng · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
-  { id: 'A4', name: 'Voice Chat', meta: 'aac · eng · stereo · 48 kHz · 3:58:12', kind: 'audio' },
-  { id: 'A5', name: 'Browser Media', meta: `aac · und · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
-  { id: 'A6', name: 'Alerts', meta: `aac · und · stereo · 44.1 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
+  { id: 'V1', trackId: 1, name: 'Screen Capture', meta: `h264 · 2560×1440 · 60.00 fps · ${FULL_DURATION_LABEL}`, kind: 'video', locked: true },
+  { id: 'A1', trackId: 2, name: 'Mic — NT-USB', meta: `aac · eng · mono · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
+  { id: 'A2', trackId: 3, name: 'Desktop Audio', meta: `aac · eng · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
+  { id: 'A3', trackId: 4, name: 'Game Capture', meta: `aac · eng · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
+  { id: 'A4', trackId: 5, name: 'Voice Chat', meta: 'aac · eng · stereo · 48 kHz · 3:58:12', kind: 'audio' },
+  { id: 'A5', trackId: 6, name: 'Browser Media', meta: `aac · und · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
+  { id: 'A6', trackId: 7, name: 'Alerts', meta: `aac · und · stereo · 44.1 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
 ];
 
 export const SOURCE_PANEL_ROWS: readonly PanelRowFixture[] = [

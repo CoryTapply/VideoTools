@@ -25,6 +25,7 @@ export interface StageProps {
   sel: TrackSelection;
   tin: number;
   tout: number;
+  estimatedExportBytes: number | null;
   frameLabel: string;
   timecode: string;
   openErrorMessage?: string | null;
@@ -57,6 +58,7 @@ export function Stage({
   sel,
   tin,
   tout,
+  estimatedExportBytes,
   frameLabel,
   timecode,
   openErrorMessage,
@@ -94,7 +96,15 @@ export function Stage({
         return <SourcePanel tracks={tracks} rows={sourceRows} />;
       case 'export':
         return (
-          <ExportPanel tracks={tracks} sel={sel} tin={tin} tout={tout} sourceFileName={sourceFileName} onToggleTrack={onToggleTrack} />
+          <ExportPanel
+            tracks={tracks}
+            sel={sel}
+            tin={tin}
+            tout={tout}
+            sourceFileName={sourceFileName}
+            estimatedBytes={estimatedExportBytes}
+            onToggleTrack={onToggleTrack}
+          />
         );
       case 'queue':
         return <JobsPanel />;

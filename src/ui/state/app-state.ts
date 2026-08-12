@@ -4,6 +4,7 @@
 // Direct submodule import, not the barrel -- src/media/index/index.ts re-exports NodeByteSource,
 // which top-level-imports node:fs/promises and crashes when bundled for the browser.
 import type { IndexError } from '../../media/index/errors.ts';
+import type { ExportError } from '../../media/export/types.ts';
 
 export type Screen =
   | 'ready'
@@ -55,6 +56,9 @@ export interface AppState {
   permissionLost: boolean;
   /** Set when the last real `openFile()` attempt failed to parse; cleared on the next attempt. */
   openError: IndexError | null;
+  /** Set when the last real export attempt failed (not on a user-initiated cancel -- see
+   * useExportSession's `startExport`). Cleared on the next attempt. */
+  exportError: ExportError | null;
 }
 
 export const DEFAULT_TIMELINE_HEIGHT = 236;
@@ -77,6 +81,7 @@ export function createInitialAppState(overrides: Partial<AppState> = {}): AppSta
     toast: false,
     permissionLost: false,
     openError: null,
+    exportError: null,
     ...overrides,
   };
 }
@@ -92,6 +97,7 @@ export type AppAction =
   | { type: 'sel/set'; sel: TrackSelection }
   | { type: 'in-out/set'; tin: number; tout: number }
   | { type: 'open-error/set'; error: IndexError | null }
+  | { type: 'export-error/set'; error: ExportError | null }
   | { type: 'notice/set'; notice: KeyframeShiftNotice | null }
   | { type: 'notice/open-set'; open: boolean }
   | { type: 'notice/keep-exact' }
@@ -131,6 +137,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, tin: action.tin, tout: action.tout };
     case 'open-error/set':
       return { ...state, openError: action.error };
+    case 'export-error/set':
+      return { ...state, exportError: action.error };
     case 'notice/set':
       return { ...state, notice: action.notice, noticeOpen: action.notice === null ? false : state.noticeOpen };
     case 'notice/open-set':
