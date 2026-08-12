@@ -7,7 +7,7 @@ import { useCallback, useRef, useState } from 'react';
 // Direct submodule imports, not the barrel -- see app-state.ts's comment on why.
 import { pickExportDirectory } from '../../media/export/picker.ts';
 import { ExportWorkerClient } from '../../media/export/worker-client.ts';
-import { selectedRealTrackIds } from '../media/derive-source-info.ts';
+import { defaultExportFileName, selectedRealTrackIds } from '../media/derive-source-info.ts';
 import type { Dispatch } from 'react';
 import type { TrackSelection } from './app-state.ts';
 import type { MediaSession } from './media-session.ts';
@@ -25,6 +25,18 @@ export interface StartExportOptions {
   sel: TrackSelection;
   tracks: readonly TrackSummary[];
   sourceFileName: string;
+  /** User-typed override from ExportPanel's "name" field; null/blank falls back to
+   * defaultExportFileName(sourceFileName). */
+  exportFileName: string | null;
+}
+
+/** Resolves the user's typed override (if any) against the auto-generated default, and makes
+ * sure the result actually has the .mp4 extension the writer always produces -- see
+ * sinks/file-system-sink.ts. */
+function resolveExportFileName(exportFileName: string | null, sourceFileName: string): string {
+  const trimmed = exportFileName?.trim() ?? '';
+  const name = trimmed.length > 0 ? trimmed : defaultExportFileName(sourceFileName);
+  return /\.mp4$/i.test(name) ? name : `${name}.mp4`;
 }
 
 export interface ExportSession {
@@ -60,8 +72,7 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
         return;
       }
 
-      const baseName = opts.sourceFileName.replace(/\.[^.]+$/, '');
-      const fileName = `${baseName}_clip.mp4`;
+      const fileName = resolveExportFileName(opts.exportFileName, opts.sourceFileName);
       const picked = await pickExportDirectory();
       if (!picked.ok) {
         dispatch({ type: 'screen/set', screen: 'ready' });

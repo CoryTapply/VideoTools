@@ -158,6 +158,7 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
 
       dispatch({ type: 'sel/set', sel });
       dispatch({ type: 'in-out/set', tin: 0, tout: durationSecondsValue });
+      dispatch({ type: 'export-filename/set', name: null });
 
       frameCacheRef.current?.dispose();
       frameCacheRef.current = null;
