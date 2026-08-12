@@ -5,7 +5,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 // Direct submodule imports, not the barrel -- see app-state.ts's comment on why.
-import { pickExportDirectory } from '../../media/export/picker.ts';
+import { pickExportFile } from '../../media/export/picker.ts';
 import { ExportWorkerClient } from '../../media/export/worker-client.ts';
 import { defaultExportFileName, selectedRealTrackIds } from '../media/derive-source-info.ts';
 import type { Dispatch } from 'react';
@@ -25,18 +25,6 @@ export interface StartExportOptions {
   sel: TrackSelection;
   tracks: readonly TrackSummary[];
   sourceFileName: string;
-  /** User-typed override from ExportPanel's "name" field; null/blank falls back to
-   * defaultExportFileName(sourceFileName). */
-  exportFileName: string | null;
-}
-
-/** Resolves the user's typed override (if any) against the auto-generated default, and makes
- * sure the result actually has the .mp4 extension the writer always produces -- see
- * sinks/file-system-sink.ts. */
-function resolveExportFileName(exportFileName: string | null, sourceFileName: string): string {
-  const trimmed = exportFileName?.trim() ?? '';
-  const name = trimmed.length > 0 ? trimmed : defaultExportFileName(sourceFileName);
-  return /\.mp4$/i.test(name) ? name : `${name}.mp4`;
 }
 
 export interface ExportSession {
@@ -72,8 +60,7 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
         return;
       }
 
-      const fileName = resolveExportFileName(opts.exportFileName, opts.sourceFileName);
-      const picked = await pickExportDirectory();
+      const picked = await pickExportFile(defaultExportFileName(opts.sourceFileName));
       if (!picked.ok) {
         dispatch({ type: 'screen/set', screen: 'ready' });
         if (picked.kind === 'unsupported') {
@@ -91,8 +78,7 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
       const result = await client.export(
         {
           file,
-          directoryHandle: picked.handle,
-          fileName,
+          fileHandle: picked.handle,
           tracks: sampleIndex.tracks(),
           selectedTrackIds,
           requestedInSec: opts.tin,
@@ -112,9 +98,10 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
       dispatch({ type: 'screen/set', screen: 'ready' });
 
       if (result.ok) {
-        // File System Access deliberately never exposes a real filesystem path -- the chosen
-        // directory's own `name` plus the generated filename is the most specific thing available.
-        setLastResult({ outPath: `${picked.handle.name}/${fileName}`, durationLabel: formatDurationLabel(result.wallMs) });
+        // File System Access deliberately never exposes a real filesystem path -- the file
+        // handle's own `name` (whatever the user actually confirmed in the Save dialog) is the
+        // most specific thing available.
+        setLastResult({ outPath: picked.handle.name, durationLabel: formatDurationLabel(result.wallMs) });
         dispatch({ type: 'toast/set', show: true });
         return;
       }

@@ -32,14 +32,14 @@ self.onmessage = (e: MessageEvent<ExportWorkerRequest>) => {
 };
 
 async function handleStart(req: ExportWorkerStartRequest): Promise<void> {
-  const { requestId, file, directoryHandle, fileName, tracks: serializedTracks, selectedTrackIds, requestedInSec, requestedOutSec } = req;
+  const { requestId, file, fileHandle, tracks: serializedTracks, selectedTrackIds, requestedInSec, requestedOutSec } = req;
   const signal: CancelSignal = { cancelled: false };
   signals.set(requestId, signal);
 
   try {
     const tracks = serializedTracks.map(deserializeTrack);
     const sampleIndex = new SampleIndex(tracks);
-    const sink = await FileSystemWritableSink.create(directoryHandle, fileName);
+    const sink = await FileSystemWritableSink.create(fileHandle);
 
     const result = await runRemuxExport({
       source: new FileByteSource(file),

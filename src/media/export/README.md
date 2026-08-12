@@ -70,10 +70,21 @@ destination *directory* (confirmed via `FileSystemFileHandle.prototype.move`, wh
 works in the same browser) and writes there -- never opening the real destination at all. Only
 `close()` calls `tempHandle.move(finalName)`, a single atomic rename that overwrites any existing
 file at that name. `abort()` never touches the final name; it just discards the temp file. This is
-why `picker.ts` asks for a *directory* (`showDirectoryPicker`), not a single file
+why `picker.ts` asked for a *directory* (`showDirectoryPicker`), not a single file
 (`showSaveFilePicker` as the first version of this module used) -- a temp file needs a directory to
 be created as a sibling in, and `FileSystemFileHandle` has no reverse-navigation-to-parent API by
 design.
+
+**Reverted back to `showSaveFilePicker()`, at the user's explicit request.** The directory-picker
+approach above is the safe one -- cancelling or failing an export never damages an existing file, by
+construction. But it means the app chooses the output name, not the user, since there's no native UI
+for typing a filename inside a directory picker. The user was shown this exact tradeoff (a single
+native "Save As" dialog for name *and* location vs. this module's cancel-safety guarantee) and chose
+the native dialog. `picker.ts` and `sinks/file-system-sink.ts` now write straight to the handle
+`showSaveFilePicker()` returns, with no temp file -- so the truncate-on-abort behavior documented
+above is back: overwriting an existing file, then cancelling or hitting a failure partway through,
+destroys that file. This is a known, accepted risk, not a rediscovery -- don't "fix" it back to
+temp-name-and-rename without checking with the user first.
 
 ## Worker split and cancellation
 

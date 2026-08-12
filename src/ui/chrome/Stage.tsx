@@ -26,7 +26,6 @@ export interface StageProps {
   tin: number;
   tout: number;
   estimatedExportBytes: number | null;
-  exportFileName: string | null;
   frameLabel: string;
   timecode: string;
   openErrorMessage?: string | null;
@@ -41,7 +40,6 @@ export interface StageProps {
   onUnpinPanel: () => void;
   onToggleShortcuts: () => void;
   onToggleTrack: (id: TrackId) => void;
-  onChangeExportFileName: (name: string) => void;
   overlay?: ReactNode;
   toast?: ReactNode;
 }
@@ -61,7 +59,6 @@ export function Stage({
   tin,
   tout,
   estimatedExportBytes,
-  exportFileName,
   frameLabel,
   timecode,
   openErrorMessage,
@@ -76,7 +73,6 @@ export function Stage({
   onUnpinPanel,
   onToggleShortcuts,
   onToggleTrack,
-  onChangeExportFileName,
   overlay,
   toast,
 }: StageProps) {
@@ -107,9 +103,7 @@ export function Stage({
             tout={tout}
             sourceFileName={sourceFileName}
             estimatedBytes={estimatedExportBytes}
-            exportFileName={exportFileName}
             onToggleTrack={onToggleTrack}
-            onChangeExportFileName={onChangeExportFileName}
           />
         );
       case 'queue':

@@ -59,9 +59,6 @@ export interface AppState {
   /** Set when the last real export attempt failed (not on a user-initiated cancel -- see
    * useExportSession's `startExport`). Cleared on the next attempt. */
   exportError: ExportError | null;
-  /** User-typed override for the export filename; null means "use the auto-generated default"
-   * (derive-source-info.ts's defaultExportFileName). Reset to null whenever a new file opens. */
-  exportFileName: string | null;
 }
 
 export const DEFAULT_TIMELINE_HEIGHT = 236;
@@ -85,7 +82,6 @@ export function createInitialAppState(overrides: Partial<AppState> = {}): AppSta
     permissionLost: false,
     openError: null,
     exportError: null,
-    exportFileName: null,
     ...overrides,
   };
 }
@@ -102,7 +98,6 @@ export type AppAction =
   | { type: 'in-out/set'; tin: number; tout: number }
   | { type: 'open-error/set'; error: IndexError | null }
   | { type: 'export-error/set'; error: ExportError | null }
-  | { type: 'export-filename/set'; name: string | null }
   | { type: 'notice/set'; notice: KeyframeShiftNotice | null }
   | { type: 'notice/open-set'; open: boolean }
   | { type: 'notice/keep-exact' }
@@ -144,8 +139,6 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, openError: action.error };
     case 'export-error/set':
       return { ...state, exportError: action.error };
-    case 'export-filename/set':
-      return { ...state, exportFileName: action.name };
     case 'notice/set':
       return { ...state, notice: action.notice, noticeOpen: action.notice === null ? false : state.noticeOpen };
     case 'notice/open-set':
