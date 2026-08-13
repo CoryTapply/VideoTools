@@ -78,6 +78,28 @@ describe('seek coalescing: convergence', () => {
     expect(engine.state).toBe('ready');
   });
 
+  it('onFrame listeners only ever see the final settled position, never a superseded intermediate hop', async () => {
+    // Reproduces the reported bug: scrub to A, release (seek A in flight), then scrub again to B
+    // before A settles. The browser's 'seeked' for A must not broadcast A to onFrame listeners --
+    // that would visibly snap the playhead/timecode back to A before it corrects to B.
+    const { engine } = await loadedEngine({ seekLatencyMs: 20 });
+    const onFrame = vi.fn();
+    engine.onFrame(onFrame);
+
+    const p1 = engine.seek(1000, 'accurate'); // issued immediately, in flight
+    await vi.advanceTimersByTimeAsync(5); // still in flight
+    const p2 = engine.seek(2000, 'accurate'); // coalesced target, arrives mid-flight
+
+    await vi.advanceTimersByTimeAsync(15); // first seek (1000) settles -> re-issues toward 2000
+    expect(onFrame).not.toHaveBeenCalled(); // must not have broadcast the superseded 1000
+
+    await vi.advanceTimersByTimeAsync(20); // 2000 settles -> fully idle
+    await Promise.all([p1, p2]);
+
+    expect(onFrame).toHaveBeenCalledTimes(1);
+    expect(onFrame).toHaveBeenCalledWith(2000, expect.any(Number));
+  });
+
   it('seeking to the position already there settles immediately, without relying on a seeked event (browsers do not always fire it for a no-op currentTime assignment)', async () => {
     // Discovered via a real hang in the Part 1 browser harness: seeking to 0 right after load,
     // when the video is already sitting at 0, never fired 'seeked' in Chrome -- and since

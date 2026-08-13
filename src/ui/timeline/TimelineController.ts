@@ -376,7 +376,15 @@ export class TimelineController {
     const engine = this.engineRef.current;
     if (engine !== null) {
       this.unsubscribeFrame = engine.onFrame((t) => {
-        this.stateRef.current.t = t;
+        // The engine's sync loop reports the real <video>'s live position on every animation
+        // frame, independent of any seek/drag in progress -- it can lag behind (or momentarily
+        // revert to) a superseded target while a settle-seek is still catching up. state.t must
+        // stay owned by the pointer (mid-drag) or the just-released target (while its settle-seek
+        // is in flight) during those windows, same as drawPreviewOverlay's own masking condition,
+        // or the playhead visibly snaps back to a stale position.
+        const state = this.stateRef.current;
+        if (state.scrubActive || this.settleSeekTicks !== null) return;
+        state.t = t;
       });
       return;
     }
