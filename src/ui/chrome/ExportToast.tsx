@@ -3,26 +3,17 @@ import styles from './ExportToast.module.css';
 export interface ExportToastProps {
   durationLabel: string;
   outPath: string;
-  onShowInFolder: () => void;
-  onTrimAnother: () => void;
+  onDismiss: () => void;
 }
 
-export function ExportToast({ durationLabel, outPath, onShowInFolder, onTrimAnother }: ExportToastProps) {
+export function ExportToast({ durationLabel, outPath, onDismiss }: ExportToastProps) {
   return (
-    <div className={styles.root}>
+    <div className={styles.root} onClick={onDismiss} role="button" tabIndex={0}>
       <div className={styles.headerRow}>
         <span className={styles.dot} />
         <span>Clip exported — {durationLabel}</span>
       </div>
       <div className={styles.path}>{outPath}</div>
-      <div className={styles.actions}>
-        <button type="button" className={styles.showButton} onClick={onShowInFolder}>
-          Show in folder
-        </button>
-        <button type="button" className={styles.trimAnotherButton} onClick={onTrimAnother}>
-          Trim another range
-        </button>
-      </div>
     </div>
   );
 }
