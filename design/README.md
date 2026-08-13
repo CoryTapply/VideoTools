@@ -135,7 +135,7 @@ Panel body rows are a two-column Plex Mono 11px line, `line-height:16px`, `5px` 
 
 **Source panel** rows: container `mp4`, codec `h264 / High`, resolution `2560 × 1440`, frame rate `60.00 fps`, frames `862,401`, keyframes `3,422`, GOP `252 frames · 4.2 s`, bitrate `11.6 Mb/s`, size `19.4 GB`, heap `147 MB in use`.
 
-**Export panel** rows: container `mp4`, video `stream copy`, audio `stream copy × N` (or `none selected` in amber when N = 0), range `00:02:02`, est. size `178 + 29N MB`, writer `file system access`, folder `~/Recordings`, name `session-4_clip.mp4`.
+**Export panel** rows: container `mp4`, video `stream copy` (or `none selected` in amber when the video track is deselected), audio `stream copy × N` (or `none selected` in amber when N = 0), range `00:02:02`, est. size `178 + 29N MB`, writer `file system access`, folder `~/Recordings`, name `session-4_clip.mp4`.
 
 **Jobs panel** rows: index `done · 138 ms`, keyframe map `done · 41 ms`, thumbs `68% · running`, waveform `queued`, plus finished/canceled prior exports.
 
@@ -147,7 +147,7 @@ Fixture tracks — one video, six audio (a realistic OBS multi-track capture):
 
 | id | name | meta |
 |---|---|---|
-| V1 | Screen Capture | h264 · 2560×1440 · 60.00 fps · 4:00:00 (locked on) |
+| V1 | Screen Capture | h264 · 2560×1440 · 60.00 fps · 4:00:00 |
 | A1 | Mic — NT-USB | aac · eng · mono · 48 kHz · 4:00:00 |
 | A2 | Desktop Audio | aac · eng · stereo · 48 kHz · 4:00:00 |
 | A3 | Game Capture | aac · eng · stereo · 48 kHz · 4:00:00 |
@@ -155,7 +155,7 @@ Fixture tracks — one video, six audio (a realistic OBS multi-track capture):
 | A5 | Browser Media | aac · und · stereo · 48 kHz · 4:00:00 |
 | A6 | Alerts | aac · und · stereo · 44.1 kHz · 4:00:00 |
 
-Only the Export panel's checkboxes are interactive; V1 is locked. Selected rows get bg `rgba(76,141,246,.10)`. Defaults: V1 + A1. The Source panel shows the same list read-only with inert `#232326` boxes.
+Only the Export panel's checkboxes are interactive, including V1 -- deselecting it (with at least one audio track selected) exports an audio-only clip. Selected rows get bg `rgba(76,141,246,.10)`. Defaults: V1 + A1. The Source panel shows the same list read-only with inert `#232326` boxes.
 
 ### Transport bar (36px)
 

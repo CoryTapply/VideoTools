@@ -108,7 +108,6 @@ export function deriveSourceRows(tracks: readonly TrackIndex[], fileSizeBytes: n
 export function deriveTrackSummaries(tracks: readonly TrackIndex[]): TrackSummary[] {
   let videoIndex = 0;
   let audioIndex = 0;
-  let sawPrimaryVideo = false;
   const summaries: TrackSummary[] = [];
   for (const track of tracks) {
     if (track.kind === 'video' && track.video !== undefined) {
@@ -121,9 +120,7 @@ export function deriveTrackSummaries(tracks: readonly TrackIndex[]): TrackSummar
         name: 'Video',
         meta: `${friendlyCodecName(track.codec)} · ${track.video.displayWidth.toString()}×${track.video.displayHeight.toString()} · ${track.video.nominalFrameRate.toFixed(2)} fps · ${formatDurationHMS(durationSeconds)}`,
         kind: 'video',
-        locked: !sawPrimaryVideo,
       });
-      sawPrimaryVideo = true;
     } else if (track.kind === 'audio' && track.audio !== undefined) {
       audioIndex++;
       const id: TrackId = `A${audioIndex.toString()}`;
@@ -187,11 +184,12 @@ export function deriveExportRows(
   sourceFileName: string,
   estimatedBytes: number | null,
 ): PanelRowFixture[] {
+  const videoSelected = tracks.some((t) => t.kind === 'video' && sel[t.id]);
   const audioSelected = tracks.filter((t) => t.kind === 'audio' && sel[t.id]).length;
   const estSize = estimatedBytes !== null ? formatFileSize(estimatedBytes) : `${(178 + audioSelected * 29).toString()} MB`;
   return [
     { label: 'container', value: 'mp4', tone: 'neutral' },
-    { label: 'video', value: 'stream copy', tone: 'informational' },
+    { label: 'video', value: videoSelected ? 'stream copy' : 'none selected', tone: videoSelected ? 'informational' : 'warning' },
     {
       label: 'audio',
       value: audioSelected === 0 ? 'none selected' : `stream copy × ${audioSelected.toString()}`,

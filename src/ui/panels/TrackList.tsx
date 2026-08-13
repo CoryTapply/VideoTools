@@ -25,11 +25,10 @@ export function TrackList({ mode, tracks, sel, onToggle }: TrackListProps) {
         <span className={styles.trackListCount}>{count}</span>
       </div>
       {tracks.map((track) => {
-        // The Source panel is read-only: it never shows a checkmark, even for the always-on V1
-        // track -- design/reference/Video Trimmer.dc.html's trackRows('source') forces `on: false`
-        // regardless of selection state.
+        // The Source panel is read-only: it never shows a checkmark, regardless of selection
+        // state -- design/reference/Video Trimmer.dc.html's trackRows('source') forces `on: false`.
         const on = mode === 'export' && sel[track.id];
-        const interactive = mode === 'export' && !track.locked;
+        const interactive = mode === 'export';
 
         const checkboxClass = [styles.checkbox, mode === 'export' ? (on ? styles.checkboxOn : styles.checkboxOff) : '']
           .filter(Boolean)

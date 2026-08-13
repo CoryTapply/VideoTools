@@ -12,5 +12,4 @@ export interface TrackSummary {
   name: string;
   meta: string;
   kind: 'video' | 'audio';
-  locked?: boolean;
 }

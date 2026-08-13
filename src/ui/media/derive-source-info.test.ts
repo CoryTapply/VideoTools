@@ -136,11 +136,9 @@ describe('deriveSourceRows', () => {
 });
 
 describe('deriveTrackSummaries', () => {
-  it('synthesizes V1/A1 ids, locks only the primary video track', () => {
+  it('synthesizes V1/A1 ids', () => {
     const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
     expect(summaries.map((s) => s.id)).toEqual(['V1', 'A1']);
-    expect(summaries[0].locked).toBe(true);
-    expect(summaries[1].locked).toBeUndefined();
     expect(summaries[1].name).toBe('Mic — NT-USB');
   });
 
@@ -182,6 +180,13 @@ describe('deriveExportRows', () => {
     const rows = deriveExportRows(summaries, { V1: true, A1: false }, 0, 10, 'x.mp4', null);
     const audioRow = rows.find((r) => r.label === 'audio');
     expect(audioRow).toEqual({ label: 'audio', value: 'none selected', tone: 'warning' });
+  });
+
+  it('flags "none selected" in warning tone when the video track is deselected (audio-only export)', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack()]);
+    const rows = deriveExportRows(summaries, { V1: false, A1: true }, 0, 10, 'x.mp4', null);
+    const videoRow = rows.find((r) => r.label === 'video');
+    expect(videoRow).toEqual({ label: 'video', value: 'none selected', tone: 'warning' });
   });
 
   it('falls back to the illustrative formula when no real estimate is available', () => {

@@ -16,7 +16,7 @@ export const FORMAT_CHIP = 'MP4 · H.264 · 19.4 GB';
 const FULL_DURATION_LABEL = '4:00:00';
 
 export const TRACKS: readonly TrackSummary[] = [
-  { id: 'V1', trackId: 1, name: 'Screen Capture', meta: `h264 · 2560×1440 · 60.00 fps · ${FULL_DURATION_LABEL}`, kind: 'video', locked: true },
+  { id: 'V1', trackId: 1, name: 'Screen Capture', meta: `h264 · 2560×1440 · 60.00 fps · ${FULL_DURATION_LABEL}`, kind: 'video' },
   { id: 'A1', trackId: 2, name: 'Mic — NT-USB', meta: `aac · eng · mono · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
   { id: 'A2', trackId: 3, name: 'Desktop Audio', meta: `aac · eng · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },
   { id: 'A3', trackId: 4, name: 'Game Capture', meta: `aac · eng · stereo · 48 kHz · ${FULL_DURATION_LABEL}`, kind: 'audio' },

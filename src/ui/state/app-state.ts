@@ -127,9 +127,9 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       // enforcement section: "Switching manually to `exact` clears the notice."
       return { ...state, trimMode: action.mode, notice: null, noticeOpen: false };
     case 'track/toggle':
-      // Locking (the primary video track can't be deselected) is data-driven via each track
-      // summary's own `locked` flag -- TrackList.tsx only wires onClick when `!locked`, so the
-      // reducer trusts its caller rather than keeping its own copy of which id is locked.
+      // Any track (including the primary video track) can be deselected -- e.g. to export an
+      // audio-only clip. resolveExportSelection still requires a video track to exist in the
+      // source file for the timeline/keyframe reference, but it doesn't need to be selected.
       return { ...state, sel: { ...state.sel, [action.track]: !state.sel[action.track] } };
     case 'sel/set':
       return { ...state, sel: action.sel };
