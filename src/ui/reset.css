@@ -20,7 +20,7 @@ html {
 body {
   background: var(--color-bg-base);
   color: var(--color-text-primary);
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--ui);
   font-size: 13px;
   overflow: hidden;
   user-select: none;

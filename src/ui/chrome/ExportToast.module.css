@@ -40,7 +40,7 @@
 }
 
 .path {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--color-text-tertiary);
   word-break: break-all;

@@ -43,7 +43,7 @@
 }
 
 .fileName {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
@@ -59,7 +59,7 @@
   border-radius: 6px;
   background: var(--color-bg-raised);
   border: 1px solid var(--color-border-base);
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
   color: var(--color-text-secondary);
   white-space: nowrap;
@@ -86,7 +86,7 @@
   border: 1px solid var(--color-warn-button-border);
   background: transparent;
   color: var(--color-warn);
-  font: 500 11px 'IBM Plex Sans', sans-serif;
+  font: 11px var(--ui);
   cursor: pointer;
 }
 
@@ -105,7 +105,7 @@
   border: 1px solid var(--color-border-base);
   background: var(--color-bg-panel);
   color: var(--color-text-primary);
-  font: 500 12.5px 'IBM Plex Sans', sans-serif;
+  font: 12.5px var(--ui);
   cursor: pointer;
 }
 
@@ -120,7 +120,7 @@
   border: 1px solid var(--color-accent);
   background: var(--color-accent);
   color: var(--color-accent-on);
-  font: 600 12.5px 'IBM Plex Sans', sans-serif;
+  font: 12.5px var(--ui);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -137,7 +137,7 @@
 }
 
 .exportHint {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 11px;
   opacity: 0.6;
 }

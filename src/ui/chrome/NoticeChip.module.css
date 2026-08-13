@@ -36,12 +36,12 @@
 }
 
 .noticeLabel {
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--ui);
   font-size: 12px;
 }
 
 .noticeDelta {
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: var(--mono);
   font-size: 12px;
   font-weight: 500;
   color: var(--color-warn-bright);
@@ -61,7 +61,7 @@
   flex-direction: column;
   gap: 9px;
   color: var(--color-text-primary);
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: var(--ui);
   font-size: 12px;
   z-index: 60;
 }
@@ -83,7 +83,7 @@
   border: 1px solid var(--color-border-base);
   background: var(--color-bg-raised);
   color: var(--color-text-primary);
-  font: 500 11.5px 'IBM Plex Sans', sans-serif;
+  font: 11.5px var(--ui);
   cursor: pointer;
 }
 
@@ -98,7 +98,7 @@
   border: 1px solid var(--color-border-base);
   background: transparent;
   color: var(--color-text-secondary);
-  font: 500 11.5px 'IBM Plex Sans', sans-serif;
+  font: 11.5px var(--ui);
   cursor: pointer;
 }
 
