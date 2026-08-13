@@ -2,7 +2,7 @@
   position: absolute;
   left: 14px;
   right: 14px;
-  top: 14px;
+  top: 56px; /* clears the floating title bar -- design/floating-chrome-changes.md's "7. Export progress overlay moved down". */
   height: 34px;
   display: flex;
   align-items: center;

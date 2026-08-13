@@ -9,7 +9,7 @@ import type { DragTarget } from '../../state/timeline-controller-state.ts';
 const HANDLE_BAR_WIDTH_PX = 8;
 const HANDLE_BAR_RADIUS_PX = 2;
 const GRIP_HEIGHT_PX = 16;
-const CHIP_TOP_PX = 26;
+const CHIP_TOP_PX = 30;
 const CHIP_PADDING_X_PX = 6;
 const CHIP_HEIGHT_PX = 18;
 /** No measureText() in CanvasLike (kept narrow on purpose -- see canvas-like.ts) -- a fixed

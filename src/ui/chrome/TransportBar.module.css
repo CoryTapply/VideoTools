@@ -1,13 +1,32 @@
+/* design/floating-chrome-changes.md's "2. Transport becomes a floating pill" -- centered over the
+   preview, 14px above the splitter. `left`/`transform` center it; `bottom` is set inline (see
+   TransportBar.tsx's bottomPx) since it depends on the live timeline height. */
 .root {
-  flex: 0 0 36px;
-  height: 36px;
+  position: absolute;
+  left: calc(50% - 17px); /* rowHeight.railWidth / 2 -- centers the pill over the preview, not the full window. */
+  transform: translateX(-50%);
+  height: 40px;
+  z-index: 32;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 10px;
-  border-top: 1px solid var(--color-border-base);
-  border-bottom: 1px solid var(--color-border-base);
-  background: var(--color-bg-base);
+  gap: 16px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border-base);
+  border-radius: 10px;
+  background: var(--color-transport-pill-bg);
+  box-shadow: var(--shadow-transport-pill);
+  transition: opacity 180ms ease-out;
+}
+
+.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    transition-duration: 0ms;
+  }
 }
 
 .timecode {
@@ -74,10 +93,6 @@
 
 .readoutValue {
   color: var(--color-text-primary);
-}
-
-.spacer {
-  flex: 1;
 }
 
 .trimGroup {

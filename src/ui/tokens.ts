@@ -25,7 +25,6 @@ export const color = {
   // Indexing-state stripe overlay -- design/README.md's Timeline "Indexing state" note.
   bgIndexingStripeA: '#151517',
   bgIndexingStripeB: '#121214',
-  bgKeyframes: '#121215',
   bgWaveform: '#0F0F11',
   bgTileEmpty: '#1B1B1F',
   // The preview stage's placeholder-frame stripe texture (stands in for a real decoded frame) --
@@ -35,6 +34,13 @@ export const color = {
   // Splitter hover -- design/reference/Video Trimmer.dc.html's `style-hover` on the splitter row,
   // not in the main token table.
   bgSplitterHover: '#16161A',
+  // Floating title bar's gradient scrim (replaces the old row's border-bottom) --
+  // design/floating-chrome-changes.md's "Title bar floats over the preview".
+  titleScrimTop: 'rgba(11,11,12,.94)',
+  titleScrimBottom: 'rgba(11,11,12,0)',
+  // Floating transport pill's background -- design/floating-chrome-changes.md's "Transport becomes
+  // a floating pill".
+  transportPillBg: 'rgba(14,14,15,.9)',
 
   borderBase: '#2E2E32',
   borderSubtle: '#232326',
@@ -118,16 +124,19 @@ export const radius = [2, 3, 4, 5, 6, 8] as const;
 export const shadow = {
   panel: '0 12px 32px rgba(0,0,0,.55)',
   exportOverlay: '0 10px 26px rgba(0,0,0,.5)',
+  // Floating transport pill -- design/floating-chrome-changes.md's "Transport becomes a floating
+  // pill".
+  transportPill: '0 10px 28px rgba(0,0,0,.45)',
 } as const;
 
-// Fixed pixel heights/widths named explicitly in design/README.md's "Row heights" token line.
+// Fixed pixel heights/widths named explicitly in design/README.md's "Row heights" token line
+// (updated by design/floating-chrome-changes.md: title/transport/status no longer occupy column
+// height, ruler absorbs the old keyframe row).
 export const rowHeight = {
-  title: 40,
+  titleOverlay: 44,
   degradedStrip: 22,
-  transport: 36,
-  status: 30,
-  ruler: 22,
-  keyframes: 15,
+  transportPill: 40,
+  ruler: 26,
   waveform: 26,
   splitter: 5,
   railWidth: 34,
@@ -141,5 +150,9 @@ export const motion = {
   snapFlashMs: 450,
   panelHoverOpenMs: 400,
   panelCloseMs: 220,
+  // Chrome auto-hide idle timeout and cross-fade duration --
+  // design/floating-chrome-changes.md's "Auto-hide behaviour".
+  chromeIdleMs: 2000,
+  chromeFadeMs: 180,
   easingOut: 'ease-out',
 } as const;

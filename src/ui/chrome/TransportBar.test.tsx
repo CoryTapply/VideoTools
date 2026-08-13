@@ -18,6 +18,7 @@ const baseProps = {
   durTc: '00:00:00:00',
   trimMode: 'copy' as const,
   onSetTrimMode: () => {},
+  bottomPx: 55,
 };
 
 describe('TransportBar', () => {

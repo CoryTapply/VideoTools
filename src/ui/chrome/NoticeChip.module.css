@@ -1,19 +1,24 @@
+/* design/floating-chrome-changes.md's "3. Status bar removed" -- the keyframe-shift notice as a
+   standalone floating chip. `right`/`margin-right`/`bottom` are set inline (see NoticeChip.tsx)
+   since they depend on live rail/pinned-panel width and timeline height; by default `bottom`
+   matches the transport pill's own (both sit near the bottom of the video region), since the pill
+   is horizontally centered and this chip is right-aligned, so the two don't normally share any
+   horizontal space. */
 .root {
-  flex: 0 0 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 10px;
-  border-top: 1px solid var(--color-border-base);
-  background: var(--color-bg-base);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 11px;
-  color: var(--color-text-tertiary);
+  position: absolute;
+  z-index: 34;
 }
 
-.spacer {
-  flex: 1;
+/* Below ~1200px the centered pill can grow wide enough to reach this right-aligned chip (and the
+   wider popover it opens), so lift clear of it instead -- the note's "only move it up if it will
+   conflict with the floating chrome, on very small screen size". The exact collision point moves
+   with pill content width and rail/pinned-panel state, so this is a conservative fixed breakpoint
+   rather than a measured one; 1200px comfortably clears the design's own 1440px reference width
+   while catching the 924px width design/screens/*.png was captured at. */
+@media (max-width: 1200px) {
+  .root {
+    margin-bottom: 52px; /* rowHeight.transportPill (40) + a 12px gap. */
+  }
 }
 
 .noticePill {

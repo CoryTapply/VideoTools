@@ -63,7 +63,7 @@ describe('drawHandles', () => {
   it('draws a timecode chip while dragging, with the label passed through', () => {
     const { ctx, calls } = makeRecordingCtx();
     drawHandles(ctx, 1000, { inX: 100, outX: 800, heightPx: 236, drag: 'in' }, '00:01:00:00');
-    expect(calls.some((c) => c === 'fillText(00:01:00:00,100,35)')).toBe(true);
+    expect(calls.some((c) => c === 'fillText(00:01:00:00,100,39)')).toBe(true);
   });
 
   it('highlights the dragged handle with accentActive, the idle one with accent', () => {

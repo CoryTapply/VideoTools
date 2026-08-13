@@ -1,31 +1,28 @@
-// Keyframe row draw: background, border-bottom, density-dependent ticks (full/short/stripe).
-// design/README.md's "2. Keyframe row -- 15px" -- see ../keyframe-density.ts for the density math.
+// Keyframe-tick draw: density-dependent ticks (full/short/stripe) painted into the ruler's own
+// lower band. design/floating-chrome-changes.md's "4. Keyframe ticks merged into the ruler" --
+// the row this used to own (its own background, border-bottom) is gone; ruler.ts now supplies the
+// backdrop. See ../keyframe-density.ts for the density math (unchanged).
 
-import { color, rowHeight } from '../../tokens.ts';
+import { color } from '../../tokens.ts';
 import { averageKeyframeIntervalTicks, keyframeDensity, visibleKeyframeTicks } from '../keyframe-density.ts';
 import type { CanvasLike } from '../canvas-like.ts';
 import type { Time, Viewport } from '../types.ts';
 
-export const KEYFRAME_ROW_TOP = rowHeight.ruler;
-export const KEYFRAME_ROW_HEIGHT = rowHeight.keyframes;
+/** The band's top, in canvas px from the ruler's own origin -- design/floating-chrome-changes.md:
+ * "position:absolute; ... top:14px; bottom:0". The old row's `top:0`/`top:5px` tick offsets are
+ * now relative to this instead. */
+export const KEYFRAME_BAND_TOP_PX = 14;
+/** Ruler height (26) minus the band's top (14) -- the band runs to the ruler's own bottom edge. */
+export const KEYFRAME_BAND_HEIGHT_PX = 12;
 const SHORT_TICK_TOP = 5;
 const STRIPE_PERIOD_PX = 8;
 
-export interface KeyframeRowHighlights {
+export interface KeyframeBandHighlights {
   /** Presentation ticks currently coinciding with the in or out point -- drawn accent-colored. */
   accentTimes: readonly Time[];
 }
 
-export function drawKeyframeRow(ctx: CanvasLike, widthPx: number, viewport: Viewport, keyframeTimes: Float64Array, highlights?: KeyframeRowHighlights): void {
-  ctx.fillStyle = color.bgKeyframes;
-  ctx.fillRect(0, KEYFRAME_ROW_TOP, widthPx, KEYFRAME_ROW_HEIGHT);
-  ctx.strokeStyle = color.borderSubtle;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(0, KEYFRAME_ROW_TOP + KEYFRAME_ROW_HEIGHT - 0.5);
-  ctx.lineTo(widthPx, KEYFRAME_ROW_TOP + KEYFRAME_ROW_HEIGHT - 0.5);
-  ctx.stroke();
-
+export function drawKeyframeBand(ctx: CanvasLike, widthPx: number, viewport: Viewport, keyframeTimes: Float64Array, highlights?: KeyframeBandHighlights): void {
   if (keyframeTimes.length < 2 || viewport.viewSpan <= 0) return;
   const intervalTicks = averageKeyframeIntervalTicks(keyframeTimes);
   const pxPerKeyframe = (intervalTicks / viewport.viewSpan) * widthPx;
@@ -35,7 +32,7 @@ export function drawKeyframeRow(ctx: CanvasLike, widthPx: number, viewport: View
     ctx.globalAlpha = density.stripeOpacity;
     ctx.fillStyle = color.keyframeTickShort;
     for (let x = 0; x < widthPx; x += STRIPE_PERIOD_PX) {
-      ctx.fillRect(x, KEYFRAME_ROW_TOP, 1, KEYFRAME_ROW_HEIGHT);
+      ctx.fillRect(x, KEYFRAME_BAND_TOP_PX, 1, KEYFRAME_BAND_HEIGHT_PX);
     }
     ctx.globalAlpha = 1;
     return;
@@ -43,8 +40,8 @@ export function drawKeyframeRow(ctx: CanvasLike, widthPx: number, viewport: View
 
   const accentSet = new Set(highlights?.accentTimes ?? []);
   const ticks = visibleKeyframeTicks(keyframeTimes, viewport);
-  const top = density.mode === 'full' ? KEYFRAME_ROW_TOP : KEYFRAME_ROW_TOP + SHORT_TICK_TOP;
-  const bottom = KEYFRAME_ROW_TOP + KEYFRAME_ROW_HEIGHT;
+  const top = density.mode === 'full' ? KEYFRAME_BAND_TOP_PX : KEYFRAME_BAND_TOP_PX + SHORT_TICK_TOP;
+  const bottom = KEYFRAME_BAND_TOP_PX + KEYFRAME_BAND_HEIGHT_PX;
   for (const tick of ticks) {
     ctx.strokeStyle = accentSet.has(tick.time) ? color.accent : density.mode === 'full' ? color.keyframeTickFull : color.keyframeTickShort;
     ctx.beginPath();

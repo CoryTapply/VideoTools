@@ -2,10 +2,11 @@ import { rowHeight } from '../tokens.ts';
 import styles from './TimelineRegion.module.css';
 import type { RefObject } from 'react';
 
-// Indexing covers the filmstrip (and, in M2, the waveform) but not the ruler/keyframe rows --
-// design/README.md's "Indexing state" note. Computed from tokens.ts rather than duplicated as a
-// CSS literal, so the two stay in sync if the row heights ever change.
-const FILMSTRIP_TOP_PX = rowHeight.ruler + rowHeight.keyframes;
+// Indexing covers the filmstrip (and, in M2, the waveform) but not the ruler, which now hosts the
+// keyframe ticks too -- design/README.md's "Indexing state" note, design/floating-chrome-changes.md's
+// keyframe-row merge. Computed from tokens.ts rather than duplicated as a CSS literal, so the two
+// stay in sync if the row height ever changes.
+const FILMSTRIP_TOP_PX = rowHeight.ruler;
 
 export interface TimelineRegionProps {
   heightPx: number;

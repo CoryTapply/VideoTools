@@ -6,7 +6,7 @@
 import { color, motion } from '../../tokens.ts';
 import type { CanvasLike } from '../canvas-like.ts';
 
-const TOP_PX = 22; // below the ruler, matching rowHeight.ruler -- the flash starts at the keyframe row.
+const TOP_PX = 26; // rowHeight.ruler -- the flash starts where the filmstrip begins, now that the keyframe ticks live inside the ruler.
 
 /** 1 (just snapped) fading linearly to 0 over motion.snapFlashMs; null once fully expired. */
 export function snapFlashOpacity(startedAt: number, now: number): number | null {

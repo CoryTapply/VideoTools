@@ -12,9 +12,8 @@ import { wrapCanvasContext } from './canvas-like.ts';
 import { clampHandleDrag, edgeX, hitTestHandle, scrubTimeFromPointer } from './drag-gesture.ts';
 import { drawFilmstrip, FILMSTRIP_TILE_WIDTH_PX } from './draw/filmstrip.ts';
 import { drawHandles } from './draw/handles.ts';
-import { drawKeyframeRow, KEYFRAME_ROW_HEIGHT, KEYFRAME_ROW_TOP } from './draw/keyframe-row.ts';
 import { drawPlayhead } from './draw/playhead.ts';
-import { drawRuler } from './draw/ruler.ts';
+import { drawRuler, RULER_HEIGHT } from './draw/ruler.ts';
 import { drawScrubPreview } from './draw/scrub-preview.ts';
 import { drawSnapFlash, snapFlashOpacity } from './draw/snap-flash.ts';
 import { decayVelocity, isCoastingDone, updateVelocity } from './kinetic-pan.ts';
@@ -496,10 +495,9 @@ export class TimelineController {
     const inTicks = state.drag === 'in' && state.dragValueTicks !== null ? state.dragValueTicks : secondsToTicks(tinTout.tin, timescale);
     const outTicks = state.drag === 'out' && state.dragValueTicks !== null ? state.dragValueTicks : secondsToTicks(tinTout.tout, timescale);
 
-    drawRuler(this.ctx, widthPx, viewport, timescale, ticksPerFrame, fps);
-    drawKeyframeRow(this.ctx, widthPx, viewport, this.keyframeTimesFor(videoTrack), { accentTimes: [inTicks, outTicks] });
+    drawRuler(this.ctx, widthPx, viewport, timescale, ticksPerFrame, fps, this.keyframeTimesFor(videoTrack), { accentTimes: [inTicks, outTicks] });
 
-    const filmstripTop = KEYFRAME_ROW_TOP + KEYFRAME_ROW_HEIGHT;
+    const filmstripTop = RULER_HEIGHT;
     const filmstripHeight = Math.max(0, heightPx - filmstripTop);
     const tileCount = Math.max(1, Math.ceil(widthPx / FILMSTRIP_TILE_WIDTH_PX) + 1);
     const frameCache = this.frameCacheRef.current;
