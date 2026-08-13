@@ -283,14 +283,20 @@ export class NativeVideoEngine implements PlaybackEngine {
 
   private readonly handleSeeked = (): void => {
     this.seekInFlight = undefined;
+    if (this.pendingSeekTarget) {
+      // This 'seeked' landed on an intermediate hop that a newer seek() call already superseded
+      // (e.g. a quick second scrub released before the first one settled) -- re-issue toward the
+      // latest target without broadcasting the now-stale position. onFrame listeners (playhead,
+      // timecode) must only ever see the final settled position, never an intermediate coalescing
+      // hop, or they visibly snap back to the superseded target before correcting.
+      this.issueSeek();
+      return;
+    }
+
     // The video element's currentTime is authoritative the instant 'seeked' fires -- sync it now
     // rather than waiting for the next rVFC/rAF tick, so `this.currentTime` (and thus the
     // convergence property) doesn't depend on a frame callback also having fired.
     this.updateCurrentTimeFromSeconds(this.video.currentTime);
-    if (this.pendingSeekTarget) {
-      this.issueSeek();
-      return;
-    }
 
     const waiters = this.seekSettleWaiters;
     this.seekSettleWaiters = [];
