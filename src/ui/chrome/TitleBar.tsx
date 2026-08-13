@@ -8,11 +8,37 @@ export interface TitleBarProps {
   onOpen: () => void;
   onExport: () => void;
   onReconnect: () => void;
+  /** design/floating-chrome-changes.md's "5. Auto-hide behaviour" -- cross-fades and, while
+   * false, stops intercepting clicks meant for the frame beneath. Defaults true so existing
+   * callers/tests that don't pass it still render fully visible. */
+  chromeVisible?: boolean;
+  /** Distance from the preview area's right edge -- clears the icon rail, plus a pinned panel's
+   * width when one is docked. See chrome/floating-offsets.ts. */
+  rightPx: number;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-export function TitleBar({ fileName, formatChip, permissionLost, canExport, onOpen, onExport, onReconnect }: TitleBarProps) {
+export function TitleBar({
+  fileName,
+  formatChip,
+  permissionLost,
+  canExport,
+  onOpen,
+  onExport,
+  onReconnect,
+  chromeVisible = true,
+  rightPx,
+  onMouseEnter,
+  onMouseLeave,
+}: TitleBarProps) {
   return (
-    <div className={styles.root}>
+    <div
+      className={chromeVisible ? styles.root : `${styles.root} ${styles.hidden}`}
+      style={{ right: rightPx }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <div className={styles.identity}>
         <div className={styles.dot} />
         <div className={styles.fileName}>{fileName ?? 'No file open'}</div>

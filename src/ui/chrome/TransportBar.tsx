@@ -24,6 +24,14 @@ export interface TransportBarProps {
   trimMode: TrimMode;
   exactAvailable: boolean;
   onSetTrimMode: (mode: TrimMode) => void;
+  /** design/floating-chrome-changes.md's "5. Auto-hide behaviour". Defaults true so existing
+   * callers/tests that don't pass it still render fully visible. */
+  chromeVisible?: boolean;
+  /** Distance from the timeline's live top edge -- 14px above the splitter. See
+   * chrome/floating-offsets.ts. */
+  bottomPx: number;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 export function TransportBar({
@@ -41,9 +49,18 @@ export function TransportBar({
   trimMode,
   exactAvailable,
   onSetTrimMode,
+  chromeVisible = true,
+  bottomPx,
+  onMouseEnter,
+  onMouseLeave,
 }: TransportBarProps) {
   return (
-    <div className={styles.root}>
+    <div
+      className={chromeVisible ? styles.root : `${styles.root} ${styles.hidden}`}
+      style={{ bottom: bottomPx }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <div ref={timecodeRef} className={styles.timecode}>
         {timecode}
       </div>
@@ -83,7 +100,6 @@ export function TransportBar({
           <span className={styles.readoutValue}>{durTc}</span>
         </div>
       </div>
-      <div className={styles.spacer} />
       <div className={styles.trimGroup}>
         <span className={styles.trimLabel}>trim</span>
         <div className={styles.segmented}>

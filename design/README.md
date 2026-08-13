@@ -1,5 +1,7 @@
 # Handoff: Browser-Based Video Trimmer
 
+> **Two change notes supersede parts of this file.** `floating-chrome-changes.md` (current) replaces everything about the title bar, transport bar, status bar, ruler and keyframe rows. `empty-state-changes.md` replaces the empty-state description. Read both before implementing.
+
 ## Overview
 
 A dark, dense, desktop-only web UI for a browser app that opens very large local video files (20 GB+ MP4/H.264), lets the user scrub a 4-hour timeline, set in/out points, and export a trimmed clip via stream copy. Everything runs client-side — the file is read through the File System Access API and never uploaded.
@@ -78,20 +80,17 @@ something the architecture does not do.
 
 | Row | Height | Notes |
 |---|---|---|
-| Title bar | `40px` fixed | file identity + Open + Export clip |
+| ~~Title bar~~ | — | now a floating overlay, out of the column — see `floating-chrome-changes.md` |
 | Degraded notice | `22px` | only in the degraded state |
 | Stage area | `flex:1, min-height:0` | horizontal flex: preview / pinned panel / icon rail |
-| Transport bar | `36px` fixed | timecode, transport, in/out/dur, trim mode |
+| ~~Transport bar~~ | — | now a floating pill over the preview — see `floating-chrome-changes.md` |
 | Splitter | `5px` | `cursor:row-resize` |
 | Timeline | `236px` default, resizable `150–55vh` | ruler / keyframes / filmstrip / waveform |
-| Status bar | `30px` fixed | zoom, thumbs, index, keyframe-shift notice |
+| ~~Status bar~~ | — | removed; only the keyframe-shift notice survives, as a floating chip |
 
 The stage row is the only flexible one — the timeline is a fixed pixel height driven by state, and the splitter mutates it.
 
-In M1 the timeline is three rows, not four — see *Waveform* below. The default
-`236px` timeline height is unchanged; the filmstrip absorbs the freed space.
-
-### Title bar (40px)
+### Title bar (44px, floating — geometry per `floating-chrome-changes.md`; contents below still apply)
 
 - Left: `8×8px` rounded-`2px` green dot (`#5DCAA5`), then the filename in IBM Plex Mono `12.5px`, ellipsized. Empty state shows `No file open`.
 - Format chip: `22px` tall, `0 8px`, radius `6px`, bg `#232326`, border `1px #2E2E32`, Plex Mono `11px`, color `#9A9A96`. Content: `MP4 · H.264 · 19.4 GB`.
@@ -110,7 +109,7 @@ While dragging an in/out handle the label switches to `filmstrip cache frame` �
 
 **Export toast** — bottom-right, `320px`, radius 8, bg `#1A1A1C`, border `1px #2E2E32`, animates in with `translateY(6px)→0` over 180ms. Green dot + `Clip exported — 2 m 02 s`, output path in Plex Mono 11px `#6B6B68` (`word-break:break-all`), then `Show in folder` and `Trim another range` buttons (24px tall).
 
-**Empty state** replaces the video surface: `min(520px,80%)`, `40px 32px` padding, `1px dashed #2E2E32`, radius 8, bg `#111113`, hover border `#4C8DF6` / bg `#131317`. A 34px rounded icon tile, then `Drop an MP4 or MOV file, or open one` (14px) and `Files stay on your machine. 20 GB and up is fine.` (12px `#6B6B68`).
+**Empty state** replaces the video surface, hides the title and status bars, and swaps panel bodies for skeletons — see `empty-state-changes.md`, which supersedes this paragraph.
 
 **Unsupported-codec state**: `min(560px,86%)` card, bg `#1A1A1C`, border `1px #2E2E32`, radius 8, `26px 28px`. Headline 14px: *This file's codec can't be previewed in your browser, but it can still be trimmed.* Body 12.5px `#9A9A96` explains that index, keyframe map, and waveform read normally and stream copy still works. Footer row of Plex Mono 11.5px `#6B6B68` facts: `hevc / Main 10`, `3840 × 2160`, `59.94 fps`. The timeline stays fully live in this state — only decode is unavailable.
 
@@ -157,7 +156,7 @@ Fixture tracks — one video, six audio (a realistic OBS multi-track capture):
 
 Only the Export panel's checkboxes are interactive, including V1 -- deselecting it (with at least one audio track selected) exports an audio-only clip. Selected rows get bg `rgba(76,141,246,.10)`. Defaults: V1 + A1. The Source panel shows the same list read-only with inert `#232326` boxes.
 
-### Transport bar (36px)
+### Transport bar (40px floating pill — geometry per `floating-chrome-changes.md`; contents below still apply)
 
 `14px` gaps, borders top and bottom `1px #2E2E32`.
 
@@ -170,9 +169,9 @@ Only the Export panel's checkboxes are interactive, including V1 -- deselecting 
 
 A vertical stack inside a container that owns pointer handling. Four rows:
 
-**1. Ruler — 22px.** `border-bottom:1px #232326`, `cursor:text`. Adaptive tick step chosen from `[1f, 2f, 5f, 10f, 0.5s, 1s, 2s, 5s, 10s, 30s, 1m, 2m, 5m, 10m, 30m, 1h]` — the first candidate whose on-screen width is ≥ 90px. Minor ticks at step/5, drawn only when ≥ 13px apart. Major tick `#4A4A4E` full height; minor `#2A2A2E`, 6px. Labels Plex Mono 10.5px `#6B6B68`, offset `+4px` right of their tick, truncated by zoom level: `HH:MM` at ≥1min steps, `HH:MM:SS` at ≥1s, `MM:SS:FF` below. During indexing a 2px `#4C8DF6` progress fill runs along the bottom of this row.
+**1. Ruler — 26px, and it now carries the keyframe ticks (`floating-chrome-changes.md`).** `border-bottom:1px #232326`, `cursor:text`. Adaptive tick step chosen from `[1f, 2f, 5f, 10f, 0.5s, 1s, 2s, 5s, 10s, 30s, 1m, 2m, 5m, 10m, 30m, 1h]` — the first candidate whose on-screen width is ≥ 90px. Minor ticks at step/5, drawn only when ≥ 13px apart. Major tick `#4A4A4E` full height; minor `#2A2A2E`, 6px. Labels Plex Mono 10.5px `#6B6B68`, offset `+4px` right of their tick, truncated by zoom level: `HH:MM` at ≥1min steps, `HH:MM:SS` at ≥1s, `MM:SS:FF` below. During indexing a 2px `#4C8DF6` progress fill runs along the bottom of this row.
 
-**2. Keyframe row — 15px.** bg `#121215`, `border-bottom:1px #232326`, tooltip `Keyframes — cuts in copy mode land here`. GOP is `4.2s` (252 frames). Rendering depends on keyframe spacing in px:
+**2. Keyframe ticks — REMOVED as a row, merged into the ruler (`floating-chrome-changes.md`); tick rules below still apply.** bg `#121215`, `border-bottom:1px #232326`, tooltip `Keyframes — cuts in copy mode land here`. GOP is `4.2s` (252 frames). Rendering depends on keyframe spacing in px:
 - ≥ 16px: full-height ticks, `#8A8A92`
 - 3–16px: short ticks starting at `top:5px`, `#6E6E76`
 - < 3px: a repeating-linear-gradient texture (`#6E6E76` 1px stripes at the keyframe pitch), opacity `clamp(0.4, kfPx*2, 0.85)`
@@ -211,7 +210,7 @@ re-layout.
 
 **Indexing state** covers the filmstrip and waveform with a 10px/20px vertical stripe pattern (`#151517` / `#121214`) and blocks pointer interaction.
 
-### Status bar (30px)
+### Status bar — REMOVED (`floating-chrome-changes.md`); notice chip contents below still apply
 
 Plex Mono 11px `#6B6B68`, 16px gaps, border-top `1px #2E2E32`.
 
@@ -425,7 +424,7 @@ same token module.
 
 **Shadow** — panels `0 12px 32px rgba(0,0,0,.55)`; export overlay `0 10px 26px rgba(0,0,0,.5)`.
 
-**Row heights** — 40 title / 36 transport / 30 status / 22 ruler / 15 keyframes / 26 waveform / 5 splitter / 34 rail width / 250 floating panel / 258 pinned panel.
+**Row heights** — 44 floating title overlay / 40 floating transport pill / 26 ruler (incl. keyframe ticks) / 26 waveform / 5 splitter / 34 rail width / 250 floating panel / 258 pinned panel. No title, transport or status row occupies column height any more.
 
 **Motion** — panel fade 120ms ease-out; toast rise 180ms ease-out; snap flash 450ms ease-out; panel hover-open delay 400ms; panel close delay 220ms. No transitions on anything that tracks the pointer.
 
@@ -439,7 +438,8 @@ None. All icons are inline SVG drawn at a 16×16 or 20×20 viewBox with `stroke-
 
 | File | State |
 |---|---|
-| `01-ready.png` | Default: file open, in/out set, keyframe-shift notice in the status bar |
+| `01-ready.png` | Default: file open, in/out set, floating chrome visible, keyframe-shift chip |
+| `02-chrome-hidden.png` | Same, two seconds later: chrome faded out, in-frame readout visible |
 | `02-keyframe-shift-popover.png` | Notice popover with `Keep exact frame` |
 | `03-panel-source.png` | Floating Source panel with the read-only track list |
 | `04-panel-export-tracks.png` | Export panel — track checkboxes, selection count, derived audio/size rows |
@@ -452,15 +452,15 @@ None. All icons are inline SVG drawn at a 16×16 or 20×20 viewBox with `stroke-
 | `11-degraded-browser.png` | No File System Access — reconnect pill + download-cap note |
 | `12-variant-no-waveform.png` | First-release variant (`waveform: false`) |
 | `13-variant-exact-disabled.png` | `exactAvailable: false` — exact toggle disabled |
-| — | **Opening** — preview playable while indexing continues (missing) |
-| — | **Finalising** — the tail of an export, distinct from `07-exporting` (missing) |
-
-`12-variant-no-waveform.png` is now the M1 default, not a variant.
 
 ## Files
 
 - `Video Trimmer.dc.html` — the full design: template markup plus the logic class (state, geometry math, snapping, keyboard, tick/tile/waveform generation). The logic class is the most directly portable part.
 - `support.js` — runtime for the prototype format. Needed only to open the HTML locally; do not port.
+- `empty-state-changes.md` — revision note for the empty state (current; supersedes this file's empty-state description).
+- `empty-state-prompt.md` — ready-to-paste prompt for the empty-state revision.
+- `floating-chrome-changes.md` — revision note for the preview-height work (current).
+- `floating-chrome-prompt.md` — ready-to-paste prompt for that revision.
 - `original-brief.md` — the initial design brief.
 - `revision-request.md` — the follow-up revision round (MP4, timeline proportions, keyframe row, track list, indexing timing, GOP).
 

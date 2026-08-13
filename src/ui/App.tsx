@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import styles from './App.module.css';
 // Direct submodule imports, not the barrel -- see state/app-state.ts's comment on why.
 import { formatIndexError } from '../media/index/errors.ts';
@@ -10,10 +10,11 @@ import { DegradedStrip } from './chrome/DegradedStrip.tsx';
 import { ExportErrorToast } from './chrome/ExportErrorToast.tsx';
 import { ExportOverlay } from './chrome/ExportOverlay.tsx';
 import { ExportToast } from './chrome/ExportToast.tsx';
+import { railClearancePx, transportPillBottomPx } from './chrome/floating-offsets.ts';
 import { KeyboardOverlay } from './chrome/KeyboardOverlay.tsx';
+import { NoticeChip } from './chrome/NoticeChip.tsx';
 import { Splitter } from './chrome/Splitter.tsx';
 import { Stage } from './chrome/Stage.tsx';
-import { StatusBar } from './chrome/StatusBar.tsx';
 import { TimelineRegion } from './chrome/TimelineRegion.tsx';
 import { TitleBar } from './chrome/TitleBar.tsx';
 import { TransportBar } from './chrome/TransportBar.tsx';
@@ -25,15 +26,13 @@ import {
   FILE_NAME,
   FORMAT_CHIP,
   FPS,
-  INDEX_LABEL,
   PLAYHEAD_SECONDS,
   SOURCE_PANEL_ROWS,
-  THUMB_LABEL,
   TRACKS,
-  ZOOM_LABEL,
   formatExportLine,
 } from './fixtures.ts';
 import { selectedRealTrackIds } from './media/derive-source-info.ts';
+import { useChromeVisibility } from './state/useChromeVisibility.ts';
 import { useExportSession } from './state/export-session.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
 import { useMediaSession } from './state/media-session.ts';
@@ -101,6 +100,14 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   const reverseShuttleHandleRef = useRef<number | undefined>(undefined);
   const reverseShuttleVirtualTicksRef = useRef(0);
   const reverseShuttleLastTimeRef = useRef(0);
+
+  // design/floating-chrome-changes.md's "5. Auto-hide behaviour": hovering either floating overlay
+  // pins it, alongside a rail panel being open/pinned or the shortcut sheet being open (all three
+  // of the latter already live in `state`).
+  const [titleHovered, setTitleHovered] = useState(false);
+  const [transportHovered, setTransportHovered] = useState(false);
+  const suppressChromeHide = titleHovered || transportHovered || state.panel !== null || state.pinned !== null || state.shortcuts;
+  const chromeVisible = useChromeVisibility(suppressChromeHide);
 
   function triggerOpen() {
     fileInputRef.current?.click();
@@ -420,6 +427,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     }
   }
 
+  const rightClearancePx = railClearancePx(state.pinned);
+
   return (
     <div className={styles.root}>
       <input
@@ -442,13 +451,22 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           onReconnect={() => {
             dispatch({ type: 'permission-lost/set', lost: false });
           }}
+          chromeVisible={chromeVisible}
+          rightPx={rightClearancePx}
+          onMouseEnter={() => {
+            setTitleHovered(true);
+          }}
+          onMouseLeave={() => {
+            setTitleHovered(false);
+          }}
         />
       )}
-      {showChrome && state.screen === 'degraded' && <DegradedStrip />}
+      {showChrome && state.screen === 'degraded' && <DegradedStrip rightPx={rightClearancePx} />}
 
       <Stage
         screen={state.screen}
         showChrome={showChrome}
+        chromeVisible={chromeVisible}
         panel={state.panel}
         pinned={state.pinned}
         shortcuts={state.shortcuts}
@@ -551,6 +569,14 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           onSetTrimMode={(mode) => {
             dispatch({ type: 'trim-mode/set', mode });
           }}
+          chromeVisible={chromeVisible}
+          bottomPx={transportPillBottomPx(timelineHeight)}
+          onMouseEnter={() => {
+            setTransportHovered(true);
+          }}
+          onMouseLeave={() => {
+            setTransportHovered(false);
+          }}
         />
       )}
 
@@ -572,10 +598,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       )}
 
       {showFileChrome && (
-        <StatusBar
-          zoomLabel={ZOOM_LABEL}
-          thumbLabel={THUMB_LABEL}
-          indexLabel={INDEX_LABEL}
+        <NoticeChip
           notice={state.notice}
           noticeOpen={state.noticeOpen}
           onNoticeEnter={() => {
@@ -604,6 +627,9 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           }}
           exactAvailable={exactAvailable}
           fps={FPS}
+          rightPx={14}
+          marginRightPx={rightClearancePx}
+          bottomPx={transportPillBottomPx(timelineHeight)}
         />
       )}
 

@@ -6,6 +6,10 @@ import type { UnsupportedInfo } from '../state/media-session.ts';
 
 export interface PreviewSurfaceProps {
   screen: 'empty' | 'unsupported' | 'has-video';
+  /** design/floating-chrome-changes.md's "6. In-frame readout cross-fades" -- the bottom-left
+   * frame/timecode readout is the inverse of the floating chrome: visible only while it's hidden,
+   * since the transport pill already shows the timecode when the chrome is up. */
+  chromeVisible: boolean;
   frameLabel: string;
   timecode: string;
   onOpen: () => void;
@@ -25,6 +29,7 @@ export interface PreviewSurfaceProps {
 
 export function PreviewSurface({
   screen,
+  chromeVisible,
   frameLabel,
   timecode,
   onOpen,
@@ -57,7 +62,7 @@ export function PreviewSurface({
             </>
           )}
           {videoRef !== undefined && <canvas ref={scrubOverlayRef} className={styles.scrubOverlay} />}
-          <div className={styles.frameOverlay}>
+          <div className={styles.frameOverlay} style={{ opacity: chromeVisible ? 0 : 1 }}>
             <span>{frameLabel}</span>
             <span>{timecode}</span>
           </div>

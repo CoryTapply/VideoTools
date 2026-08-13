@@ -1,5 +1,9 @@
 .root {
-  flex: 0 0 22px;
+  position: absolute;
+  left: 0;
+  top: 44px; /* rowHeight.titleOverlay -- sits directly below the floating title bar. */
+  height: 22px;
+  z-index: 31;
   display: flex;
   align-items: center;
   justify-content: flex-end;

@@ -47,10 +47,6 @@ export const JOBS_PANEL_ROWS: readonly PanelRowFixture[] = [
   { label: 'clip_02.mp4', value: 'canceled', tone: 'warning' },
 ];
 
-export const ZOOM_LABEL = '1 frame = 5px';
-export const THUMB_LABEL = 'thumbs 68%';
-export const INDEX_LABEL = 'index 862,401 frames · 3,422 keyframes';
-
 export interface KeyRowFixture {
   chord: string;
   description: string;
