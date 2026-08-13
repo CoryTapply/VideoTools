@@ -2,6 +2,7 @@ import { useEffect, useMemo, useReducer, useRef } from 'react';
 import styles from './App.module.css';
 // Direct submodule imports, not the barrel -- see state/app-state.ts's comment on why.
 import { formatIndexError } from '../media/index/errors.ts';
+import { ticksToSeconds } from '../media/index/time.ts';
 import { estimateExportBytes } from '../media/export/estimate.ts';
 import { resolveExportSelection } from '../media/export/select.ts';
 import { formatExportError } from '../media/export/types.ts';
@@ -250,7 +251,14 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         }
         case 'set-in': {
           evt.preventDefault();
-          const { tout, currentSeconds } = latestRef.current;
+          const videoTrack = media.videoTrackRef.current;
+          if (videoTrack === null) break;
+          const { tout } = latestRef.current;
+          // Reads the timeline controller's live playhead ref rather than media.currentSeconds --
+          // that React state lags behind a scrub (it only updates once the async settle-seek's
+          // 'seeked' event lands, see TimelineController.ts's onPointerUp), so a quick scrub-then-I
+          // would otherwise set the in point at the pre-scrub position.
+          const currentSeconds = ticksToSeconds(timelineControllerRef.current.t, videoTrack.timescale);
           if (currentSeconds < tout) {
             dispatch({ type: 'in-out/set', tin: currentSeconds, tout });
           }
@@ -258,7 +266,10 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         }
         case 'set-out': {
           evt.preventDefault();
-          const { tin, currentSeconds } = latestRef.current;
+          const videoTrack = media.videoTrackRef.current;
+          if (videoTrack === null) break;
+          const { tin } = latestRef.current;
+          const currentSeconds = ticksToSeconds(timelineControllerRef.current.t, videoTrack.timescale);
           if (currentSeconds > tin) {
             dispatch({ type: 'in-out/set', tin, tout: currentSeconds });
           }
