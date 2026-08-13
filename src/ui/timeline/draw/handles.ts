@@ -13,7 +13,7 @@ const CHIP_TOP_PX = 30;
 const CHIP_PADDING_X_PX = 6;
 const CHIP_HEIGHT_PX = 18;
 /** No measureText() in CanvasLike (kept narrow on purpose -- see canvas-like.ts) -- a fixed
- * per-character advance is close enough for Plex Mono at this size to size the chip's background. */
+ * per-character advance is close enough for Azeret Mono at this size to size the chip's background. */
 const CHIP_CHAR_WIDTH_PX = 6.5;
 
 export interface HandlesGeometry {

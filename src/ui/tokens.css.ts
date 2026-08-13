@@ -1,4 +1,4 @@
-import { color, shadow } from './tokens.ts';
+import { color, shadow, type } from './tokens.ts';
 
 function toKebabCase(key: string): string {
   return key.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
@@ -14,4 +14,8 @@ export function applyTokenCssVariables(root: HTMLElement = document.documentElem
   for (const [key, value] of Object.entries(shadow)) {
     root.style.setProperty(`--shadow-${toKebabCase(key)}`, value);
   }
+  // --ui / --mono: the one place the UI/mono typeface pairing is set, so it can be swapped without
+  // touching every CSS module that references it.
+  root.style.setProperty('--ui', type.fontSans);
+  root.style.setProperty('--mono', type.fontMono);
 }

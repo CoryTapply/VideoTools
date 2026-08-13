@@ -110,9 +110,13 @@ export const color = {
 } as const;
 
 export const type = {
-  fontSans: "'IBM Plex Sans', sans-serif",
-  fontMono: "'IBM Plex Mono', monospace",
-  weightSans: [400, 500, 600],
+  // Helvetica Neue is a system font -- no Google Fonts load, Helvetica/Arial cover the machines
+  // without it. Azeret Mono is loaded from Google Fonts (see app.html/ui-harness.html).
+  fontSans: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+  fontMono: "'Azeret Mono', ui-monospace, monospace",
+  // Helvetica Neue has a hard 400 -> 700 jump (500/600 snap to bold or get synthetically
+  // emboldened), so the UI face stays at 400 only. Azeret Mono has a real medium.
+  weightSans: [400],
   weightMono: [400, 500],
   size: [10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15],
 } as const;
