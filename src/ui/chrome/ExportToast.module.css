@@ -11,6 +11,7 @@
   flex-direction: column;
   gap: 8px;
   animation: rise 0.18s ease-out;
+  cursor: pointer;
 }
 
 @keyframes rise {
@@ -45,37 +46,3 @@
   word-break: break-all;
 }
 
-.actions {
-  display: flex;
-  gap: 8px;
-}
-
-.showButton {
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 5px;
-  border: 1px solid var(--color-border-base);
-  background: var(--color-bg-raised);
-  color: var(--color-text-primary);
-  font: 500 11.5px 'IBM Plex Sans', sans-serif;
-  cursor: pointer;
-}
-
-.showButton:hover {
-  background: var(--color-bg-raised-hover);
-}
-
-.trimAnotherButton {
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 5px;
-  border: 1px solid var(--color-border-base);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: 500 11.5px 'IBM Plex Sans', sans-serif;
-  cursor: pointer;
-}
-
-.trimAnotherButton:hover {
-  color: var(--color-text-primary);
-}

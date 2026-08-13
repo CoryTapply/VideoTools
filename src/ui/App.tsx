@@ -508,8 +508,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
             <ExportToast
               durationLabel={exportSession.lastResult?.durationLabel ?? EXPORT_DURATION_LABEL}
               outPath={exportSession.lastResult?.outPath ?? EXPORT_OUT_PATH}
-              onShowInFolder={() => {}}
-              onTrimAnother={() => {
+              onDismiss={() => {
                 dispatch({ type: 'toast/set', show: false });
               }}
             />
