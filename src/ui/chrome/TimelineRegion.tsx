@@ -1,6 +1,6 @@
 import { rowHeight } from '../tokens.ts';
 import styles from './TimelineRegion.module.css';
-import type { RefObject } from 'react';
+import type { RefCallback } from 'react';
 
 // Indexing covers the filmstrip (and, in M2, the waveform) but not the ruler, which now hosts the
 // keyframe ticks too -- design/README.md's "Indexing state" note, design/floating-chrome-changes.md's
@@ -14,8 +14,11 @@ export interface TimelineRegionProps {
   indexing: boolean;
   /** Task 4b's canvas layer stack target -- see state/useTimelineController.ts. Undefined in
    * ui-harness.html, which never opens a real file and so never constructs a controller; the
-   * canvas still mounts (so height/layout screenshots stay accurate) but nothing draws onto it. */
-  canvasRef?: RefObject<HTMLCanvasElement | null>;
+   * canvas still mounts (so height/layout screenshots stay accurate) but nothing draws onto it.
+   * A callback ref, not a RefObject: useTimelineController.ts needs to know when this canvas
+   * mounts/unmounts (the fullscreen toggle does both) so it can rebuild the controller against
+   * the fresh node. */
+  canvasRef?: RefCallback<HTMLCanvasElement>;
 }
 
 /**
