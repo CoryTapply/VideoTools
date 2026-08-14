@@ -16,9 +16,6 @@ import type { TrackSummary } from '../media/track-summary.ts';
 export interface StageProps {
   screen: Screen;
   showChrome: boolean;
-  /** design/floating-chrome-changes.md's "6. In-frame readout cross-fades" -- threaded down to
-   * PreviewSurface's bottom-left readout, which fades the opposite way from the floating chrome. */
-  chromeVisible: boolean;
   panel: PanelId | null;
   pinned: PanelId | null;
   shortcuts: boolean;
@@ -52,7 +49,6 @@ const PANEL_TITLES: Record<PanelId, string> = { info: 'Source', export: 'Export'
 export function Stage({
   screen,
   showChrome,
-  chromeVisible,
   panel,
   pinned,
   shortcuts,
@@ -121,7 +117,6 @@ export function Stage({
     <div className={styles.root}>
       <PreviewSurface
         screen={previewScreen}
-        chromeVisible={chromeVisible}
         frameLabel={frameLabel}
         timecode={timecode}
         onOpen={onOpenFile}

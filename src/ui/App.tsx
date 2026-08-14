@@ -404,7 +404,10 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   // Title bar, status bar, transport bar, splitter, and timeline all have nothing to report with
   // no file open -- design/empty-state-changes.md's "Top bar and status bar are hidden" section
   // (extended to the transport/timeline row per the design screenshot). The rail stays under
-  // `showChrome` alone: it's the explanation surface for what the app is about to do.
+  // `showChrome` alone: it's the explanation surface for what the app is about to do. Fullscreen
+  // (`state.full`) unmounts the timeline's canvas along with the rest of this chrome; the canvas
+  // remount is handled by useTimelineController.ts, which rebuilds the TimelineController against
+  // the fresh node instead of leaving it bound to the detached one.
   const showFileChrome = showChrome && state.screen !== 'empty';
   const timelineHeight = state.full ? Math.min(state.timelineH, FULLSCREEN_TIMELINE_CAP_PX) : state.timelineH;
   const displayFps = media.fps ?? FPS;
@@ -487,7 +490,6 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       <Stage
         screen={state.screen}
         showChrome={showChrome}
-        chromeVisible={chromeVisible}
         panel={state.panel}
         pinned={state.pinned}
         shortcuts={state.shortcuts}
