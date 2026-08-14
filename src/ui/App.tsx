@@ -26,12 +26,14 @@ import {
   FILE_NAME,
   FORMAT_CHIP,
   FPS,
+  JOBS_PANEL_ROWS,
   PLAYHEAD_SECONDS,
   SOURCE_PANEL_ROWS,
   TRACKS,
   formatExportLine,
 } from './fixtures.ts';
-import { selectedRealTrackIds } from './media/derive-source-info.ts';
+import { deriveJobsRows, selectedRealTrackIds } from './media/derive-source-info.ts';
+import type { ExportJobStatus } from './media/derive-source-info.ts';
 import { useChromeVisibility } from './state/useChromeVisibility.ts';
 import { useExportSession } from './state/export-session.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
@@ -417,6 +419,16 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   const fileName = media.file?.name ?? (hasFile ? FILE_NAME : null);
   const formatChip = media.formatChip ?? (hasFile ? FORMAT_CHIP : null);
   const sourceRows = media.sourceRows ?? SOURCE_PANEL_ROWS;
+  // Real once a file's been opened (index/thumbs jobs) or an export has been attempted; otherwise
+  // the design fixture -- same `media.X ?? fixtureX` pattern as sourceRows above.
+  const exportJobStatus: ExportJobStatus | null =
+    exportSession.job === null
+      ? null
+      : exportSession.job.status === 'running'
+        ? { status: 'running', fileName: exportSession.job.fileName, percent: state.exportPct }
+        : exportSession.job;
+  const realJobsRows = deriveJobsRows(media.indexJob, media.thumbsJob, exportJobStatus);
+  const jobsRows = realJobsRows.length > 0 ? realJobsRows : JOBS_PANEL_ROWS;
   const openErrorMessage = state.openError !== null ? formatIndexError(state.openError) : null;
   const exportErrorMessage = state.exportError !== null ? formatExportError(state.exportError) : null;
 
@@ -494,6 +506,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         shortcuts={state.shortcuts}
         tracks={tracks}
         sourceRows={sourceRows}
+        jobsRows={jobsRows}
         sourceFileName={sourceFileName}
         sel={state.sel}
         tin={state.tin}

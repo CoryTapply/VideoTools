@@ -16,6 +16,7 @@ import { formatPlaybackError } from '../../media/playback/errors.ts';
 import { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.ts';
 import { RealVideoElement } from '../../media/playback/RealVideoElement.ts';
 import { defaultTrackSelection, deriveFormatChip, deriveSourceRows, deriveTrackSummaries, friendlyCodecName } from '../media/derive-source-info.ts';
+import type { IndexJobStatus, ThumbsJobStatus } from '../media/derive-source-info.ts';
 import { recordRecentFile } from './recent-files.ts';
 import { formatDurationCompact, formatFrameNumber } from './snap-notice.ts';
 import type { Dispatch, RefObject } from 'react';
@@ -55,6 +56,11 @@ export interface MediaSession {
   durationSeconds: number | null;
   fps: number | null;
   unsupported: UnsupportedInfo | null;
+  /** Real timing for the Jobs panel's "index" row -- see derive-source-info.ts's deriveJobsRows. */
+  indexJob: IndexJobStatus | null;
+  /** Real progress for the Jobs panel's "thumbs" row, driven by FrameCache.warmCoarse()'s
+   * onProgress -- null when the current file has no video track to warm thumbnails for. */
+  thumbsJob: ThumbsJobStatus | null;
   playing: boolean;
   currentSeconds: number;
   timecode: string;
@@ -115,6 +121,8 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
   const [unsupported, setUnsupported] = useState<UnsupportedInfo | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentSeconds, setCurrentSeconds] = useState(0);
+  const [indexJob, setIndexJob] = useState<IndexJobStatus | null>(null);
+  const [thumbsJob, setThumbsJob] = useState<ThumbsJobStatus | null>(null);
 
   useEffect(
     () => () => {
@@ -129,16 +137,22 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
       dispatch({ type: 'screen/set', screen: 'indexing' });
       dispatch({ type: 'open-error/set', error: null });
       setUnsupported(null);
+      setIndexJob({ status: 'running' });
+      setThumbsJob(null);
 
       const client = new IndexWorkerClient();
+      const indexStartMs = performance.now();
       const result = await client.index(selected);
+      const indexMs = Math.round(performance.now() - indexStartMs);
       client.terminate();
 
       if (!result.ok) {
         dispatch({ type: 'open-error/set', error: result.error });
         dispatch({ type: 'screen/set', screen: 'empty' });
+        setIndexJob(null);
         return;
       }
+      setIndexJob({ status: 'done', ms: indexMs });
 
       const rawTracks = result.tracks;
       const sampleIndex = new SampleIndex(rawTracks);
@@ -170,7 +184,19 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
         const pool = new FrameWorkerPool(Array.from({ length: workerCount }, () => new FrameWorkerClient(selected)));
         const frameCache = new FrameCache({ sampleIndex, videoTrackId: videoTrack.trackId, pool });
         frameCacheRef.current = frameCache;
-        void frameCache.warmCoarse();
+        setThumbsJob({ status: 'running', percent: 0 });
+        const thumbsStartMs = performance.now();
+        void frameCache
+          .warmCoarse((completed, total) => {
+            // Guards against a stale progress/completion callback from a since-superseded file's
+            // warmCoarse landing after the user has already opened another file.
+            if (frameCacheRef.current !== frameCache) return;
+            setThumbsJob({ status: 'running', percent: total > 0 ? Math.round((completed / total) * 100) : 0 });
+          })
+          .then(() => {
+            if (frameCacheRef.current !== frameCache) return;
+            setThumbsJob({ status: 'done', ms: Math.round(performance.now() - thumbsStartMs) });
+          });
       }
 
       engineRef.current?.dispose();
@@ -270,6 +296,8 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
     durationSeconds,
     fps: trackFps,
     unsupported,
+    indexJob,
+    thumbsJob,
     playing,
     currentSeconds,
     timecode: formatDurationCompact(currentSeconds),

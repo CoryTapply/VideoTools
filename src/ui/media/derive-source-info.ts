@@ -176,6 +176,60 @@ export function defaultExportFileName(sourceFileName: string): string {
   return `${baseName}_clip.mp4`;
 }
 
+/** Real job/export state for the Jobs panel -- see ../panels/JobsPanel.tsx. Deliberately has no
+ * "keyframe map" or "waveform" row: keyframes are a free query over the already-built SampleIndex
+ * (not a separate timed job), and waveform generation doesn't exist yet (M2) -- same convention as
+ * deriveSourceRows's deliberately-omitted "heap" row above: no fabricated rows for work that isn't
+ * actually happening. */
+export type IndexJobStatus = { status: 'running' } | { status: 'done'; ms: number };
+
+export type ThumbsJobStatus = { status: 'running'; percent: number } | { status: 'done'; ms: number };
+
+export type ExportJobStatus =
+  | { status: 'running'; fileName: string; percent: number }
+  | { status: 'done'; fileName: string; durationLabel: string }
+  | { status: 'canceled'; fileName: string }
+  | { status: 'failed'; fileName: string };
+
+export function deriveJobsRows(
+  indexJob: IndexJobStatus | null,
+  thumbsJob: ThumbsJobStatus | null,
+  exportJob: ExportJobStatus | null,
+): PanelRowFixture[] {
+  const rows: PanelRowFixture[] = [];
+  if (indexJob !== null) {
+    rows.push(
+      indexJob.status === 'done'
+        ? { label: 'Indexing Video', value: `done · ${indexJob.ms.toString()} ms`, tone: 'good' }
+        : { label: 'Indexing Video', value: 'running', tone: 'informational' },
+    );
+  }
+  if (thumbsJob !== null) {
+    rows.push(
+      thumbsJob.status === 'done'
+        ? { label: 'Thumbnails', value: `done · ${thumbsJob.ms.toString()} ms`, tone: 'good' }
+        : { label: 'Thumbnails', value: `${thumbsJob.percent.toString()}% · running`, tone: 'informational' },
+    );
+  }
+  if (exportJob !== null) {
+    switch (exportJob.status) {
+      case 'running':
+        rows.push({ label: exportJob.fileName, value: `${exportJob.percent.toString()}% · running`, tone: 'informational' });
+        break;
+      case 'done':
+        rows.push({ label: exportJob.fileName, value: `done · ${exportJob.durationLabel}`, tone: 'good' });
+        break;
+      case 'canceled':
+        rows.push({ label: exportJob.fileName, value: 'canceled', tone: 'warning' });
+        break;
+      case 'failed':
+        rows.push({ label: exportJob.fileName, value: 'failed', tone: 'warning' });
+        break;
+    }
+  }
+  return rows;
+}
+
 export function deriveExportRows(
   tracks: readonly TrackSummary[],
   sel: TrackSelection,

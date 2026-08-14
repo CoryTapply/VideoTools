@@ -21,6 +21,7 @@ export interface StageProps {
   shortcuts: boolean;
   tracks: readonly TrackSummary[];
   sourceRows: readonly PanelRowFixture[];
+  jobsRows: readonly PanelRowFixture[];
   sourceFileName: string;
   sel: TrackSelection;
   tin: number;
@@ -54,6 +55,7 @@ export function Stage({
   shortcuts,
   tracks,
   sourceRows,
+  jobsRows,
   sourceFileName,
   sel,
   tin,
@@ -107,7 +109,7 @@ export function Stage({
           />
         );
       case 'queue':
-        return <JobsPanel />;
+        return <JobsPanel rows={jobsRows} />;
     }
   }
 
