@@ -14,6 +14,10 @@ export interface HandlesGeometry {
   inX: number;
   outX: number;
   heightPx: number;
+  /** Top of the handle bars/grips, in canvas px -- the filmstrip row's top, not the canvas's, so
+   * the bars start level with the first thumbnail rather than poking up through the ruler row. The
+   * dim overlays and selection borders are unaffected and still span the full 0..heightPx. */
+  barTopPx: number;
   /** Pre-resolved fill colors for each handle bar -- resolved by the caller (TimelineController's
    * draw loop, via draw/handle-color.ts's rest/hover/active transition), not here: this module only
    * draws, it doesn't own the hover/drag state machine or the color-lerp animation. */
@@ -41,15 +45,16 @@ function drawRoundedBar(ctx: CanvasLike, cx: number, top: number, height: number
   ctx.fill();
 }
 
-function drawHandle(ctx: CanvasLike, x: number, heightPx: number, fillColor: string): void {
+function drawHandle(ctx: CanvasLike, x: number, topPx: number, heightPx: number, fillColor: string): void {
+  const barHeight = heightPx - topPx;
   ctx.fillStyle = fillColor;
-  drawRoundedBar(ctx, x, 0, heightPx, HANDLE_BAR_WIDTH_PX, HANDLE_BAR_RADIUS_PX);
+  drawRoundedBar(ctx, x, topPx, barHeight, HANDLE_BAR_WIDTH_PX, HANDLE_BAR_RADIUS_PX);
 
   ctx.strokeStyle = color.handleGrip;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(x, (heightPx - GRIP_HEIGHT_PX) / 2);
-  ctx.lineTo(x, (heightPx + GRIP_HEIGHT_PX) / 2);
+  ctx.moveTo(x, topPx + (barHeight - GRIP_HEIGHT_PX) / 2);
+  ctx.lineTo(x, topPx + (barHeight + GRIP_HEIGHT_PX) / 2);
   ctx.stroke();
 }
 
@@ -65,7 +70,7 @@ export function clampBarX(x: number, widthPx: number): number {
 }
 
 export function drawHandles(ctx: CanvasLike, widthPx: number, geometry: HandlesGeometry): void {
-  const { inX, outX, heightPx, inFill, outFill } = geometry;
+  const { inX, outX, heightPx, barTopPx, inFill, outFill } = geometry;
 
   ctx.fillStyle = color.dim;
   if (inX > 0) ctx.fillRect(0, 0, Math.min(inX, widthPx), heightPx);
@@ -80,6 +85,6 @@ export function drawHandles(ctx: CanvasLike, widthPx: number, geometry: HandlesG
   ctx.lineTo(outX, heightPx - 0.75);
   ctx.stroke();
 
-  drawHandle(ctx, clampBarX(inX, widthPx), heightPx, inFill);
-  drawHandle(ctx, clampBarX(outX, widthPx), heightPx, outFill);
+  drawHandle(ctx, clampBarX(inX, widthPx), barTopPx, heightPx, inFill);
+  drawHandle(ctx, clampBarX(outX, widthPx), barTopPx, heightPx, outFill);
 }

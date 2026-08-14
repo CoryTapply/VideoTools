@@ -604,6 +604,7 @@ export class TimelineController {
       inX,
       outX,
       heightPx,
+      barTopPx: filmstripTop,
       inFill: barFillColor(state.barTransition.in, now),
       outFill: barFillColor(state.barTransition.out, now),
     });
