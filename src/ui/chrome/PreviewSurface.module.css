@@ -68,11 +68,4 @@
   color: var(--color-text-tertiary);
   display: flex;
   gap: 12px;
-  transition: opacity 180ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .frameOverlay {
-    transition-duration: 0ms;
-  }
 }
