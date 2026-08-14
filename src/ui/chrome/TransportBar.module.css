@@ -34,7 +34,14 @@
   font-size: 15px;
   font-weight: 500;
   letter-spacing: 0.02em;
-  min-width: 118px;
+  /* formatDurationCompact's length varies ("0m 00s" vs "12h 34m 56s") -- floor it small rather
+     than at the old fixed-width timecode's 118px, which left a lot of empty slack before the
+     buttons. nowrap/no-shrink so it never wraps or gets squeezed inside the flex row. */
+  min-width: 70px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  /* Root's 16px gap is shared by every child pair; pull just this one in closer to the buttons. */
+  margin-right: -12px;
 }
 
 .buttons {
@@ -79,6 +86,7 @@
   display: flex;
   gap: 6px;
   align-items: baseline;
+  white-space: nowrap;
 }
 
 .readoutLabel {

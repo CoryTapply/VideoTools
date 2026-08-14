@@ -24,6 +24,17 @@ export function formatDurationHMS(totalSeconds: number): string {
   return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
 }
 
+/** Human-readable, unit-labeled duration, e.g. "1h 23m 04s" / "23m 04s" / "0m 04s". Minutes and
+ * seconds always show (even when zero); the hours field is dropped entirely when zero. */
+export function formatDurationCompact(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const hh = Math.floor(seconds / 3600);
+  const mm = Math.floor((seconds % 3600) / 60);
+  const ss = seconds % 60;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return hh > 0 ? `${hh.toString()}h ${pad(mm)}m ${pad(ss)}s` : `${mm.toString()}m ${pad(ss)}s`;
+}
+
 /** Comma-grouped frame number with the design doc's ` f` suffix, e.g. "402,153 f". */
 export function formatFrameNumber(frame: number): string {
   return `${Math.floor(frame).toLocaleString('en-US')} f`;

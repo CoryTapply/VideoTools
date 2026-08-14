@@ -40,17 +40,17 @@ describe('App', () => {
     expect(getByTitle('Play · pause (Space)')).toBeTruthy();
   });
 
-  it('Alt+I (clear-in) resets the in point to 00:00:00:00', () => {
+  it('Alt+I (clear-in) resets the in point to 0m 00s', () => {
     const { getByText } = render(<App initialState={{ screen: 'ready' }} />);
     fireEvent.keyDown(window, { key: 'i', altKey: true });
-    expect(getByText('00:00:00:00')).toBeTruthy();
+    expect(getByText('0m 00s')).toBeTruthy();
   });
 
   it('Alt+O (clear-out) is a no-op without a real file open (no known duration)', () => {
     const { queryByText } = render(<App initialState={{ screen: 'ready', tout: 6812 }} />);
     fireEvent.keyDown(window, { key: 'o', altKey: true });
-    // 6812s at the fixture's 60fps -- unchanged, since media.durationSeconds is null pre-file-open.
-    expect(queryByText('01:53:32:00')).toBeTruthy();
+    // 6812s -- unchanged, since media.durationSeconds is null pre-file-open.
+    expect(queryByText('1h 53m 32s')).toBeTruthy();
   });
 
   it('M toggles mute; the speaker button title reflects the new state', () => {
@@ -75,7 +75,7 @@ describe('App', () => {
       <App initialState={{ screen: 'ready', tin: 6690.5, tout: 6812, notice: { delta: 0.5, at: 6690.5, which: 'in' }, noticeOpen: true }} />,
     );
     fireEvent.click(getByText('Keep exact frame'));
-    // 6690s at the fixture's 60fps -- HH:MM:SS:FF.
-    expect(getByText('01:51:30:00')).toBeTruthy();
+    // 6690s.
+    expect(getByText('1h 51m 30s')).toBeTruthy();
   });
 });

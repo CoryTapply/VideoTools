@@ -1,7 +1,10 @@
 // Adaptive ruler tick generation -- design/README.md's Ruler row: step chosen from a fixed
 // candidate list (frames, then seconds) by on-screen width, minor ticks at step/5 drawn only when
-// they'd be legible, labels truncated by zoom band. Pure: no canvas, no DOM.
+// they'd be legible. Major labels use formatDurationCompact's "1h 23m 04s" unit style at every
+// zoom band (this deviates from design/README.md's HH:MM/HH:MM:SS/MM:SS:FF spec, which is now
+// stale). Pure: no canvas, no DOM.
 
+import { formatDurationCompact } from '../state/snap-notice.ts';
 import { timeToX } from './viewport.ts';
 import type { Time, Viewport } from './types.ts';
 
@@ -59,23 +62,8 @@ export interface RulerTick {
   label: string | null;
 }
 
-/** `HH:MM` at >=1min steps, `HH:MM:SS` at >=1s, `MM:SS:FF` below -- design/README.md's Ruler labels. */
-function formatRulerLabel(time: Time, stepTicks: Time, timescale: number, fps: number): string {
-  const totalSeconds = time / timescale;
-  const wholeSeconds = Math.floor(totalSeconds);
-  const hh = Math.floor(wholeSeconds / 3600);
-  const mm = Math.floor((wholeSeconds % 3600) / 60);
-  const ss = wholeSeconds % 60;
-  const pad = (n: number) => n.toString().padStart(2, '0');
-
-  if (stepTicks >= 60 * timescale) return `${pad(hh)}:${pad(mm)}`;
-  if (stepTicks >= timescale) return `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
-  const ff = Math.floor((totalSeconds - wholeSeconds) * fps);
-  return `${pad(mm)}:${pad(ss)}:${pad(ff)}`;
-}
-
 /** All ruler ticks currently on screen, major and minor, with labels pre-formatted on majors. */
-export function generateRulerTicks(viewport: Viewport, timescale: number, ticksPerFrame: Time, fps: number): RulerTick[] {
+export function generateRulerTicks(viewport: Viewport, timescale: number, ticksPerFrame: Time): RulerTick[] {
   if (viewport.viewSpan <= 0 || viewport.widthPx <= 0) return [];
   const stepTicks = chooseTickStep(viewport, timescale, ticksPerFrame);
   const minorStepTicks = stepTicks / 5;
@@ -93,7 +81,7 @@ export function generateRulerTicks(viewport: Viewport, timescale: number, ticksP
       time: t,
       x: timeToX(t, viewport.viewStart, viewport.viewSpan, viewport.widthPx),
       major: isMajor,
-      label: isMajor ? formatRulerLabel(t, stepTicks, timescale, fps) : null,
+      label: isMajor ? formatDurationCompact(t / timescale) : null,
     });
   }
   return ticks;

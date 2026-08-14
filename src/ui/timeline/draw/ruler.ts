@@ -24,7 +24,6 @@ export function drawRuler(
   viewport: Viewport,
   timescale: number,
   ticksPerFrame: Time,
-  fps: number,
   keyframeTimes: Float64Array,
   keyframeHighlights?: KeyframeBandHighlights,
 ): void {
@@ -41,7 +40,7 @@ export function drawRuler(
   // "the ticks read clearly under the time labels".
   drawKeyframeBand(ctx, widthPx, viewport, keyframeTimes, keyframeHighlights);
 
-  const ticks = generateRulerTicks(viewport, timescale, ticksPerFrame, fps);
+  const ticks = generateRulerTicks(viewport, timescale, ticksPerFrame);
   ctx.font = `${typeTokens.size[1].toString()}px ${typeTokens.fontMono}`;
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';

@@ -6,7 +6,7 @@
 // same class.
 
 import { secondsToTicks, ticksToSeconds } from '../../media/index/time.ts';
-import { formatTimecode } from '../state/snap-notice.ts';
+import { formatDurationCompact, formatTimecode } from '../state/snap-notice.ts';
 import { color } from '../tokens.ts';
 import { wrapCanvasContext } from './canvas-like.ts';
 import { clampHandleDrag, edgeX, hitTestHandle, scrubTimeFromPointer } from './drag-gesture.ts';
@@ -495,7 +495,7 @@ export class TimelineController {
     const inTicks = state.drag === 'in' && state.dragValueTicks !== null ? state.dragValueTicks : secondsToTicks(tinTout.tin, timescale);
     const outTicks = state.drag === 'out' && state.dragValueTicks !== null ? state.dragValueTicks : secondsToTicks(tinTout.tout, timescale);
 
-    drawRuler(this.ctx, widthPx, viewport, timescale, ticksPerFrame, fps, this.keyframeTimesFor(videoTrack), { accentTimes: [inTicks, outTicks] });
+    drawRuler(this.ctx, widthPx, viewport, timescale, ticksPerFrame, this.keyframeTimesFor(videoTrack), { accentTimes: [inTicks, outTicks] });
 
     const filmstripTop = RULER_HEIGHT;
     const filmstripHeight = Math.max(0, heightPx - filmstripTop);
@@ -531,7 +531,7 @@ export class TimelineController {
     // trigger a re-render.
     const timecodeEl = this.transportTimecodeRef.current;
     if (timecodeEl !== null) {
-      timecodeEl.textContent = formatTimecode(ticksToSeconds(state.t, timescale) * fps, fps);
+      timecodeEl.textContent = formatDurationCompact(ticksToSeconds(state.t, timescale));
     }
   }
 

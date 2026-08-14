@@ -32,7 +32,7 @@ describe('generateRulerTicks', () => {
   it('produces only major ticks with labels when minor ticks would be illegibly close', () => {
     // Very zoomed out: minor (step/5) ticks would be far under MIN_MINOR_TICK_PX apart.
     const viewport = { viewStart: 0, viewSpan: 100_000 * TIMESCALE, widthPx: 800 };
-    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME, FPS);
+    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME);
     expect(ticks.length).toBeGreaterThan(0);
     expect(ticks.every((t) => t.major)).toBe(true);
     expect(ticks.every((t) => t.label !== null)).toBe(true);
@@ -42,41 +42,44 @@ describe('generateRulerTicks', () => {
     // Zoomed in enough that step/5 minor ticks are still comfortably spaced.
     const widthPx = 2000;
     const viewport = { viewStart: 0, viewSpan: 20 * TIMESCALE, widthPx };
-    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME, FPS);
+    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME);
     expect(ticks.some((t) => !t.major)).toBe(true);
     expect(ticks.filter((t) => !t.major).every((t) => t.label === null)).toBe(true);
   });
 
   it('places tick x-positions consistently with the viewport transform', () => {
     const viewport = { viewStart: 5 * TIMESCALE, viewSpan: 20 * TIMESCALE, widthPx: 1000 };
-    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME, FPS);
+    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME);
     for (const tick of ticks) {
       const expectedX = ((tick.time - viewport.viewStart) / viewport.viewSpan) * viewport.widthPx;
       expect(tick.x).toBeCloseTo(expectedX, 6);
     }
   });
 
-  it('formats major labels as HH:MM at minute-scale steps', () => {
+  // formatDurationCompact's two shapes: "1h 23m 04s" / "23m 04s" (mm/ss always shown).
+  const DURATION_COMPACT_RE = /^(?:\d+h \d{2}m \d{2}s|\d+m \d{2}s)$/;
+
+  it('formats major labels in compact unit style (h/m/s) at minute-scale steps', () => {
     const viewport = { viewStart: 0, viewSpan: 3600 * TIMESCALE, widthPx: 100 };
-    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME, FPS);
+    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME);
     const majors = ticks.filter((t) => t.major);
     expect(majors.length).toBeGreaterThan(0);
     for (const tick of majors) {
-      expect(tick.label).toMatch(/^\d{2}:\d{2}$/);
+      expect(tick.label).toMatch(DURATION_COMPACT_RE);
     }
   });
 
-  it('formats major labels as MM:SS:FF at frame-scale steps', () => {
+  it('formats major labels in compact unit style (h/m/s) at frame-scale steps', () => {
     const viewport = { viewStart: 0, viewSpan: 2 * TICKS_PER_FRAME, widthPx: 2000 };
-    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME, FPS);
+    const ticks = generateRulerTicks(viewport, TIMESCALE, TICKS_PER_FRAME);
     const majors = ticks.filter((t) => t.major);
     expect(majors.length).toBeGreaterThan(0);
     for (const tick of majors) {
-      expect(tick.label).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+      expect(tick.label).toMatch(DURATION_COMPACT_RE);
     }
   });
 
   it('returns nothing for a degenerate viewport', () => {
-    expect(generateRulerTicks({ viewStart: 0, viewSpan: 0, widthPx: 800 }, TIMESCALE, TICKS_PER_FRAME, FPS)).toEqual([]);
+    expect(generateRulerTicks({ viewStart: 0, viewSpan: 0, widthPx: 800 }, TIMESCALE, TICKS_PER_FRAME)).toEqual([]);
   });
 });

@@ -17,7 +17,7 @@ import { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.ts';
 import { RealVideoElement } from '../../media/playback/RealVideoElement.ts';
 import { defaultTrackSelection, deriveFormatChip, deriveSourceRows, deriveTrackSummaries, friendlyCodecName } from '../media/derive-source-info.ts';
 import { recordRecentFile } from './recent-files.ts';
-import { formatFrameNumber, formatTimecode } from './snap-notice.ts';
+import { formatDurationCompact, formatFrameNumber } from './snap-notice.ts';
 import type { Dispatch, RefObject } from 'react';
 import type { TrackIndex } from '../../media/index/track-index.ts';
 import type { PlaybackState } from '../../media/playback/PlaybackEngine.ts';
@@ -272,7 +272,7 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
     unsupported,
     playing,
     currentSeconds,
-    timecode: formatTimecode(currentSeconds * formattingFps, formattingFps),
+    timecode: formatDurationCompact(currentSeconds),
     frameLabel: formatFrameNumber(currentSeconds * formattingFps),
     openFile,
     togglePlay,
