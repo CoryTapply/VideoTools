@@ -31,4 +31,12 @@ describe('TimelineRegion', () => {
     const { container } = render(<TimelineRegion heightPx={236} indexing={false} />);
     expect(container.querySelectorAll('[class*="chipWrapper"]')).toHaveLength(2);
   });
+
+  it('attaches the chip hairline to the filmstrip top, matching the handle bar geometry in draw/handles.ts', () => {
+    const { container } = render(<TimelineRegion heightPx={236} indexing={false} />);
+    const wrappers = container.querySelectorAll<HTMLElement>('[class*="chipWrapper"]');
+    for (const wrapper of wrappers) {
+      expect(wrapper.style.bottom).toBe('calc(100% - 26px)'); // rowHeight.ruler, same as barTopPx
+    }
+  });
 });

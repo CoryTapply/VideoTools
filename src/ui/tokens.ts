@@ -109,7 +109,7 @@ export const color = {
   filmstripSeamLight: 'rgba(255,255,255,.05)',
   // In/out region -- design/README.md's In/out region: the selected span's top/bottom borders,
   // and the handle's grip line (drawn over the accent-colored bar).
-  selectionBorder: 'rgba(76,141,246,.55)',
+  selectionBorder: 'rgba(76,141,246,.9)',
   handleGrip: 'rgba(11,18,32,.55)',
   // IN/OUT scrub chip's dark bubble background -- design/scrub-chip-prompt.md's chip markup.
   scrubChipBg: 'rgba(14,14,15,.94)',

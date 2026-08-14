@@ -9,14 +9,15 @@ import type { CanvasLike } from '../canvas-like.ts';
 const HANDLE_BAR_WIDTH_PX = 8;
 const HANDLE_BAR_RADIUS_PX = 2;
 const GRIP_HEIGHT_PX = 14;
+const SELECTION_BORDER_WIDTH_PX = 2;
 
 export interface HandlesGeometry {
   inX: number;
   outX: number;
   heightPx: number;
-  /** Top of the handle bars/grips, in canvas px -- the filmstrip row's top, not the canvas's, so
-   * the bars start level with the first thumbnail rather than poking up through the ruler row. The
-   * dim overlays and selection borders are unaffected and still span the full 0..heightPx. */
+  /** Top of the handle bars/grips and the top selection border, in canvas px -- the filmstrip
+   * row's top, not the canvas's, so they start level with the first thumbnail rather than poking
+   * up through the ruler row. The dim overlays still span the full 0..heightPx. */
   barTopPx: number;
   /** Pre-resolved fill colors for each handle bar -- resolved by the caller (TimelineController's
    * draw loop, via draw/handle-color.ts's rest/hover/active transition), not here: this module only
@@ -69,22 +70,33 @@ export function clampBarX(x: number, widthPx: number): number {
   return Math.min(Math.max(x, half), widthPx - half);
 }
 
-export function drawHandles(ctx: CanvasLike, widthPx: number, geometry: HandlesGeometry): void {
-  const { inX, outX, heightPx, barTopPx, inFill, outFill } = geometry;
+/** Dim overlays + top/bottom selection borders only -- no handle bars. Split out from drawHandles
+ * so the caller (TimelineController's draw loop) can sandwich the playhead between this and
+ * drawHandleBars: the playhead must render underneath the blue trim handles (so a handle bar
+ * occludes the playhead line where they cross) but on top of the dim/border, which is unaffected
+ * by draw order since it only touches two thin horizontal hairlines. */
+export function drawSelectionOverlay(ctx: CanvasLike, widthPx: number, geometry: HandlesGeometry): void {
+  const { inX, outX, heightPx, barTopPx } = geometry;
 
   ctx.fillStyle = color.dim;
   if (inX > 0) ctx.fillRect(0, 0, Math.min(inX, widthPx), heightPx);
   if (outX < widthPx) ctx.fillRect(Math.max(outX, 0), 0, widthPx - Math.max(outX, 0), heightPx);
 
   ctx.strokeStyle = color.selectionBorder;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = SELECTION_BORDER_WIDTH_PX;
+  const borderOffset = SELECTION_BORDER_WIDTH_PX / 2;
   ctx.beginPath();
-  ctx.moveTo(inX, 0.75);
-  ctx.lineTo(outX, 0.75);
-  ctx.moveTo(inX, heightPx - 0.75);
-  ctx.lineTo(outX, heightPx - 0.75);
+  ctx.moveTo(inX, barTopPx + borderOffset);
+  ctx.lineTo(outX, barTopPx + borderOffset);
+  ctx.moveTo(inX, heightPx - borderOffset);
+  ctx.lineTo(outX, heightPx - borderOffset);
   ctx.stroke();
+}
 
+/** The two in/out handle bars + grips only -- see drawSelectionOverlay's doc comment for why this
+ * is split out and drawn after the playhead. */
+export function drawHandleBars(ctx: CanvasLike, widthPx: number, geometry: HandlesGeometry): void {
+  const { inX, outX, heightPx, barTopPx, inFill, outFill } = geometry;
   drawHandle(ctx, clampBarX(inX, widthPx), barTopPx, heightPx, inFill);
   drawHandle(ctx, clampBarX(outX, widthPx), barTopPx, heightPx, outFill);
 }
