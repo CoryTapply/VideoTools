@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  formatDurationCompact,
   formatDurationHMS,
   formatFrameNumber,
   formatKeyframeShiftMessage,
@@ -27,6 +28,25 @@ describe('formatDurationHMS', () => {
 
   it('rolls over hours', () => {
     expect(formatDurationHMS(3661)).toBe('01:01:01');
+  });
+});
+
+describe('formatDurationCompact', () => {
+  it('always shows minutes and seconds by default, even when zero', () => {
+    expect(formatDurationCompact(0)).toBe('0m 00s');
+    expect(formatDurationCompact(120)).toBe('2m 00s');
+    expect(formatDurationCompact(3600)).toBe('1h 00m 00s');
+  });
+
+  it('omits the seconds field when omitZeroSeconds is set and seconds are zero', () => {
+    expect(formatDurationCompact(0, { omitZeroSeconds: true })).toBe('0m');
+    expect(formatDurationCompact(120, { omitZeroSeconds: true })).toBe('2m');
+    expect(formatDurationCompact(3600, { omitZeroSeconds: true })).toBe('1h 00m');
+  });
+
+  it('keeps the seconds field when omitZeroSeconds is set but seconds are non-zero', () => {
+    expect(formatDurationCompact(125, { omitZeroSeconds: true })).toBe('2m 05s');
+    expect(formatDurationCompact(3661, { omitZeroSeconds: true })).toBe('1h 01m 01s');
   });
 });
 

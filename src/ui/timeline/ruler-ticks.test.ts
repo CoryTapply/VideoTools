@@ -56,8 +56,9 @@ describe('generateRulerTicks', () => {
     }
   });
 
-  // formatDurationCompact's two shapes: "1h 23m 04s" / "23m 04s" (mm/ss always shown).
-  const DURATION_COMPACT_RE = /^(?:\d+h \d{2}m \d{2}s|\d+m \d{2}s)$/;
+  // formatDurationCompact's shapes with omitZeroSeconds: "1h 23m 04s" / "23m 04s", with the
+  // " 00s" suffix dropped when seconds are exactly zero ("1h 23m" / "23m").
+  const DURATION_COMPACT_RE = /^(?:\d+h \d{2}m(?: \d{2}s)?|\d+m(?: \d{2}s)?)$/;
 
   it('formats major labels in compact unit style (h/m/s) at minute-scale steps', () => {
     const viewport = { viewStart: 0, viewSpan: 3600 * TIMESCALE, widthPx: 100 };
