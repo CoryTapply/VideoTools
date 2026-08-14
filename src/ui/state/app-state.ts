@@ -42,6 +42,9 @@ export interface AppState {
   tin: number;
   tout: number;
   trimMode: TrimMode;
+  /** Preview-only monitoring gain -- design/volume-slider-prompt.md. Never affects export output. */
+  vol: number;
+  muted: boolean;
   panel: PanelId | null;
   pinned: PanelId | null;
   sel: TrackSelection;
@@ -69,6 +72,8 @@ export function createInitialAppState(overrides: Partial<AppState> = {}): AppSta
     tin: 0,
     tout: 0,
     trimMode: 'copy',
+    vol: 0.7,
+    muted: false,
     panel: null,
     pinned: null,
     sel: { V1: true, A1: true, A2: false, A3: false, A4: false, A5: false, A6: false },
@@ -93,6 +98,9 @@ export type AppAction =
   | { type: 'panel/pin'; panel: PanelId }
   | { type: 'panel/unpin' }
   | { type: 'trim-mode/set'; mode: TrimMode }
+  | { type: 'volume/set'; vol: number }
+  | { type: 'mute/toggle' }
+  | { type: 'mute/set'; muted: boolean }
   | { type: 'track/toggle'; track: TrackId }
   | { type: 'sel/set'; sel: TrackSelection }
   | { type: 'in-out/set'; tin: number; tout: number }
@@ -126,6 +134,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       // Manually switching modes clears any pending notice, per design/README.md's Keyframe
       // enforcement section: "Switching manually to `exact` clears the notice."
       return { ...state, trimMode: action.mode, notice: null, noticeOpen: false };
+    case 'volume/set':
+      return { ...state, vol: Math.min(1, Math.max(0, action.vol)) };
+    case 'mute/toggle':
+      return { ...state, muted: !state.muted };
+    case 'mute/set':
+      return { ...state, muted: action.muted };
     case 'track/toggle':
       // Any track (including the primary video track) can be deselected -- e.g. to export an
       // audio-only clip. resolveExportSelection still requires a video track to exist in the

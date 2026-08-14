@@ -26,6 +26,9 @@ export type ShortcutAction =
   | 'jump-start'
   | 'jump-end'
   | 'toggle-fullscreen'
+  | 'toggle-mute'
+  | 'volume-up'
+  | 'volume-down'
   | 'export'
   | 'open-file'
   | 'undo'
@@ -71,6 +74,8 @@ export function matchShortcut(evt: KeyboardEventLike): ShortcutAction | null {
     if (key === 'z') return 'zoom-fit';
     if (key === 'arrowleft') return 'step-back-second';
     if (key === 'arrowright') return 'step-forward-second';
+    if (key === 'arrowup') return 'volume-up';
+    if (key === 'arrowdown') return 'volume-down';
     return null;
   }
 
@@ -105,6 +110,8 @@ export function matchShortcut(evt: KeyboardEventLike): ShortcutAction | null {
       return 'jump-end';
     case 'f':
       return 'toggle-fullscreen';
+    case 'm':
+      return 'toggle-mute';
     case 'escape':
       return 'close';
     default:

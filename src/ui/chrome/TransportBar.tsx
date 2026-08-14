@@ -1,4 +1,5 @@
 import { NextKeyframeIcon, PauseIcon, PlayIcon, PrevKeyframeIcon, StepBackIcon, StepForwardIcon } from '../icons/index.tsx';
+import { VolumeControl } from './VolumeControl.tsx';
 import styles from './TransportBar.module.css';
 import type { RefObject } from 'react';
 import type { TrimMode } from '../state/app-state.ts';
@@ -24,6 +25,11 @@ export interface TransportBarProps {
   trimMode: TrimMode;
   exactAvailable: boolean;
   onSetTrimMode: (mode: TrimMode) => void;
+  vol: number;
+  muted: boolean;
+  onToggleMute: () => void;
+  onUnmute: () => void;
+  onSetVolume: (vol: number) => void;
   /** design/floating-chrome-changes.md's "5. Auto-hide behaviour". Defaults true so existing
    * callers/tests that don't pass it still render fully visible. */
   chromeVisible?: boolean;
@@ -49,6 +55,11 @@ export function TransportBar({
   trimMode,
   exactAvailable,
   onSetTrimMode,
+  vol,
+  muted,
+  onToggleMute,
+  onUnmute,
+  onSetVolume,
   chromeVisible = true,
   bottomPx,
   onMouseEnter,
@@ -86,6 +97,7 @@ export function TransportBar({
           <NextKeyframeIcon />
         </button>
       </div>
+      <VolumeControl vol={vol} muted={muted} onToggleMute={onToggleMute} onUnmute={onUnmute} onSetVolume={onSetVolume} />
       <div className={styles.readouts}>
         <div className={styles.readout}>
           <span className={styles.readoutLabel}>in</span>

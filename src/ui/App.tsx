@@ -212,6 +212,18 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           evt.preventDefault();
           dispatch({ type: 'full/toggle' });
           break;
+        case 'toggle-mute':
+          evt.preventDefault();
+          dispatch({ type: 'mute/toggle' });
+          break;
+        case 'volume-up':
+          evt.preventDefault();
+          dispatch({ type: 'volume/set', vol: Math.round((state.vol + 0.05) * 100) / 100 });
+          break;
+        case 'volume-down':
+          evt.preventDefault();
+          dispatch({ type: 'volume/set', vol: Math.round((state.vol - 0.05) * 100) / 100 });
+          break;
         case 'export':
           evt.preventDefault();
           if (canExport) {
@@ -377,7 +389,16 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       window.removeEventListener('keyup', handleKeyUp);
       stopReverseShuttle();
     };
-  }, [state.shortcuts, state.panel, state.full, canExport, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds, media.videoTrackRef, media.engineRef, timelineControllerRef]);
+  }, [state.shortcuts, state.panel, state.full, state.vol, canExport, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds, media.videoTrackRef, media.engineRef, timelineControllerRef]);
+
+  // Monitoring-only gain: applies straight to the preview <video> element, never touches the
+  // export path (which remuxes the source file directly, not this element) --
+  // design/volume-slider-prompt.md's "must not affect export output". Re-runs on media.file so a
+  // freshly mounted <video> picks up the current level/mute state right away.
+  useEffect(() => {
+    media.setVolume(state.vol);
+    media.setMuted(state.muted);
+  }, [state.vol, state.muted, media]);
 
   const showChrome = !state.full;
   // Title bar, status bar, transport bar, splitter, and timeline all have nothing to report with
@@ -568,6 +589,17 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           exactAvailable={exactAvailable}
           onSetTrimMode={(mode) => {
             dispatch({ type: 'trim-mode/set', mode });
+          }}
+          vol={state.vol}
+          muted={state.muted}
+          onToggleMute={() => {
+            dispatch({ type: 'mute/toggle' });
+          }}
+          onUnmute={() => {
+            dispatch({ type: 'mute/set', muted: false });
+          }}
+          onSetVolume={(vol) => {
+            dispatch({ type: 'volume/set', vol });
           }}
           chromeVisible={chromeVisible}
           bottomPx={transportPillBottomPx(timelineHeight)}

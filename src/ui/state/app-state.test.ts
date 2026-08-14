@@ -8,6 +8,12 @@ describe('createInitialAppState', () => {
     expect(state.sel).toEqual({ V1: true, A1: true, A2: false, A3: false, A4: false, A5: false, A6: false });
   });
 
+  it('defaults volume to 0.7, unmuted', () => {
+    const state = createInitialAppState();
+    expect(state.vol).toBe(0.7);
+    expect(state.muted).toBe(false);
+  });
+
   it('accepts overrides for harness use', () => {
     const state = createInitialAppState({ screen: 'unsupported' });
     expect(state.screen).toBe('unsupported');
@@ -117,6 +123,26 @@ describe('appReducer', () => {
     });
     expect(state.permissionLost).toBe(true);
     expect(state.screen).toBe('ready');
+  });
+
+  it('volume/set clamps to 0..1', () => {
+    let state = appReducer(createInitialAppState(), { type: 'volume/set', vol: 1.4 });
+    expect(state.vol).toBe(1);
+    state = appReducer(state, { type: 'volume/set', vol: -0.2 });
+    expect(state.vol).toBe(0);
+    state = appReducer(state, { type: 'volume/set', vol: 0.42 });
+    expect(state.vol).toBe(0.42);
+  });
+
+  it('mute/toggle flips muted; mute/set forces a specific value', () => {
+    let state = appReducer(createInitialAppState(), { type: 'mute/toggle' });
+    expect(state.muted).toBe(true);
+    state = appReducer(state, { type: 'mute/toggle' });
+    expect(state.muted).toBe(false);
+    state = appReducer(state, { type: 'mute/set', muted: true });
+    expect(state.muted).toBe(true);
+    state = appReducer(state, { type: 'mute/set', muted: true });
+    expect(state.muted).toBe(true);
   });
 
   it('open-error/set stores and clears a parse failure', () => {

@@ -107,6 +107,13 @@ export const color = {
   // and the handle's grip line (drawn over the accent-colored bar).
   selectionBorder: 'rgba(76,141,246,.55)',
   handleGrip: 'rgba(11,18,32,.55)',
+
+  // Volume popover's slider track (unfilled portion) -- design/volume-slider-prompt.md. Coincides
+  // with skeletonBarValue's hex but kept as its own token: unrelated features.
+  volumeTrackBg: '#26262A',
+  // Speaker button's active background when muted -- design/volume-slider-prompt.md. A fourth,
+  // distinct amber-tint pairing alongside warnBannerBg/warnNoticeBg/warnButtonHoverBg above.
+  warnVolumeActiveBg: 'rgba(239,159,39,.14)',
 } as const;
 
 export const type = {
@@ -131,6 +138,9 @@ export const shadow = {
   // Floating transport pill -- design/floating-chrome-changes.md's "Transport becomes a floating
   // pill".
   transportPill: '0 10px 28px rgba(0,0,0,.45)',
+  // Volume popover -- design/volume-slider-prompt.md. Same value as exportOverlay's but kept
+  // separate: unrelated floating surfaces.
+  volumePopover: '0 10px 26px rgba(0,0,0,.5)',
 } as const;
 
 // Fixed pixel heights/widths named explicitly in design/README.md's "Row heights" token line
@@ -158,5 +168,8 @@ export const motion = {
   // design/floating-chrome-changes.md's "Auto-hide behaviour".
   chromeIdleMs: 2000,
   chromeFadeMs: 180,
+  // Volume popover's leave-to-close delay -- design/volume-slider-prompt.md's "~250ms", distinct
+  // from panelCloseMs's 220ms (a different floating surface with its own spec).
+  volumePopoverCloseMs: 250,
   easingOut: 'ease-out',
 } as const;
