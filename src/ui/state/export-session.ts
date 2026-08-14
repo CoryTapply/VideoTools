@@ -20,6 +20,15 @@ export interface ExportSessionResult {
   durationLabel: string;
 }
 
+/** The most recent export attempt's identity/outcome -- see the Jobs panel's
+ * derive-source-info.ts's deriveJobsRows. A single value, not a history: nothing in this hook
+ * retains earlier attempts once a new one starts. */
+export type ExportJobMeta =
+  | { fileName: string; status: 'running' }
+  | { fileName: string; status: 'done'; durationLabel: string }
+  | { fileName: string; status: 'canceled' }
+  | { fileName: string; status: 'failed' };
+
 export interface StartExportOptions {
   tin: number;
   tout: number;
@@ -32,11 +41,13 @@ export interface ExportSession {
   startExport: (opts: StartExportOptions) => Promise<void>;
   cancelExport: () => void;
   lastResult: ExportSessionResult | null;
+  job: ExportJobMeta | null;
 }
 
 export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSession): ExportSession {
   const clientRef = useRef<ExportWorkerClient | null>(null);
   const [lastResult, setLastResult] = useState<ExportSessionResult | null>(null);
+  const [job, setJob] = useState<ExportJobMeta | null>(null);
 
   const startExport = useCallback(
     async (opts: StartExportOptions) => {
@@ -62,6 +73,8 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
         // 'cancelled' (the user dismissed the picker): not an error, nothing else has started.
         return;
       }
+
+      setJob({ fileName: picked.handle.name, status: 'running' });
 
       const selectedTrackIds = selectedRealTrackIds(opts.tracks, opts.sel);
       const client = new ExportWorkerClient();
@@ -94,15 +107,20 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
         // File System Access deliberately never exposes a real filesystem path -- the file
         // handle's own `name` (whatever the user actually confirmed in the Save dialog) is the
         // most specific thing available.
-        setLastResult({ outPath: picked.handle.name, durationLabel: formatDurationCompact(result.wallMs / 1000) });
+        const durationLabel = formatDurationCompact(result.wallMs / 1000);
+        setLastResult({ outPath: picked.handle.name, durationLabel });
+        setJob({ fileName: picked.handle.name, status: 'done', durationLabel });
         dispatch({ type: 'toast/set', show: true });
         return;
       }
 
       // A user-initiated cancel is not a failure -- no error toast, matching the overlay's own
       // Cancel button UX.
-      if (result.error.kind !== 'cancelled') {
+      if (result.error.kind === 'cancelled') {
+        setJob({ fileName: picked.handle.name, status: 'canceled' });
+      } else {
         dispatch({ type: 'export-error/set', error: result.error });
+        setJob({ fileName: picked.handle.name, status: 'failed' });
       }
     },
     [dispatch, media],
@@ -112,5 +130,5 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
     clientRef.current?.cancel();
   }, []);
 
-  return { startExport, cancelExport, lastResult };
+  return { startExport, cancelExport, lastResult, job };
 }
