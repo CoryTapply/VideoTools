@@ -21,13 +21,22 @@ export interface HandlesGeometry {
   outFill: string;
 }
 
+/** Corners are chamfered (cut with a short diagonal) rather than true arcs, matching
+ * playhead.ts's drawHeadShape -- CanvasLike exposes only line/move primitives, no arcTo, and at
+ * radius 2 a chamfer and a true arc are visually indistinguishable. */
 function drawRoundedBar(ctx: CanvasLike, cx: number, top: number, height: number, width: number, radius: number): void {
   const x = cx - width / 2;
+  const bottom = top + height;
+  const right = x + width;
   ctx.beginPath();
   ctx.moveTo(x, top + radius);
-  ctx.lineTo(x, top + height - radius);
-  ctx.lineTo(x + width, top + height - radius);
-  ctx.lineTo(x + width, top + radius);
+  ctx.lineTo(x, bottom - radius);
+  ctx.lineTo(x + radius, bottom);
+  ctx.lineTo(right - radius, bottom);
+  ctx.lineTo(right, bottom - radius);
+  ctx.lineTo(right, top + radius);
+  ctx.lineTo(right - radius, top);
+  ctx.lineTo(x + radius, top);
   ctx.lineTo(x, top + radius);
   ctx.fill();
 }
