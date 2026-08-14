@@ -26,4 +26,9 @@ describe('TimelineRegion', () => {
   it('does not throw when getContext("2d") is unavailable, as under jsdom', () => {
     expect(() => render(<TimelineRegion heightPx={236} indexing={false} />)).not.toThrow();
   });
+
+  it('renders both IN/OUT chip wrappers whether or not chipInRef/chipOutRef are supplied', () => {
+    const { container } = render(<TimelineRegion heightPx={236} indexing={false} />);
+    expect(container.querySelectorAll('[class*="chipWrapper"]')).toHaveLength(2);
+  });
 });

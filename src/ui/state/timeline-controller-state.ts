@@ -12,6 +12,10 @@
 
 import { useRef } from 'react';
 import type { RefObject } from 'react';
+// Type-only -- keeps this module free of any runtime dependency beyond react, matching its
+// "type + inert factory only" scope (see the Time/DragTarget comment above). draw/handle-color.ts
+// owns resolving these labels to actual colors; this file only carries the timestamp+labels.
+import type { BarColorTransition } from '../timeline/draw/handle-color.ts';
 
 /** Same convention as src/media/frames/types.ts and src/media/playback/PlaybackEngine.ts: an
  * integer count of the loaded file's primary video track's own timescale. Redeclared here rather
@@ -30,8 +34,16 @@ export interface TimelineControllerState {
   viewSpan: Time;
   playing: boolean;
   drag: DragTarget;
+  /** Which handle (if any) the pointer is hovering, while not dragging -- gates the hover bar fill
+   * and the IN/OUT chip's visibility. Always null while `drag !== null`: hover is suppressed for
+   * the whole duration of a drag, per design/scrub-chip-prompt.md's visibility rules. */
+  hover: DragTarget;
   /** Ghost in/out value while `drag !== null`, presentation ticks; null when not dragging a handle. */
   dragValueTicks: Time | null;
+  /** Each handle bar's current rest/hover/active color transition -- draw/handle-color.ts resolves
+   * these to an animated fill color every frame; TimelineController.draw() advances them whenever
+   * the target state (derived from `drag`/`hover`) changes. */
+  barTransition: { in: BarColorTransition; out: BarColorTransition };
   /** True during a handle drag OR a general playhead drag-scrub -- gates the cache-frame preview
    * overlay in PreviewSurface and suppresses PlaybackEngine.seek() until pointer-up's settle seek. */
   scrubActive: boolean;
@@ -52,7 +64,12 @@ export function createTimelineControllerState(
     viewSpan: 0,
     playing: false,
     drag: null,
+    hover: null,
     dragValueTicks: null,
+    barTransition: {
+      in: { from: 'rest', to: 'rest', startedAt: -Infinity },
+      out: { from: 'rest', to: 'rest', startedAt: -Infinity },
+    },
     scrubActive: false,
     panVelocityTicksPerMs: 0,
     snapFlash: null,
