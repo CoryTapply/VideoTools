@@ -70,6 +70,17 @@ describe('matchShortcut', () => {
     expect(matchShortcut(key('Escape'))).toBe('close');
   });
 
+  it('matches M to toggle-mute', () => {
+    expect(matchShortcut(key('m'))).toBe('toggle-mute');
+  });
+
+  it('matches Shift+ArrowUp/Down to volume-up/down, distinct from the plain arrow-key/keyframe chords', () => {
+    expect(matchShortcut(key('ArrowUp', { shiftKey: true }))).toBe('volume-up');
+    expect(matchShortcut(key('ArrowDown', { shiftKey: true }))).toBe('volume-down');
+    expect(matchShortcut(key('ArrowUp'))).toBe('prev-keyframe');
+    expect(matchShortcut(key('ArrowDown'))).toBe('next-keyframe');
+  });
+
   it('returns null for unrecognized chords', () => {
     expect(matchShortcut(key('a'))).toBeNull();
     expect(matchShortcut(key('k', { shiftKey: true }))).toBeNull();

@@ -53,6 +53,21 @@ describe('App', () => {
     expect(queryByText('01:53:32:00')).toBeTruthy();
   });
 
+  it('M toggles mute; the speaker button title reflects the new state', () => {
+    const { getByTitle } = render(<App initialState={{ screen: 'ready' }} />);
+    expect(getByTitle('Mute (M)')).toBeTruthy();
+    fireEvent.keyDown(window, { key: 'm' });
+    expect(getByTitle('Unmute (M)')).toBeTruthy();
+  });
+
+  it('Shift+ArrowUp raises volume, reflected in the popover readout on hover', () => {
+    const { getByTitle, getByText } = render(<App initialState={{ screen: 'ready' }} />);
+    fireEvent.keyDown(window, { key: 'ArrowUp', shiftKey: true });
+    // Fixture default vol is 0.7 (see app-state.ts) -- +0.05 -> 0.75 -> "75%".
+    fireEvent.mouseEnter(getByTitle('Mute (M)').closest('div') as Element);
+    expect(getByText('75%')).toBeTruthy();
+  });
+
   it('"Keep exact frame" restores the pre-enforcement in point and switches to exact mode', () => {
     // notice.at (6690.5s) is the keyframe-enforced value; notice.delta (0.5s) is enforced-minus-
     // original, so the restored value should be 6690.5 - 0.5 = 6690s.

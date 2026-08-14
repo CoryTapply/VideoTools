@@ -135,6 +135,39 @@ export function WarningTriangleIcon(props: IconProps) {
   );
 }
 
+/** Speaker cone shared by the volume control's three icon states -- chrome/VolumeControl.tsx. */
+function SpeakerCone() {
+  return <path d="M2 6.3h2.4L8 3.2v9.6L4.4 9.7H2z" fill="currentColor" stroke="none" />;
+}
+
+export function SpeakerMutedIcon(props: IconProps) {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" {...props}>
+      <SpeakerCone />
+      <path d="M10.6 6.3l3.6 3.6M14.2 6.3l-3.6 3.6" />
+    </svg>
+  );
+}
+
+export function SpeakerLowIcon(props: IconProps) {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" {...props}>
+      <SpeakerCone />
+      <path d="M10.4 6.2a3.3 3.3 0 0 1 0 5.6" />
+    </svg>
+  );
+}
+
+export function SpeakerHighIcon(props: IconProps) {
+  return (
+    <svg width={16} height={16} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" {...props}>
+      <SpeakerCone />
+      <path d="M10.4 6.2a3.3 3.3 0 0 1 0 5.6" />
+      <path d="M12.3 4.3a6.2 6.2 0 0 1 0 9.4" />
+    </svg>
+  );
+}
+
 /** Empty-state drop-zone icon: a disk with a play triangle. */
 export function FileDropIcon(props: IconProps) {
   return (

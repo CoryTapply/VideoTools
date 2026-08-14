@@ -18,6 +18,11 @@ const baseProps = {
   durTc: '00:00:00:00',
   trimMode: 'copy' as const,
   onSetTrimMode: () => {},
+  vol: 0.7,
+  muted: false,
+  onToggleMute: () => {},
+  onUnmute: () => {},
+  onSetVolume: () => {},
   bottomPx: 55,
 };
 

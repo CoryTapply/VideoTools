@@ -65,6 +65,8 @@ export const KEY_ROWS: readonly KeyRowFixture[] = [
   { chord: 'Shift + Z', description: 'zoom to fit' },
   { chord: 'Home / End', description: 'start · end' },
   { chord: 'F', description: 'full-screen preview' },
+  { chord: 'M', description: 'mute output' },
+  { chord: 'Shift + ↑ / ↓', description: 'volume up · down' },
   { chord: '⌘ / Ctrl + E', description: 'export clip' },
   { chord: '⌘ / Ctrl + Z', description: 'undo' },
   { chord: 'Alt (drag)', description: 'disable snapping' },
