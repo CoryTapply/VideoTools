@@ -12,7 +12,7 @@ import { wrapCanvasContext } from './canvas-like.ts';
 import { clampHandleDrag, edgeX, hitTestHandle, scrubTimeFromPointer } from './drag-gesture.ts';
 import { drawFilmstrip, FILMSTRIP_TILE_WIDTH_PX } from './draw/filmstrip.ts';
 import { advanceBarTransition, barFillColor } from './draw/handle-color.ts';
-import { clampBarX, drawHandles } from './draw/handles.ts';
+import { clampBarX, drawHandleBars, drawSelectionOverlay } from './draw/handles.ts';
 import { drawPlayhead } from './draw/playhead.ts';
 import { drawRuler, RULER_HEIGHT } from './draw/ruler.ts';
 import { drawScrubPreview } from './draw/scrub-preview.ts';
@@ -600,14 +600,23 @@ export class TimelineController {
     const targetOut: BarVisualState = state.drag === 'out' ? 'active' : state.hover === 'out' ? 'hover' : 'rest';
     state.barTransition.in = advanceBarTransition(state.barTransition.in, targetIn, now);
     state.barTransition.out = advanceBarTransition(state.barTransition.out, targetOut, now);
-    drawHandles(this.ctx, widthPx, {
+    const handlesGeometry = {
       inX,
       outX,
       heightPx,
       barTopPx: filmstripTop,
       inFill: barFillColor(state.barTransition.in, now),
       outFill: barFillColor(state.barTransition.out, now),
-    });
+    };
+    drawSelectionOverlay(this.ctx, widthPx, handlesGeometry);
+
+    // Playhead draws between the selection overlay and the handle bars -- underneath the blue trim
+    // handles in z-order, so a handle bar occludes the playhead line where they cross, rather than
+    // the red line cutting across the handle on top of it.
+    const playheadX = timeToX(state.t, viewport.viewStart, viewport.viewSpan, widthPx);
+    drawPlayhead(this.ctx, playheadX, 0, heightPx);
+
+    drawHandleBars(this.ctx, widthPx, handlesGeometry);
     this.updateChips(state, widthPx, inX, outX, inTicks, outTicks, timescale);
 
     if (state.snapFlash !== null) {
@@ -619,9 +628,6 @@ export class TimelineController {
         drawSnapFlash(this.ctx, flashX, heightPx, opacity);
       }
     }
-
-    const playheadX = timeToX(state.t, viewport.viewStart, viewport.viewSpan, widthPx);
-    drawPlayhead(this.ctx, playheadX, 0, heightPx);
 
     // While handle-dragging, the driven position is the dragged handle's own ticks (inTicks/outTicks
     // already resolve to the live ghost value above), not the playhead -- so the preview scrubs to

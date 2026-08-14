@@ -9,11 +9,10 @@ import type { RefCallback, RefObject } from 'react';
 const FILMSTRIP_TOP_PX = rowHeight.ruler;
 
 // The IN/OUT chip's hairline must land exactly on the handle bar's top edge -- design/scrub-chip-prompt.md's
-// "Attachment" section. The spec derives this offset assuming the handle bar starts below the
-// ruler (27px), but draw/handles.ts actually draws the bar (and the selection border/dim overlay)
-// from the very top of the canvas, y=0 -- so the true offset is 0, not 27. Revisit this constant
-// together with draw/handles.ts if that vertical geometry ever changes.
-const CHIP_ATTACH_BOTTOM_PX = 0;
+// "Attachment" section. draw/handles.ts draws the bar starting at the filmstrip's top (barTopPx,
+// passed as FILMSTRIP_TOP_PX below), not the canvas's, so the chip attaches there too. Revisit this
+// constant together with draw/handles.ts if that vertical geometry ever changes.
+const CHIP_ATTACH_BOTTOM_PX = FILMSTRIP_TOP_PX;
 
 /** A handle's chip DOM refs -- the wrapper (positioned/shown by the controller) and the time text
  * node (its content written by the controller). See state/useTimelineController.ts. */
