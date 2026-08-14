@@ -8,6 +8,7 @@ import { useCallback, useRef, useState } from 'react';
 import { pickExportFile } from '../../media/export/picker.ts';
 import { ExportWorkerClient } from '../../media/export/worker-client.ts';
 import { defaultExportFileName, selectedRealTrackIds } from '../media/derive-source-info.ts';
+import { formatDurationCompact } from './snap-notice.ts';
 import type { Dispatch } from 'react';
 import type { TrackSelection } from './app-state.ts';
 import type { MediaSession } from './media-session.ts';
@@ -31,14 +32,6 @@ export interface ExportSession {
   startExport: (opts: StartExportOptions) => Promise<void>;
   cancelExport: () => void;
   lastResult: ExportSessionResult | null;
-}
-
-/** "2 m 02 s" / "17 s" -- matching fixtures.ts's EXPORT_DURATION_LABEL style. */
-function formatDurationLabel(wallMs: number): string {
-  const totalSeconds = Math.round(wallMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return minutes > 0 ? `${minutes.toString()} m ${seconds.toString().padStart(2, '0')} s` : `${seconds.toString()} s`;
 }
 
 export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSession): ExportSession {
@@ -101,7 +94,7 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
         // File System Access deliberately never exposes a real filesystem path -- the file
         // handle's own `name` (whatever the user actually confirmed in the Save dialog) is the
         // most specific thing available.
-        setLastResult({ outPath: picked.handle.name, durationLabel: formatDurationLabel(result.wallMs) });
+        setLastResult({ outPath: picked.handle.name, durationLabel: formatDurationCompact(result.wallMs / 1000) });
         dispatch({ type: 'toast/set', show: true });
         return;
       }

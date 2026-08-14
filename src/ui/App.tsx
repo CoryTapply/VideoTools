@@ -37,7 +37,7 @@ import { useExportSession } from './state/export-session.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
 import { useMediaSession } from './state/media-session.ts';
 import { nextShuttleRate } from './state/shuttle.ts';
-import { formatFrameNumber, formatTimecode } from './state/snap-notice.ts';
+import { formatDurationCompact, formatFrameNumber } from './state/snap-notice.ts';
 import { useTimelineControllerRef } from './state/timeline-controller-state.ts';
 import { useTimelineController } from './state/useTimelineController.ts';
 import { fitToDuration, zoomAtPlayhead } from './timeline/viewport.ts';
@@ -410,7 +410,6 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   // the fresh node instead of leaving it bound to the detached one.
   const showFileChrome = showChrome && state.screen !== 'empty';
   const timelineHeight = state.full ? Math.min(state.timelineH, FULLSCREEN_TIMELINE_CAP_PX) : state.timelineH;
-  const displayFps = media.fps ?? FPS;
 
   // Real once a file is open; otherwise the design fixture, used both by ui-harness.html's
   // variant switcher (which never opens a real file) and by App before anything is opened.
@@ -437,11 +436,11 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [media.file, tracks, state.sel, state.tin, state.tout]);
 
-  const timecode = media.file !== null ? media.timecode : formatTimecode(PLAYHEAD_SECONDS * FPS, FPS);
+  const timecode = media.file !== null ? media.timecode : formatDurationCompact(PLAYHEAD_SECONDS);
   const frameLabel = media.file !== null ? media.frameLabel : formatFrameNumber(PLAYHEAD_SECONDS * FPS);
-  const inTc = formatTimecode(state.tin * displayFps, displayFps);
-  const outTc = formatTimecode(state.tout * displayFps, displayFps);
-  const durTc = formatTimecode((state.tout - state.tin) * displayFps, displayFps);
+  const inTc = formatDurationCompact(state.tin);
+  const outTc = formatDurationCompact(state.tout);
+  const durTc = formatDurationCompact(state.tout - state.tin);
 
   function handleFileInputChange(evt: ChangeEvent<HTMLInputElement>) {
     const file = evt.target.files?.[0];

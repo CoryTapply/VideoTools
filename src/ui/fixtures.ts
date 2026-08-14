@@ -84,7 +84,7 @@ export function formatExportLine(percent: number): string {
 }
 
 export const EXPORT_OUT_PATH = '~/Recordings/session-4_clip.mp4';
-export const EXPORT_DURATION_LABEL = '2 m 02 s';
+export const EXPORT_DURATION_LABEL = '2m 02s';
 
 export const PLAYHEAD_SECONDS = 6724.517;
 export const DEFAULT_IN_SECONDS = 6690;
