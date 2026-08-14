@@ -6,12 +6,13 @@
 // same class.
 
 import { secondsToTicks, ticksToSeconds } from '../../media/index/time.ts';
-import { formatDurationCompact, formatTimecode } from '../state/snap-notice.ts';
+import { formatDurationCompact } from '../state/snap-notice.ts';
 import { color } from '../tokens.ts';
 import { wrapCanvasContext } from './canvas-like.ts';
 import { clampHandleDrag, edgeX, hitTestHandle, scrubTimeFromPointer } from './drag-gesture.ts';
 import { drawFilmstrip, FILMSTRIP_TILE_WIDTH_PX } from './draw/filmstrip.ts';
-import { drawHandles } from './draw/handles.ts';
+import { advanceBarTransition, barFillColor } from './draw/handle-color.ts';
+import { clampBarX, drawHandles } from './draw/handles.ts';
 import { drawPlayhead } from './draw/playhead.ts';
 import { drawRuler, RULER_HEIGHT } from './draw/ruler.ts';
 import { drawScrubPreview } from './draw/scrub-preview.ts';
@@ -22,6 +23,7 @@ import { snapToViewport } from './snap.ts';
 import { fitToDuration, panByPixels, timeToX, zoomAtCursor } from './viewport.ts';
 import { isZoomGesture, wheelPanDeltaPx, wheelZoomFactor } from './wheel-gesture.ts';
 import type { CanvasLike } from './canvas-like.ts';
+import type { BarVisualState } from './draw/handle-color.ts';
 import type { FrameCache } from '../../media/frames/FrameCache.ts';
 import type { SampleIndex } from '../../media/index/query.ts';
 import type { TrackIndex } from '../../media/index/track-index.ts';
@@ -29,7 +31,7 @@ import type { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.t
 import type { Unsubscribe } from '../../media/playback/PlaybackEngine.ts';
 import type { RefObject } from 'react';
 import type { TrimMode } from '../state/app-state.ts';
-import type { TimelineControllerState } from '../state/timeline-controller-state.ts';
+import type { DragTarget, TimelineControllerState } from '../state/timeline-controller-state.ts';
 import type { SeekDriftReport } from './seek-drift.ts';
 import type { Time, Viewport } from './types.ts';
 
@@ -53,6 +55,13 @@ export interface TimelineControllerDeps {
   previewCanvas: HTMLCanvasElement;
   /** TransportBar's timecode node -- written to directly every tick, bypassing React. */
   transportTimecodeRef: RefObject<HTMLDivElement | null>;
+  /** IN/OUT chip DOM nodes (TimelineRegion.tsx) -- position/visibility/text are all written
+   * directly every tick, same as transportTimecodeRef, never through React state. See
+   * design/scrub-chip-prompt.md. */
+  chipInWrapperRef: RefObject<HTMLDivElement | null>;
+  chipInTimeRef: RefObject<HTMLSpanElement | null>;
+  chipOutWrapperRef: RefObject<HTMLDivElement | null>;
+  chipOutTimeRef: RefObject<HTMLSpanElement | null>;
   stateRef: RefObject<TimelineControllerState>;
   frameCacheRef: RefObject<FrameCache | null>;
   sampleIndexRef: RefObject<SampleIndex | null>;
@@ -77,6 +86,10 @@ export class TimelineController {
   private readonly previewRawCtx: CanvasRenderingContext2D;
   private readonly previewCtx: CanvasLike;
   private readonly transportTimecodeRef: RefObject<HTMLDivElement | null>;
+  private readonly chipInWrapperRef: RefObject<HTMLDivElement | null>;
+  private readonly chipInTimeRef: RefObject<HTMLSpanElement | null>;
+  private readonly chipOutWrapperRef: RefObject<HTMLDivElement | null>;
+  private readonly chipOutTimeRef: RefObject<HTMLSpanElement | null>;
   private readonly stateRef: RefObject<TimelineControllerState>;
   private readonly frameCacheRef: RefObject<FrameCache | null>;
   private readonly sampleIndexRef: RefObject<SampleIndex | null>;
@@ -118,6 +131,10 @@ export class TimelineController {
     this.previewRawCtx = previewCtx2d;
     this.previewCtx = wrapCanvasContext(previewCtx2d);
     this.transportTimecodeRef = deps.transportTimecodeRef;
+    this.chipInWrapperRef = deps.chipInWrapperRef;
+    this.chipInTimeRef = deps.chipInTimeRef;
+    this.chipOutWrapperRef = deps.chipOutWrapperRef;
+    this.chipOutTimeRef = deps.chipOutTimeRef;
     this.stateRef = deps.stateRef;
     this.frameCacheRef = deps.frameCacheRef;
     this.sampleIndexRef = deps.sampleIndexRef;
@@ -148,10 +165,18 @@ export class TimelineController {
     this.canvas.addEventListener('pointermove', this.onPointerMove);
     this.canvas.addEventListener('pointerup', this.onPointerUp);
     this.canvas.addEventListener('pointercancel', this.onPointerUp);
+    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.addEventListener('pointerout', this.onPointerLeave);
   }
 
   dispose(): void {
     this.disposed = true;
+    // A drag torn down mid-gesture (e.g. the fullscreen toggle unmounting this canvas) must not
+    // leave the global cursor/selection pin from onPointerDown's handle-hit branch stuck forever.
+    if (this.stateRef.current.drag !== null) {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
     if (this.rafHandle !== undefined) cancelAnimationFrame(this.rafHandle);
     if (this.engineWaitHandle !== undefined) cancelAnimationFrame(this.engineWaitHandle);
     this.unsubscribeFrame?.();
@@ -162,6 +187,28 @@ export class TimelineController {
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('pointercancel', this.onPointerUp);
+    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.removeEventListener('pointerout', this.onPointerLeave);
+  }
+
+  /** Which handle (if any) a pointer at `clientX` currently hits -- shared by onPointerDown's
+   * drag-start hit-test and onPointerMove's hover detection so the two never drift apart. */
+  private hitTestAtClientX(clientX: number): DragTarget {
+    const videoTrack = this.videoTrackRef.current;
+    const widthPx = this.canvas.clientWidth;
+    if (videoTrack === null || widthPx <= 0) return null;
+    const state = this.stateRef.current;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const viewport: Viewport = { viewStart: state.viewStart, viewSpan: state.viewSpan, widthPx };
+    const tinTout = this.tinToutRef.current;
+    const inTicks = secondsToTicks(tinTout.tin, videoTrack.timescale);
+    const outTicks = secondsToTicks(tinTout.tout, videoTrack.timescale);
+    return hitTestHandle(x, edgeX(inTicks, viewport), edgeX(outTicks, viewport));
+  }
+
+  private updateCursor(state: TimelineControllerState): void {
+    this.canvas.style.cursor = state.drag !== null || state.hover !== null ? 'ew-resize' : '';
   }
 
   /** pointerdown hit-tests the in/out handles first (32px zones -- design/README.md); a miss
@@ -178,30 +225,41 @@ export class TimelineController {
     // Any new gesture pre-empts a kinetic coast in progress -- design intent carried over from
     // onWheel's own zoom-gesture handling.
     state.panVelocityTicksPerMs = 0;
-    const rect = this.canvas.getBoundingClientRect();
-    const x = evt.clientX - rect.left;
-    const viewport: Viewport = { viewStart: state.viewStart, viewSpan: state.viewSpan, widthPx };
-    const tinTout = this.tinToutRef.current;
-    const inTicks = secondsToTicks(tinTout.tin, videoTrack.timescale);
-    const outTicks = secondsToTicks(tinTout.tout, videoTrack.timescale);
-    const hit = hitTestHandle(x, edgeX(inTicks, viewport), edgeX(outTicks, viewport));
+    const hit = this.hitTestAtClientX(evt.clientX);
 
     if (hit !== null) {
+      const tinTout = this.tinToutRef.current;
       state.drag = hit;
-      state.dragValueTicks = hit === 'in' ? inTicks : outTicks;
+      state.hover = null;
+      // A handle drag drives the cache-frame preview overlay the same way a playhead scrub does
+      // (see draw()'s drawPreviewOverlay call) -- design/README.md's cache-only-scrub note applies
+      // equally here: a real <video> seek is 281ms p50, too slow to track the pointer live.
+      state.scrubActive = true;
+      state.dragValueTicks = hit === 'in' ? secondsToTicks(tinTout.tin, videoTrack.timescale) : secondsToTicks(tinTout.tout, videoTrack.timescale);
+      this.updateCursor(state);
+      // Pinned globally (not just on the canvas) so the cursor stays ew-resize even when the
+      // pointer runs off the canvas mid-drag -- design/scrub-chip-prompt.md's cursor section.
+      // Handle-drag only, never the general playhead scrub below.
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      this.pauseForGesture();
       return;
     }
     state.scrubActive = true;
-    // A live <video> keeps advancing currentTime (and thus, via onFrame, state.t) while playing --
-    // fighting the pointer-driven state.t writes updateScrubTime makes below, which is why scrub
-    // "doesn't work properly" while playing. Pause for the gesture's duration and resume on
-    // release only if it was actually playing.
+    this.pauseForGesture();
+    this.updateScrubTime(evt);
+  };
+
+  /** Pauses a live <video> for the duration of a pointer gesture (handle drag or playhead scrub)
+   * and records whether to resume once the gesture's settle-seek lands -- a live <video> keeps
+   * advancing currentTime (and thus, via onFrame, state.t) independent of the gesture, which would
+   * otherwise fight the ghost/preview position the gesture is driving. No-op if already paused. */
+  private pauseForGesture(): void {
     const engine = this.engineRef.current;
     const wasPlaying = engine !== null && engine.state === 'playing';
     this.scrubResumePlayback = wasPlaying;
     if (wasPlaying) engine.pause();
-    this.updateScrubTime(evt);
-  };
+  }
 
   private onPointerMove = (evt: PointerEvent): void => {
     const state = this.stateRef.current;
@@ -209,8 +267,20 @@ export class TimelineController {
       this.updateHandleDrag(evt, state.drag, evt.altKey);
       return;
     }
+    state.hover = this.hitTestAtClientX(evt.clientX);
+    this.updateCursor(state);
     if (!state.scrubActive) return;
     this.updateScrubTime(evt);
+  };
+
+  /** Clears a stale hover (and its cursor/chip) when the pointer leaves the canvas without a
+   * further pointermove -- e.g. a fast flick off the edge. No-ops mid-drag: pointer capture keeps
+   * the dragged handle's chip/cursor pinned regardless of the pointer's physical position. */
+  private onPointerLeave = (): void => {
+    const state = this.stateRef.current;
+    if (state.drag !== null) return;
+    state.hover = null;
+    this.updateCursor(state);
   };
 
   private onPointerUp = (evt: PointerEvent): void => {
@@ -222,9 +292,16 @@ export class TimelineController {
     }
     if (!state.scrubActive) return;
     state.scrubActive = false;
+    this.beginSettleSeek(state.t);
+  };
+
+  /** Seeks the real <video> to `requestedTicks` and keeps the cache-frame preview overlay showing
+   * that target -- rather than flashing back to the pre-gesture frame -- until the seek lands.
+   * Shared by playhead-scrub release (above) and handle-drag release (commitHandleDrag): both only
+   * moved the cache/controller state while the gesture was active, per onPointerDown's doc comment. */
+  private beginSettleSeek(requestedTicks: Time): void {
     const engine = this.engineRef.current;
     if (engine === null) return;
-    const requestedTicks = state.t;
     this.settleSeekTicks = requestedTicks;
     const generation = ++this.settleSeekGeneration;
     const resumePlayback = this.scrubResumePlayback;
@@ -232,14 +309,14 @@ export class TimelineController {
     void engine.seek(requestedTicks, 'accurate').then(() => {
       this.logSeekDrift(requestedTicks, engine.currentTime);
       // Only the most recent settle-seek gets to act -- an overlapping earlier one resolving late
-      // (e.g. a quick second scrub started before the first settled) must not reveal the real
+      // (e.g. a quick second gesture started before the first settled) must not reveal the real
       // <video> before its own, newer, target frame has landed, nor resume playback on the newer
       // gesture's behalf.
       if (generation !== this.settleSeekGeneration) return;
       this.settleSeekTicks = null;
       if (resumePlayback) engine.play();
     });
-  };
+  }
 
   /** Task 4c diagnostic: architecture-v3.md flags settle-seeks occasionally landing one frame off
    * "after heavy decoder activity" but it was never conclusively reproduced (roadmap.md's Task 4c)
@@ -301,11 +378,15 @@ export class TimelineController {
   /** design/README.md's "core interaction": on release in copy mode, the edge is forced outward
    * to a real keyframe (in floors, out ceils) so the exported range never loses content. */
   private commitHandleDrag(which: 'in' | 'out'): void {
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
     const state = this.stateRef.current;
     const videoTrack = this.videoTrackRef.current;
     const draggedTicks = state.dragValueTicks;
     state.drag = null;
     state.dragValueTicks = null;
+    state.scrubActive = false;
+    this.updateCursor(state);
     if (videoTrack === null || draggedTicks === null) return;
 
     const committedTicks = this.trimModeRef.current === 'copy' ? this.enforceKeyframe(which, draggedTicks, videoTrack) : draggedTicks;
@@ -315,6 +396,10 @@ export class TimelineController {
       shift = { deltaSeconds: committedSeconds - ticksToSeconds(draggedTicks, videoTrack.timescale), atSeconds: committedSeconds };
     }
     this.onHandleCommitted(which, committedSeconds, shift);
+    // Settles the real <video> onto the (possibly keyframe-shifted) committed edge -- without this,
+    // releasing the handle would flash back to whatever frame the <video> was showing before the
+    // drag started, since only the cache/controller state moved while dragging.
+    this.beginSettleSeek(committedTicks);
   }
 
   private enforceKeyframe(which: 'in' | 'out', t: Time, videoTrack: TrackIndex): Time {
@@ -489,7 +574,6 @@ export class TimelineController {
     const viewport: Viewport = { viewStart: state.viewStart, viewSpan: state.viewSpan, widthPx };
     const nominalFrameRate = videoTrack.video.nominalFrameRate;
     const ticksPerFrame = nominalFrameRate > 0 ? timescale / nominalFrameRate : 0;
-    const fps = nominalFrameRate > 0 ? nominalFrameRate : 60;
 
     const tinTout = this.tinToutRef.current;
     const inTicks = state.drag === 'in' && state.dragValueTicks !== null ? state.dragValueTicks : secondsToTicks(tinTout.tin, timescale);
@@ -509,8 +593,21 @@ export class TimelineController {
 
     const inX = timeToX(inTicks, viewport.viewStart, viewport.viewSpan, widthPx);
     const outX = timeToX(outTicks, viewport.viewStart, viewport.viewSpan, widthPx);
-    const chipLabel = state.drag !== null ? formatTimecode(ticksToSeconds(state.drag === 'in' ? inTicks : outTicks, timescale) * fps, fps) : null;
-    drawHandles(this.ctx, widthPx, { inX, outX, heightPx, drag: state.drag }, chipLabel);
+    const now = performance.now();
+    // state.hover is always null while state.drag !== null (onPointerDown/onPointerMove's
+    // invariant), so the hover check below can never fight the active drag's 'active' target.
+    const targetIn: BarVisualState = state.drag === 'in' ? 'active' : state.hover === 'in' ? 'hover' : 'rest';
+    const targetOut: BarVisualState = state.drag === 'out' ? 'active' : state.hover === 'out' ? 'hover' : 'rest';
+    state.barTransition.in = advanceBarTransition(state.barTransition.in, targetIn, now);
+    state.barTransition.out = advanceBarTransition(state.barTransition.out, targetOut, now);
+    drawHandles(this.ctx, widthPx, {
+      inX,
+      outX,
+      heightPx,
+      inFill: barFillColor(state.barTransition.in, now),
+      outFill: barFillColor(state.barTransition.out, now),
+    });
+    this.updateChips(state, widthPx, inX, outX, inTicks, outTicks, timescale);
 
     if (state.snapFlash !== null) {
       const opacity = snapFlashOpacity(state.snapFlash, performance.now());
@@ -525,7 +622,11 @@ export class TimelineController {
     const playheadX = timeToX(state.t, viewport.viewStart, viewport.viewSpan, widthPx);
     drawPlayhead(this.ctx, playheadX, 0, heightPx);
 
-    this.drawPreviewOverlay(state.scrubActive ? state.t : this.settleSeekTicks);
+    // While handle-dragging, the driven position is the dragged handle's own ticks (inTicks/outTicks
+    // already resolve to the live ghost value above), not the playhead -- so the preview scrubs to
+    // wherever the handle is, matching a general playhead scrub's use of state.t.
+    const scrubPreviewTicks = state.drag === 'in' ? inTicks : state.drag === 'out' ? outTicks : state.t;
+    this.drawPreviewOverlay(state.scrubActive ? scrubPreviewTicks : this.settleSeekTicks);
 
     // Bypasses React entirely -- TransportBar.tsx's own doc comment; playhead movement must never
     // trigger a re-render.
@@ -533,6 +634,32 @@ export class TimelineController {
     if (timecodeEl !== null) {
       timecodeEl.textContent = formatDurationCompact(ticksToSeconds(state.t, timescale));
     }
+  }
+
+  /** Writes the IN/OUT chip DOM nodes (TimelineRegion.tsx) directly every frame -- bypasses React,
+   * same as the transport timecode write above. Position reuses the same clamped bar x drawHandles
+   * just drew the handle at, so the chip's hairline stays visually flush with the bar at every
+   * zoom/pan/edge-clamp state -- design/scrub-chip-prompt.md's "Attachment" section. Visible
+   * whenever that handle is hovered (and nothing is being dragged) or is the one being dragged. */
+  private updateChips(state: TimelineControllerState, widthPx: number, inX: number, outX: number, inTicks: Time, outTicks: Time, timescale: Time): void {
+    const showIn = state.drag === 'in' || state.hover === 'in';
+    const showOut = state.drag === 'out' || state.hover === 'out';
+
+    const inWrapper = this.chipInWrapperRef.current;
+    if (inWrapper !== null) {
+      inWrapper.style.left = `${clampBarX(inX, widthPx).toString()}px`;
+      inWrapper.style.display = showIn ? 'flex' : 'none';
+    }
+    const inTimeEl = this.chipInTimeRef.current;
+    if (inTimeEl !== null) inTimeEl.textContent = formatDurationCompact(ticksToSeconds(inTicks, timescale));
+
+    const outWrapper = this.chipOutWrapperRef.current;
+    if (outWrapper !== null) {
+      outWrapper.style.left = `${clampBarX(outX, widthPx).toString()}px`;
+      outWrapper.style.display = showOut ? 'flex' : 'none';
+    }
+    const outTimeEl = this.chipOutTimeRef.current;
+    if (outTimeEl !== null) outTimeEl.textContent = formatDurationCompact(ticksToSeconds(outTicks, timescale));
   }
 
   /** Draws the cached frame nearest `scrubTime` over the real <video>, or clears the overlay

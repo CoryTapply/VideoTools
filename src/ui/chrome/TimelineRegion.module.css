@@ -1,6 +1,10 @@
 .root {
   position: relative;
-  overflow: hidden;
+  /* visible, not hidden: the IN/OUT chip must float above the canvas's own bounds -- see
+     TimelineRegion.tsx's CHIP_ATTACH_BOTTOM_PX. .indexingOverlay stays self-clipped by its own
+     inset-0 box, and the canvas's own drawing stays clipped to the canvas rect regardless of the
+     parent's overflow, so nothing else escapes. */
+  overflow: visible;
   background: var(--color-bg-base);
   display: flex;
   flex-direction: column;
@@ -25,4 +29,48 @@
     var(--color-bg-indexing-stripe-b) 20px
   );
   pointer-events: auto;
+}
+
+/* IN/OUT scrub chip -- design/scrub-chip-prompt.md. `left` and `display` are written directly by
+   TimelineController every frame, never through React re-renders. */
+.chipWrapper {
+  position: absolute;
+  left: 0;
+  transform: translateX(-50%);
+  z-index: 60;
+  pointer-events: none;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--color-scrub-chip-bg);
+  border: 1px solid var(--color-border-base);
+  box-shadow: var(--shadow-scrub-chip);
+  white-space: nowrap;
+}
+
+.chipTag {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  color: var(--color-accent);
+}
+
+.chipTime {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--color-text-primary);
+}
+
+.hairline {
+  width: 1px;
+  height: 9px;
+  background: var(--color-accent);
 }

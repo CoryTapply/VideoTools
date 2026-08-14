@@ -1,12 +1,26 @@
 import { rowHeight } from '../tokens.ts';
 import styles from './TimelineRegion.module.css';
-import type { RefCallback } from 'react';
+import type { RefCallback, RefObject } from 'react';
 
 // Indexing covers the filmstrip (and, in M2, the waveform) but not the ruler, which now hosts the
 // keyframe ticks too -- design/README.md's "Indexing state" note, design/floating-chrome-changes.md's
 // keyframe-row merge. Computed from tokens.ts rather than duplicated as a CSS literal, so the two
 // stay in sync if the row height ever changes.
 const FILMSTRIP_TOP_PX = rowHeight.ruler;
+
+// The IN/OUT chip's hairline must land exactly on the handle bar's top edge -- design/scrub-chip-prompt.md's
+// "Attachment" section. The spec derives this offset assuming the handle bar starts below the
+// ruler (27px), but draw/handles.ts actually draws the bar (and the selection border/dim overlay)
+// from the very top of the canvas, y=0 -- so the true offset is 0, not 27. Revisit this constant
+// together with draw/handles.ts if that vertical geometry ever changes.
+const CHIP_ATTACH_BOTTOM_PX = 0;
+
+/** A handle's chip DOM refs -- the wrapper (positioned/shown by the controller) and the time text
+ * node (its content written by the controller). See state/useTimelineController.ts. */
+export interface ChipRefs {
+  wrapper: RefObject<HTMLDivElement | null>;
+  time: RefObject<HTMLSpanElement | null>;
+}
 
 export interface TimelineRegionProps {
   heightPx: number;
@@ -19,20 +33,41 @@ export interface TimelineRegionProps {
    * mounts/unmounts (the fullscreen toggle does both) so it can rebuild the controller against
    * the fresh node. */
   canvasRef?: RefCallback<HTMLCanvasElement>;
+  /** IN/OUT chip DOM refs -- undefined in ui-harness.html for the same reason canvasRef is.
+   * Position/visibility/text are all written directly by TimelineController every frame, never
+   * through React state -- see design/scrub-chip-prompt.md. */
+  chipInRef?: ChipRefs;
+  chipOutRef?: ChipRefs;
 }
 
 /**
  * Ruler / keyframe row / filmstrip (no waveform row per the M1 default), drawn by
  * state/useTimelineController.ts's TimelineController onto a single canvas -- see
  * design/README.md's "single canvas, not DOM" mandate (862,401 frames on the reference fixture is
- * too many nodes). The indexing-state stripe overlay stays a DOM element on top of the canvas:
- * it's simpler, already correct, and needs no viewport math.
+ * too many nodes). The indexing-state stripe overlay and the IN/OUT chips stay DOM elements on top
+ * of the canvas -- there are at most a handful of them (not one per frame), and the chips
+ * specifically need to float above the canvas's own bounds (`.root`'s `overflow: visible`), which
+ * a canvas-drawn element can't do.
  */
-export function TimelineRegion({ heightPx, indexing, canvasRef }: TimelineRegionProps) {
+export function TimelineRegion({ heightPx, indexing, canvasRef, chipInRef, chipOutRef }: TimelineRegionProps) {
   return (
     <div className={styles.root} style={{ flex: `0 0 ${heightPx.toString()}px`, height: heightPx }}>
       <canvas ref={canvasRef} className={styles.canvas} />
       {indexing && <div className={styles.indexingOverlay} style={{ top: FILMSTRIP_TOP_PX }} />}
+      <div ref={chipInRef?.wrapper} className={styles.chipWrapper} style={{ bottom: `calc(100% - ${CHIP_ATTACH_BOTTOM_PX.toString()}px)` }}>
+        <div className={styles.chip}>
+          <span className={styles.chipTag}>IN</span>
+          <span ref={chipInRef?.time} className={styles.chipTime} />
+        </div>
+        <div className={styles.hairline} />
+      </div>
+      <div ref={chipOutRef?.wrapper} className={styles.chipWrapper} style={{ bottom: `calc(100% - ${CHIP_ATTACH_BOTTOM_PX.toString()}px)` }}>
+        <div className={styles.chip}>
+          <span className={styles.chipTag}>OUT</span>
+          <span ref={chipOutRef?.time} className={styles.chipTime} />
+        </div>
+        <div className={styles.hairline} />
+      </div>
     </div>
   );
 }

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { TimelineController } from '../timeline/TimelineController.ts';
 import type { Dispatch, RefCallback, RefObject } from 'react';
+import type { ChipRefs } from '../chrome/TimelineRegion.tsx';
 import type { AppAction, TrimMode } from './app-state.ts';
 import type { MediaSession } from './media-session.ts';
 import type { TimelineControllerState } from './timeline-controller-state.ts';
@@ -21,6 +22,10 @@ export interface TimelineControllerHandle {
   /** TransportBar's timecode node -- TimelineController writes textContent into it directly from
    * its rAF loop once constructed; see TransportBar.tsx's own doc comment. */
   transportTimecodeRef: RefObject<HTMLDivElement | null>;
+  /** IN/OUT chip DOM refs -- passed straight through to TimelineRegion.tsx's chipInRef/chipOutRef
+   * props; TimelineController writes their position/visibility/text directly. */
+  chipInRef: ChipRefs;
+  chipOutRef: ChipRefs;
 }
 
 export function useTimelineController(
@@ -37,6 +42,12 @@ export function useTimelineController(
   }, []);
   const scrubOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const transportTimecodeRef = useRef<HTMLDivElement>(null);
+  const chipInWrapperRef = useRef<HTMLDivElement>(null);
+  const chipInTimeRef = useRef<HTMLSpanElement>(null);
+  const chipOutWrapperRef = useRef<HTMLDivElement>(null);
+  const chipOutTimeRef = useRef<HTMLSpanElement>(null);
+  const chipInRef: ChipRefs = { wrapper: chipInWrapperRef, time: chipInTimeRef };
+  const chipOutRef: ChipRefs = { wrapper: chipOutWrapperRef, time: chipOutTimeRef };
   const controllerRef = useRef<TimelineController | null>(null);
   const tinToutRef = useRef({ tin, tout });
   const trimModeRef = useRef(trimMode);
@@ -77,6 +88,10 @@ export function useTimelineController(
         canvas,
         previewCanvas,
         transportTimecodeRef,
+        chipInWrapperRef,
+        chipInTimeRef,
+        chipOutWrapperRef,
+        chipOutTimeRef,
         stateRef: controllerStateRef,
         frameCacheRef: media.frameCacheRef,
         sampleIndexRef: media.sampleIndexRef,
@@ -117,5 +132,5 @@ export function useTimelineController(
     // and skips re-fitting once it's already been set.)
   }, [media.file, timelineCanvas]);
 
-  return { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef };
+  return { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef, chipInRef, chipOutRef };
 }

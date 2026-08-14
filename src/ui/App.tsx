@@ -82,7 +82,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   const tracks = media.tracks ?? TRACKS;
   const sourceFileName = media.file?.name ?? FILE_NAME;
   const timelineControllerRef = useTimelineControllerRef();
-  const { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef } = useTimelineController(
+  const { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef, chipInRef, chipOutRef } = useTimelineController(
     media,
     timelineControllerRef,
     dispatch,
@@ -640,6 +640,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           heightPx={timelineHeight}
           indexing={state.screen === 'indexing' || state.screen === 'opening'}
           canvasRef={timelineCanvasRef}
+          chipInRef={chipInRef}
+          chipOutRef={chipOutRef}
         />
       )}
 
