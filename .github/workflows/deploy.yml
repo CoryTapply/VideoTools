@@ -37,6 +37,7 @@ jobs:
           mkdir -p pages-dist
           cp dist/app.html pages-dist/index.html
           cp -r dist/assets pages-dist/assets
+          cp -r dist/icons pages-dist/icons
 
       - uses: actions/upload-pages-artifact@v3
         with:
