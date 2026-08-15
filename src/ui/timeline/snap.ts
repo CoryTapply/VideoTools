@@ -18,7 +18,7 @@ export interface SnapContext {
   keyframeTimes: Float64Array;
   playhead: Time;
   duration: Time;
-  /** The other in/out edge, or null when not applicable (e.g. general playhead scrub). */
+  /** The other start/end edge, or null when not applicable (e.g. general playhead scrub). */
   oppositeHandle: Time | null;
 }
 

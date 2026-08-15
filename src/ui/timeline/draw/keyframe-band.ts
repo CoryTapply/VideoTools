@@ -18,7 +18,7 @@ const SHORT_TICK_TOP = 5;
 const STRIPE_PERIOD_PX = 8;
 
 export interface KeyframeBandHighlights {
-  /** Presentation ticks currently coinciding with the in or out point -- drawn accent-colored. */
+  /** Presentation ticks currently coinciding with the start or end point -- drawn accent-colored. */
   accentTimes: readonly Time[];
 }
 

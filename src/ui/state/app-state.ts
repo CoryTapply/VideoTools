@@ -34,13 +34,13 @@ export interface KeyframeShiftNotice {
   delta: number;
   /** Resulting timecode position, in seconds. */
   at: number;
-  which: 'in' | 'out';
+  which: 'start' | 'end';
 }
 
 export interface AppState {
   screen: Screen;
-  tin: number;
-  tout: number;
+  tstart: number;
+  tend: number;
   trimMode: TrimMode;
   /** Preview-only monitoring gain -- design/volume-slider-prompt.md. Never affects export output. */
   vol: number;
@@ -69,8 +69,8 @@ export const DEFAULT_TIMELINE_HEIGHT = 236;
 export function createInitialAppState(overrides: Partial<AppState> = {}): AppState {
   return {
     screen: 'empty',
-    tin: 0,
-    tout: 0,
+    tstart: 0,
+    tend: 0,
     trimMode: 'copy',
     vol: 0.7,
     muted: false,
@@ -103,7 +103,7 @@ export type AppAction =
   | { type: 'mute/set'; muted: boolean }
   | { type: 'track/toggle'; track: TrackId }
   | { type: 'sel/set'; sel: TrackSelection }
-  | { type: 'in-out/set'; tin: number; tout: number }
+  | { type: 'start-end/set'; tstart: number; tend: number }
   | { type: 'open-error/set'; error: IndexError | null }
   | { type: 'export-error/set'; error: ExportError | null }
   | { type: 'notice/set'; notice: KeyframeShiftNotice | null }
@@ -147,8 +147,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, sel: { ...state.sel, [action.track]: !state.sel[action.track] } };
     case 'sel/set':
       return { ...state, sel: action.sel };
-    case 'in-out/set':
-      return { ...state, tin: action.tin, tout: action.tout };
+    case 'start-end/set':
+      return { ...state, tstart: action.tstart, tend: action.tend };
     case 'open-error/set':
       return { ...state, openError: action.error };
     case 'export-error/set':

@@ -59,7 +59,7 @@ describe('appReducer', () => {
 
   it('trim-mode/set to exact clears any pending notice', () => {
     const withNotice = createInitialAppState({
-      notice: { delta: -4.17, at: 6690, which: 'in' },
+      notice: { delta: -4.17, at: 6690, which: 'start' },
       noticeOpen: true,
     });
     const state = appReducer(withNotice, { type: 'trim-mode/set', mode: 'exact' });
@@ -70,7 +70,7 @@ describe('appReducer', () => {
 
   it('notice/keep-exact switches to exact mode and clears the notice', () => {
     const withNotice = createInitialAppState({
-      notice: { delta: -4.17, at: 6690, which: 'in' },
+      notice: { delta: -4.17, at: 6690, which: 'start' },
       noticeOpen: true,
       trimMode: 'copy',
     });
@@ -82,7 +82,7 @@ describe('appReducer', () => {
 
   it('notice/set to null also closes the popover', () => {
     const withNotice = createInitialAppState({
-      notice: { delta: -4.17, at: 6690, which: 'in' },
+      notice: { delta: -4.17, at: 6690, which: 'start' },
       noticeOpen: true,
     });
     const state = appReducer(withNotice, { type: 'notice/set', notice: null });

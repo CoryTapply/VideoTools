@@ -30,8 +30,8 @@ export type ExportJobMeta =
   | { fileName: string; status: 'failed' };
 
 export interface StartExportOptions {
-  tin: number;
-  tout: number;
+  tstart: number;
+  tend: number;
   sel: TrackSelection;
   tracks: readonly TrackSummary[];
   sourceFileName: string;
@@ -87,8 +87,8 @@ export function useExportSession(dispatch: Dispatch<AppAction>, media: MediaSess
           fileHandle: picked.handle,
           tracks: sampleIndex.tracks(),
           selectedTrackIds,
-          requestedInSec: opts.tin,
-          requestedOutSec: opts.tout,
+          requestedStartSec: opts.tstart,
+          requestedEndSec: opts.tend,
         },
         (progress) => {
           dispatch({ type: 'export/progress', pct: progress.percent });

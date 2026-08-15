@@ -12,15 +12,15 @@ export interface ExportRange {
 export interface ExportSelection {
   readonly ranges: ExportRange[];
   /** Presentation ticks, primary video track's own timescale -- the canonical time base (see
-   * architecture-v3.md §2). Keyframe-snapped: this is the actually-chosen in-point, not
+   * architecture-v3.md §2). Keyframe-snapped: this is the actually-chosen start point, not
    * necessarily the requested one. */
-  readonly actualInTicks: number;
+  readonly actualStartTicks: number;
   /** Presentation ticks, primary video track's own timescale. Unsnapped -- sampleRange's
    * half-open upper bound already excludes the sample at or after this instant, so no keyframe
-   * search is needed for the out-point. */
-  readonly actualOutTicks: number;
-  /** Signed ticks the in-point moved by (actualInTicks - requested); negative means earlier. 0 if
-   * the requested in-point was already on a keyframe. */
+   * search is needed for the end point. */
+  readonly actualEndTicks: number;
+  /** Signed ticks the start point moved by (actualStartTicks - requested); negative means earlier.
+   * 0 if the requested start point was already on a keyframe. */
   readonly keyframeShiftTicks: number;
 }
 

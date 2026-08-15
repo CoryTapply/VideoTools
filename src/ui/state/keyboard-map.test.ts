@@ -28,13 +28,13 @@ describe('matchShortcut', () => {
     expect(matchShortcut(key('ArrowRight', { shiftKey: true }))).toBe('step-forward-second');
   });
 
-  it('matches I/O to set-in/set-out, shift to jump, alt to clear', () => {
-    expect(matchShortcut(key('i'))).toBe('set-in');
-    expect(matchShortcut(key('o'))).toBe('set-out');
-    expect(matchShortcut(key('i', { shiftKey: true }))).toBe('jump-to-in');
-    expect(matchShortcut(key('o', { shiftKey: true }))).toBe('jump-to-out');
-    expect(matchShortcut(key('i', { altKey: true }))).toBe('clear-in');
-    expect(matchShortcut(key('o', { altKey: true }))).toBe('clear-out');
+  it('matches I/O to set-start/set-end, shift to jump, alt to clear', () => {
+    expect(matchShortcut(key('i'))).toBe('set-start');
+    expect(matchShortcut(key('o'))).toBe('set-end');
+    expect(matchShortcut(key('i', { shiftKey: true }))).toBe('jump-to-start');
+    expect(matchShortcut(key('o', { shiftKey: true }))).toBe('jump-to-end');
+    expect(matchShortcut(key('i', { altKey: true }))).toBe('clear-start');
+    expect(matchShortcut(key('o', { altKey: true }))).toBe('clear-end');
   });
 
   it('checks modifier chords before the plain map, so Cmd/Ctrl+E never falls through', () => {
@@ -43,10 +43,10 @@ describe('matchShortcut', () => {
     expect(matchShortcut(key('e'))).toBeNull();
   });
 
-  it('matches Cmd/Ctrl+O to open-file, distinct from the plain O (set-out) chord', () => {
+  it('matches Cmd/Ctrl+O to open-file, distinct from the plain O (set-end) chord', () => {
     expect(matchShortcut(key('o', { metaKey: true }))).toBe('open-file');
     expect(matchShortcut(key('o', { ctrlKey: true }))).toBe('open-file');
-    expect(matchShortcut(key('o'))).toBe('set-out');
+    expect(matchShortcut(key('o'))).toBe('set-end');
   });
 
   it('matches Cmd/Ctrl+Z to undo, but not with Shift held', () => {

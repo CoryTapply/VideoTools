@@ -1,5 +1,5 @@
 // Cheap, no-I/O size estimate for a resolved selection -- a real sum of the sample sizes an
-// export would actually copy, not a fabricated formula. Cheap enough to call on every tin/tout
+// export would actually copy, not a fabricated formula. Cheap enough to call on every tstart/tend
 // drag or track toggle for a live "est. size" UI row.
 
 import type { TrackIndex } from '../index/track-index';

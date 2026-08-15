@@ -27,7 +27,7 @@ describe('TimelineRegion', () => {
     expect(() => render(<TimelineRegion heightPx={236} indexing={false} />)).not.toThrow();
   });
 
-  it('renders both IN/OUT chip wrappers whether or not chipInRef/chipOutRef are supplied', () => {
+  it('renders both START/END chip wrappers whether or not chipStartRef/chipEndRef are supplied', () => {
     const { container } = render(<TimelineRegion heightPx={236} indexing={false} />);
     expect(container.querySelectorAll('[class*="chipWrapper"]')).toHaveLength(2);
   });

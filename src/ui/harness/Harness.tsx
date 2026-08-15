@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { App } from '../App.tsx';
-import { DEFAULT_IN_SECONDS, DEFAULT_OUT_SECONDS } from '../fixtures.ts';
+import { DEFAULT_START_SECONDS, DEFAULT_END_SECONDS } from '../fixtures.ts';
 import styles from './Harness.module.css';
 import type { AppState, PanelId, Screen, TrimMode } from '../state/app-state.ts';
 
 const SCREENS: readonly Screen[] = ['ready', 'empty', 'opening', 'indexing', 'exporting', 'finalising', 'unsupported', 'degraded'];
 const PANELS: readonly (PanelId | 'none')[] = ['none', 'info', 'export', 'queue'];
 const TRIM_MODES: readonly TrimMode[] = ['copy', 'exact'];
-const NOTICE_WHICH: readonly ('in' | 'out')[] = ['in', 'out'];
+const NOTICE_WHICH: readonly ('start' | 'end')[] = ['start', 'end'];
 
 /**
  * Renders <App> behind a control panel exposing every variant the design doc lists as
@@ -28,7 +28,7 @@ export function Harness() {
   const [toast, setToast] = useState(false);
   const [exportPct, setExportPct] = useState(40);
   const [noticeEnabled, setNoticeEnabled] = useState(false);
-  const [noticeWhich, setNoticeWhich] = useState<'in' | 'out'>('in');
+  const [noticeWhich, setNoticeWhich] = useState<'start' | 'end'>('start');
   const [noticeDelta, setNoticeDelta] = useState(-4.17);
   const [noticeOpen, setNoticeOpen] = useState(false);
 
@@ -43,10 +43,10 @@ export function Harness() {
     full,
     toast,
     exportPct,
-    notice: noticeEnabled ? { which: noticeWhich, delta: noticeDelta, at: DEFAULT_IN_SECONDS } : null,
+    notice: noticeEnabled ? { which: noticeWhich, delta: noticeDelta, at: DEFAULT_START_SECONDS } : null,
     noticeOpen: noticeEnabled && noticeOpen,
-    tin: DEFAULT_IN_SECONDS,
-    tout: DEFAULT_OUT_SECONDS,
+    tstart: DEFAULT_START_SECONDS,
+    tend: DEFAULT_END_SECONDS,
   };
   const remountKey = JSON.stringify({ ...initialState, exactAvailable });
 
@@ -170,7 +170,7 @@ export function Harness() {
           <select
             id="h-notice-which"
             value={noticeWhich}
-            onChange={(e) => { setNoticeWhich(e.target.value as 'in' | 'out'); }}
+            onChange={(e) => { setNoticeWhich(e.target.value as 'start' | 'end'); }}
             disabled={!noticeEnabled}
           >
             {NOTICE_WHICH.map((w) => (

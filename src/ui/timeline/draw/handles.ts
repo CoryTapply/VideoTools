@@ -1,7 +1,8 @@
-// In/out region draw: dim overlays outside the selection, top/bottom selection borders, and
-// handle bars+grips. design/README.md's "In/out region" -- see ../drag-gesture.ts for the
-// hit-testing this geometry is drawn to match. The hover/drag IN/OUT chip is a DOM overlay drawn
-// by TimelineRegion.tsx/TimelineController.ts, not this module -- see design/scrub-chip-prompt.md.
+// Start/end region draw: dim overlays outside the selection, top/bottom selection borders, and
+// handle bars+grips. design/README.md's "In/out region" section -- see ../drag-gesture.ts for the
+// hit-testing this geometry is drawn to match. The hover/drag START/END chip is a DOM overlay
+// drawn by TimelineRegion.tsx/TimelineController.ts, not this module -- see
+// design/scrub-chip-prompt.md.
 
 import { color } from '../../tokens.ts';
 import type { CanvasLike } from '../canvas-like.ts';
@@ -12,8 +13,8 @@ const GRIP_HEIGHT_PX = 14;
 const SELECTION_BORDER_WIDTH_PX = 2;
 
 export interface HandlesGeometry {
-  inX: number;
-  outX: number;
+  startX: number;
+  endX: number;
   heightPx: number;
   /** Top of the handle bars/grips and the top selection border, in canvas px -- the filmstrip
    * row's top, not the canvas's, so they start level with the first thumbnail rather than poking
@@ -22,8 +23,8 @@ export interface HandlesGeometry {
   /** Pre-resolved fill colors for each handle bar -- resolved by the caller (TimelineController's
    * draw loop, via draw/handle-color.ts's rest/hover/active transition), not here: this module only
    * draws, it doesn't own the hover/drag state machine or the color-lerp animation. */
-  inFill: string;
-  outFill: string;
+  startFill: string;
+  endFill: string;
 }
 
 /** Corners are chamfered (cut with a short diagonal) rather than true arcs, matching
@@ -76,27 +77,27 @@ export function clampBarX(x: number, widthPx: number): number {
  * occludes the playhead line where they cross) but on top of the dim/border, which is unaffected
  * by draw order since it only touches two thin horizontal hairlines. */
 export function drawSelectionOverlay(ctx: CanvasLike, widthPx: number, geometry: HandlesGeometry): void {
-  const { inX, outX, heightPx, barTopPx } = geometry;
+  const { startX, endX, heightPx, barTopPx } = geometry;
 
   ctx.fillStyle = color.dim;
-  if (inX > 0) ctx.fillRect(0, 0, Math.min(inX, widthPx), heightPx);
-  if (outX < widthPx) ctx.fillRect(Math.max(outX, 0), 0, widthPx - Math.max(outX, 0), heightPx);
+  if (startX > 0) ctx.fillRect(0, 0, Math.min(startX, widthPx), heightPx);
+  if (endX < widthPx) ctx.fillRect(Math.max(endX, 0), 0, widthPx - Math.max(endX, 0), heightPx);
 
   ctx.strokeStyle = color.selectionBorder;
   ctx.lineWidth = SELECTION_BORDER_WIDTH_PX;
   const borderOffset = SELECTION_BORDER_WIDTH_PX / 2;
   ctx.beginPath();
-  ctx.moveTo(inX, barTopPx + borderOffset);
-  ctx.lineTo(outX, barTopPx + borderOffset);
-  ctx.moveTo(inX, heightPx - borderOffset);
-  ctx.lineTo(outX, heightPx - borderOffset);
+  ctx.moveTo(startX, barTopPx + borderOffset);
+  ctx.lineTo(endX, barTopPx + borderOffset);
+  ctx.moveTo(startX, heightPx - borderOffset);
+  ctx.lineTo(endX, heightPx - borderOffset);
   ctx.stroke();
 }
 
-/** The two in/out handle bars + grips only -- see drawSelectionOverlay's doc comment for why this
- * is split out and drawn after the playhead. */
+/** The two start/end handle bars + grips only -- see drawSelectionOverlay's doc comment for why
+ * this is split out and drawn after the playhead. */
 export function drawHandleBars(ctx: CanvasLike, widthPx: number, geometry: HandlesGeometry): void {
-  const { inX, outX, heightPx, barTopPx, inFill, outFill } = geometry;
-  drawHandle(ctx, clampBarX(inX, widthPx), barTopPx, heightPx, inFill);
-  drawHandle(ctx, clampBarX(outX, widthPx), barTopPx, heightPx, outFill);
+  const { startX, endX, heightPx, barTopPx, startFill, endFill } = geometry;
+  drawHandle(ctx, clampBarX(startX, widthPx), barTopPx, heightPx, startFill);
+  drawHandle(ctx, clampBarX(endX, widthPx), barTopPx, heightPx, endFill);
 }
