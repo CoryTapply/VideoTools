@@ -12,12 +12,12 @@ export type ShortcutAction =
   | 'step-forward-frame'
   | 'step-back-second'
   | 'step-forward-second'
-  | 'set-in'
-  | 'set-out'
-  | 'jump-to-in'
-  | 'jump-to-out'
-  | 'clear-in'
-  | 'clear-out'
+  | 'set-start'
+  | 'set-end'
+  | 'jump-to-start'
+  | 'jump-to-end'
+  | 'clear-start'
+  | 'clear-end'
   | 'prev-keyframe'
   | 'next-keyframe'
   | 'zoom-in'
@@ -58,8 +58,8 @@ export function matchShortcut(evt: KeyboardEventLike): ShortcutAction | null {
   }
 
   if (evt.altKey) {
-    if (key === 'i') return 'clear-in';
-    if (key === 'o') return 'clear-out';
+    if (key === 'i') return 'clear-start';
+    if (key === 'o') return 'clear-end';
     return null;
   }
 
@@ -69,8 +69,8 @@ export function matchShortcut(evt: KeyboardEventLike): ShortcutAction | null {
   if (key === '?') return 'toggle-shortcuts';
 
   if (evt.shiftKey) {
-    if (key === 'i') return 'jump-to-in';
-    if (key === 'o') return 'jump-to-out';
+    if (key === 'i') return 'jump-to-start';
+    if (key === 'o') return 'jump-to-end';
     if (key === 'z') return 'zoom-fit';
     if (key === 'arrowleft') return 'step-back-second';
     if (key === 'arrowright') return 'step-forward-second';
@@ -92,9 +92,9 @@ export function matchShortcut(evt: KeyboardEventLike): ShortcutAction | null {
     case 'arrowright':
       return 'step-forward-frame';
     case 'i':
-      return 'set-in';
+      return 'set-start';
     case 'o':
-      return 'set-out';
+      return 'set-end';
     case 'arrowup':
       return 'prev-keyframe';
     case 'arrowdown':

@@ -15,8 +15,8 @@ export interface ExportWorkerStartRequest {
   fileHandle: FileSystemFileHandle;
   tracks: SerializedTrack[];
   selectedTrackIds: number[];
-  requestedInSec: number;
-  requestedOutSec: number;
+  requestedStartSec: number;
+  requestedEndSec: number;
 }
 
 export interface ExportWorkerCancelRequest {

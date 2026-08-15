@@ -12,8 +12,8 @@ export interface ExportJob {
   fileHandle: FileSystemFileHandle;
   tracks: readonly TrackIndex[];
   selectedTrackIds: ReadonlySet<number>;
-  requestedInSec: number;
-  requestedOutSec: number;
+  requestedStartSec: number;
+  requestedEndSec: number;
 }
 
 let nextRequestId = 1;
@@ -54,8 +54,8 @@ export class ExportWorkerClient {
         fileHandle: job.fileHandle,
         tracks: serialized,
         selectedTrackIds: [...job.selectedTrackIds],
-        requestedInSec: job.requestedInSec,
-        requestedOutSec: job.requestedOutSec,
+        requestedStartSec: job.requestedStartSec,
+        requestedEndSec: job.requestedEndSec,
       };
       this.worker.postMessage(message, transferables);
     });

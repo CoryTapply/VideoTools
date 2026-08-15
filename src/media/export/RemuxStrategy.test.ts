@@ -89,8 +89,8 @@ describe('runRemuxExport -- differential round trip', () => {
       tracks,
       sampleIndex,
       selectedTrackIds: new Set([1, 2]),
-      requestedInSec: 0,
-      requestedOutSec: 1,
+      requestedStartSec: 0,
+      requestedEndSec: 1,
       signal,
     });
 
@@ -153,8 +153,8 @@ describe('runRemuxExport -- differential round trip', () => {
       tracks,
       sampleIndex,
       selectedTrackIds: new Set([2]), // audio only -- video (trackId 1) omitted
-      requestedInSec: 0,
-      requestedOutSec: 1,
+      requestedStartSec: 0,
+      requestedEndSec: 1,
       signal: { cancelled: false },
     });
 
@@ -189,8 +189,8 @@ describe('runRemuxExport -- cancellation', () => {
       tracks,
       sampleIndex,
       selectedTrackIds: new Set([1, 2]),
-      requestedInSec: 0,
-      requestedOutSec: 1,
+      requestedStartSec: 0,
+      requestedEndSec: 1,
       signal,
     });
 

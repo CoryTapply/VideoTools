@@ -35,8 +35,8 @@ describe('estimateExportBytes', () => {
         { trackId: 1, first: 1, last: 2 }, // 200 + 300
         { trackId: 2, first: 0, last: 1 }, // 50 + 60
       ],
-      actualInTicks: 0,
-      actualOutTicks: 0,
+      actualStartTicks: 0,
+      actualEndTicks: 0,
       keyframeShiftTicks: 0,
     };
     expect(estimateExportBytes(selection, tracksById)).toBe(200 + 300 + 50 + 60);
@@ -49,8 +49,8 @@ describe('estimateExportBytes', () => {
         { trackId: 1, first: 0, last: 1 },
         { trackId: 99, first: 0, last: 0 },
       ],
-      actualInTicks: 0,
-      actualOutTicks: 0,
+      actualStartTicks: 0,
+      actualEndTicks: 0,
       keyframeShiftTicks: 0,
     };
     expect(estimateExportBytes(selection, new Map([[1, a]]))).toBe(300);

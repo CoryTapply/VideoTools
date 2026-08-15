@@ -71,7 +71,7 @@ export const color = {
   accentHover: '#5E99F7',
   accentActive: '#7FB0FF',
   accentOn: '#0B1220',
-  // In/out handle bar's hover fill -- design/scrub-chip-prompt.md's handle geometry section. Its
+  // Start/end handle bar's hover fill -- design/scrub-chip-prompt.md's handle geometry section. Its
   // own token, not accentHover: that one is already used for unrelated buttons and has a
   // different hex value than the handle spec calls for.
   handleHover: '#6BA0F9',
@@ -107,11 +107,11 @@ export const color = {
   // rather than a CSS box-shadow since tiles are canvas-drawn, not DOM nodes.
   filmstripSeamDark: 'rgba(0,0,0,.55)',
   filmstripSeamLight: 'rgba(255,255,255,.05)',
-  // In/out region -- design/README.md's In/out region: the selected span's top/bottom borders,
-  // and the handle's grip line (drawn over the accent-colored bar).
+  // Start/end region -- design/README.md's "In/out region" section: the selected span's
+  // top/bottom borders, and the handle's grip line (drawn over the accent-colored bar).
   selectionBorder: 'rgba(76,141,246,.9)',
   handleGrip: 'rgba(11,18,32,.55)',
-  // IN/OUT scrub chip's dark bubble background -- design/scrub-chip-prompt.md's chip markup.
+  // START/END scrub chip's dark bubble background -- design/scrub-chip-prompt.md's chip markup.
   scrubChipBg: 'rgba(14,14,15,.94)',
 
   // Volume popover's slider track (unfilled portion) -- design/volume-slider-prompt.md. Coincides
@@ -147,7 +147,7 @@ export const shadow = {
   // Volume popover -- design/volume-slider-prompt.md. Same value as exportOverlay's but kept
   // separate: unrelated floating surfaces.
   volumePopover: '0 10px 26px rgba(0,0,0,.5)',
-  // IN/OUT scrub chip -- design/scrub-chip-prompt.md's chip markup.
+  // START/END scrub chip -- design/scrub-chip-prompt.md's chip markup.
   scrubChip: '0 4px 14px rgba(0,0,0,.5)',
 } as const;
 
@@ -170,7 +170,7 @@ export const motion = {
   panelFadeMs: 120,
   toastRiseMs: 180,
   snapFlashMs: 450,
-  // In/out handle bar's rest/hover/active fill transition -- design/scrub-chip-prompt.md's
+  // Start/end handle bar's rest/hover/active fill transition -- design/scrub-chip-prompt.md's
   // "Transition background .12s ease-out".
   handleBarTransitionMs: 120,
   panelHoverOpenMs: 400,

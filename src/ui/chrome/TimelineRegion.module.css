@@ -1,6 +1,6 @@
 .root {
   position: relative;
-  /* visible, not hidden: the IN/OUT chip must float above the canvas's own bounds -- see
+  /* visible, not hidden: the START/END chip must float above the canvas's own bounds -- see
      TimelineRegion.tsx's CHIP_ATTACH_BOTTOM_PX. .indexingOverlay stays self-clipped by its own
      inset-0 box, and the canvas's own drawing stays clipped to the canvas rect regardless of the
      parent's overflow, so nothing else escapes. */
@@ -31,7 +31,7 @@
   pointer-events: auto;
 }
 
-/* IN/OUT scrub chip -- design/scrub-chip-prompt.md. `left` and `display` are written directly by
+/* START/END scrub chip -- design/scrub-chip-prompt.md. `left` and `display` are written directly by
    TimelineController every frame, never through React re-renders. */
 .chipWrapper {
   position: absolute;

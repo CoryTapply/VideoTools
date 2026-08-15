@@ -13,8 +13,8 @@ describe('createTimelineControllerState', () => {
       hover: null,
       dragValueTicks: null,
       barTransition: {
-        in: { from: 'rest', to: 'rest', startedAt: -Infinity },
-        out: { from: 'rest', to: 'rest', startedAt: -Infinity },
+        start: { from: 'rest', to: 'rest', startedAt: -Infinity },
+        end: { from: 'rest', to: 'rest', startedAt: -Infinity },
       },
       scrubActive: false,
       panVelocityTicksPerMs: 0,

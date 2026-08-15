@@ -68,22 +68,22 @@ describe('formatNoticeDelta', () => {
 });
 
 describe('formatNoticeLabel', () => {
-  it('labels in/out moves', () => {
-    expect(formatNoticeLabel('in')).toBe('in moved');
-    expect(formatNoticeLabel('out')).toBe('out moved');
+  it('labels start/end moves', () => {
+    expect(formatNoticeLabel('start')).toBe('start moved');
+    expect(formatNoticeLabel('end')).toBe('end moved');
   });
 });
 
 describe('formatKeyframeShiftMessage', () => {
   it('reads "back" for a negative (earlier) delta', () => {
-    expect(formatKeyframeShiftMessage('in', -4.17, '01:51:25:52')).toBe(
-      'Stream copy can only cut on a keyframe, so the in point moved back to 01:51:25:52.',
+    expect(formatKeyframeShiftMessage('start', -4.17, '01:51:25:52')).toBe(
+      'Stream copy can only cut on a keyframe, so the start point moved back to 01:51:25:52.',
     );
   });
 
   it('reads "forward" for a positive (later) delta', () => {
-    expect(formatKeyframeShiftMessage('out', 2.5, '00:10:00:00')).toBe(
-      'Stream copy can only cut on a keyframe, so the out point moved forward to 00:10:00:00.',
+    expect(formatKeyframeShiftMessage('end', 2.5, '00:10:00:00')).toBe(
+      'Stream copy can only cut on a keyframe, so the end point moved forward to 00:10:00:00.',
     );
   });
 });

@@ -8,7 +8,7 @@ import type { RefCallback, RefObject } from 'react';
 // stay in sync if the row height ever changes.
 const FILMSTRIP_TOP_PX = rowHeight.ruler;
 
-// The IN/OUT chip's hairline must land exactly on the handle bar's top edge -- design/scrub-chip-prompt.md's
+// The START/END chip's hairline must land exactly on the handle bar's top edge -- design/scrub-chip-prompt.md's
 // "Attachment" section. draw/handles.ts draws the bar starting at the filmstrip's top (barTopPx,
 // passed as FILMSTRIP_TOP_PX below), not the canvas's, so the chip attaches there too. Revisit this
 // constant together with draw/handles.ts if that vertical geometry ever changes.
@@ -32,38 +32,38 @@ export interface TimelineRegionProps {
    * mounts/unmounts (the fullscreen toggle does both) so it can rebuild the controller against
    * the fresh node. */
   canvasRef?: RefCallback<HTMLCanvasElement>;
-  /** IN/OUT chip DOM refs -- undefined in ui-harness.html for the same reason canvasRef is.
+  /** START/END chip DOM refs -- undefined in ui-harness.html for the same reason canvasRef is.
    * Position/visibility/text are all written directly by TimelineController every frame, never
    * through React state -- see design/scrub-chip-prompt.md. */
-  chipInRef?: ChipRefs;
-  chipOutRef?: ChipRefs;
+  chipStartRef?: ChipRefs;
+  chipEndRef?: ChipRefs;
 }
 
 /**
  * Ruler / keyframe row / filmstrip (no waveform row per the M1 default), drawn by
  * state/useTimelineController.ts's TimelineController onto a single canvas -- see
  * design/README.md's "single canvas, not DOM" mandate (862,401 frames on the reference fixture is
- * too many nodes). The indexing-state stripe overlay and the IN/OUT chips stay DOM elements on top
- * of the canvas -- there are at most a handful of them (not one per frame), and the chips
+ * too many nodes). The indexing-state stripe overlay and the START/END chips stay DOM elements on
+ * top of the canvas -- there are at most a handful of them (not one per frame), and the chips
  * specifically need to float above the canvas's own bounds (`.root`'s `overflow: visible`), which
  * a canvas-drawn element can't do.
  */
-export function TimelineRegion({ heightPx, indexing, canvasRef, chipInRef, chipOutRef }: TimelineRegionProps) {
+export function TimelineRegion({ heightPx, indexing, canvasRef, chipStartRef, chipEndRef }: TimelineRegionProps) {
   return (
     <div className={styles.root} style={{ flex: `0 0 ${heightPx.toString()}px`, height: heightPx }}>
       <canvas ref={canvasRef} className={styles.canvas} />
       {indexing && <div className={styles.indexingOverlay} style={{ top: FILMSTRIP_TOP_PX }} />}
-      <div ref={chipInRef?.wrapper} className={styles.chipWrapper} style={{ bottom: `calc(100% - ${CHIP_ATTACH_BOTTOM_PX.toString()}px)` }}>
+      <div ref={chipStartRef?.wrapper} className={styles.chipWrapper} style={{ bottom: `calc(100% - ${CHIP_ATTACH_BOTTOM_PX.toString()}px)` }}>
         <div className={styles.chip}>
-          <span className={styles.chipTag}>IN</span>
-          <span ref={chipInRef?.time} className={styles.chipTime} />
+          <span className={styles.chipTag}>START</span>
+          <span ref={chipStartRef?.time} className={styles.chipTime} />
         </div>
         <div className={styles.hairline} />
       </div>
-      <div ref={chipOutRef?.wrapper} className={styles.chipWrapper} style={{ bottom: `calc(100% - ${CHIP_ATTACH_BOTTOM_PX.toString()}px)` }}>
+      <div ref={chipEndRef?.wrapper} className={styles.chipWrapper} style={{ bottom: `calc(100% - ${CHIP_ATTACH_BOTTOM_PX.toString()}px)` }}>
         <div className={styles.chip}>
-          <span className={styles.chipTag}>OUT</span>
-          <span ref={chipOutRef?.time} className={styles.chipTime} />
+          <span className={styles.chipTag}>END</span>
+          <span ref={chipEndRef?.time} className={styles.chipTime} />
         </div>
         <div className={styles.hairline} />
       </div>

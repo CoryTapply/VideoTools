@@ -19,8 +19,8 @@ export interface TransportBarProps {
   onStepForward: () => void;
   onPrevKeyframe: () => void;
   onNextKeyframe: () => void;
-  inTc: string;
-  outTc: string;
+  startTc: string;
+  endTc: string;
   durTc: string;
   trimMode: TrimMode;
   exactAvailable: boolean;
@@ -49,8 +49,8 @@ export function TransportBar({
   onStepForward,
   onPrevKeyframe,
   onNextKeyframe,
-  inTc,
-  outTc,
+  startTc,
+  endTc,
   durTc,
   trimMode,
   exactAvailable,
@@ -100,12 +100,12 @@ export function TransportBar({
       <VolumeControl vol={vol} muted={muted} onToggleMute={onToggleMute} onUnmute={onUnmute} onSetVolume={onSetVolume} />
       <div className={styles.readouts}>
         <div className={styles.readout}>
-          <span className={styles.readoutLabel}>in</span>
-          <span className={styles.readoutValueAccent}>{inTc}</span>
+          <span className={styles.readoutLabel}>start</span>
+          <span className={styles.readoutValueAccent}>{startTc}</span>
         </div>
         <div className={styles.readout}>
-          <span className={styles.readoutLabel}>out</span>
-          <span className={styles.readoutValueAccent}>{outTc}</span>
+          <span className={styles.readoutLabel}>end</span>
+          <span className={styles.readoutValueAccent}>{endTc}</span>
         </div>
         <div className={styles.readout}>
           <span className={styles.readoutLabel}>dur</span>

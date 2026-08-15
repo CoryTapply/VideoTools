@@ -53,17 +53,17 @@ export function formatNoticeDelta(deltaSeconds: number): string {
   return `${sign}${Math.abs(deltaSeconds).toFixed(2)} s`;
 }
 
-/** e.g. "in moved" / "out moved" -- the status-bar pill's label. */
-export function formatNoticeLabel(which: 'in' | 'out'): string {
+/** e.g. "start moved" / "end moved" -- the status-bar pill's label. */
+export function formatNoticeLabel(which: 'start' | 'end'): string {
   return `${which} moved`;
 }
 
 /**
- * The popover body text: "Stream copy can only cut on a keyframe, so the in point moved back to
- * HH:MM:SS:FF." Direction is derived from the delta's sign -- negative (earlier) reads "back",
+ * The popover body text: "Stream copy can only cut on a keyframe, so the start point moved back
+ * to HH:MM:SS:FF." Direction is derived from the delta's sign -- negative (earlier) reads "back",
  * positive (later) reads "forward".
  */
-export function formatKeyframeShiftMessage(which: 'in' | 'out', deltaSeconds: number, timecode: string): string {
+export function formatKeyframeShiftMessage(which: 'start' | 'end', deltaSeconds: number, timecode: string): string {
   const direction = deltaSeconds < 0 ? 'back' : 'forward';
   return `Stream copy can only cut on a keyframe, so the ${which} point moved ${direction} to ${timecode}.`;
 }

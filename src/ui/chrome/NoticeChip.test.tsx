@@ -6,7 +6,7 @@ import type { KeyframeShiftNotice } from '../state/app-state.ts';
 
 afterEach(cleanup);
 
-const notice: KeyframeShiftNotice = { delta: -4.17, at: 6690, which: 'in' };
+const notice: KeyframeShiftNotice = { delta: -4.17, at: 6690, which: 'start' };
 
 const baseProps = {
   notice,

@@ -1,4 +1,4 @@
-// Pointer-drag geometry -- general playhead scrub and in/out handle drag. Pure: no DOM, no
+// Pointer-drag geometry -- general playhead scrub and start/end handle drag. Pure: no DOM, no
 // pointer-capture wiring (that's TimelineController's job).
 
 import { timeToX, xToTime } from './viewport.ts';
@@ -19,22 +19,22 @@ export const HANDLE_HIT_ZONE_PX = 32;
  * clamped >= 0.2s from the other edge." */
 export const HANDLE_MIN_GAP_SECONDS = 0.2;
 
-/** Which handle (if any) a pointerdown at screen x hits, given the in/out edges' current screen
- * x positions. Ties (equally close, both within the zone) resolve to 'in'. */
-export function hitTestHandle(x: number, inX: number, outX: number): DragTarget {
+/** Which handle (if any) a pointerdown at screen x hits, given the start/end edges' current screen
+ * x positions. Ties (equally close, both within the zone) resolve to 'start'. */
+export function hitTestHandle(x: number, startX: number, endX: number): DragTarget {
   const half = HANDLE_HIT_ZONE_PX / 2;
-  const distIn = Math.abs(x - inX);
-  const distOut = Math.abs(x - outX);
-  if (distIn > half && distOut > half) return null;
-  return distIn <= distOut ? 'in' : 'out';
+  const distStart = Math.abs(x - startX);
+  const distEnd = Math.abs(x - endX);
+  if (distStart > half && distEnd > half) return null;
+  return distStart <= distEnd ? 'start' : 'end';
 }
 
 /** Clamps a handle drag so it can't cross the other edge within HANDLE_MIN_GAP_SECONDS, and
  * can't leave [0, durationTicks]. */
-export function clampHandleDrag(which: 'in' | 'out', t: Time, oppositeTicks: Time, durationTicks: Time, ticksPerSecond: Time): Time {
+export function clampHandleDrag(which: 'start' | 'end', t: Time, oppositeTicks: Time, durationTicks: Time, ticksPerSecond: Time): Time {
   const minGapTicks = HANDLE_MIN_GAP_SECONDS * ticksPerSecond;
   const clamped = Math.min(Math.max(0, t), Math.max(0, durationTicks));
-  if (which === 'in') return Math.max(0, Math.min(clamped, oppositeTicks - minGapTicks));
+  if (which === 'start') return Math.max(0, Math.min(clamped, oppositeTicks - minGapTicks));
   return Math.min(Math.max(0, durationTicks), Math.max(clamped, oppositeTicks + minGapTicks));
 }
 

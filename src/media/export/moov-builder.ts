@@ -209,16 +209,16 @@ function buildMoovFromSchedule(input: {
   tracksById: ReadonlyMap<number, TrackIndex>;
   selection: ExportSelection;
   schedule: WriteChunk[];
-  /** Primary video track's own timescale -- selection.actualIn/OutTicks are presentation ticks in
-   * this timescale (see architecture-v3.md §2). Needed to convert to seconds, then to
+  /** Primary video track's own timescale -- selection.actualStart/EndTicks are presentation ticks
+   * in this timescale (see architecture-v3.md §2). Needed to convert to seconds, then to
    * mvhd's (movie) timescale for the patched duration fields. */
   videoTimescale: number;
 }): BuiltMoov {
   const { raw, tracksById, selection, schedule, videoTimescale } = input;
   const mvhdTimescale = readMvhdTimescale(raw.mvhd);
-  const actualInSec = selection.actualInTicks / videoTimescale;
-  const actualOutSec = selection.actualOutTicks / videoTimescale;
-  const newDurationMovieUnits = Math.round((actualOutSec - actualInSec) * mvhdTimescale);
+  const actualStartSec = selection.actualStartTicks / videoTimescale;
+  const actualEndSec = selection.actualEndTicks / videoTimescale;
+  const newDurationMovieUnits = Math.round((actualEndSec - actualStartSec) * mvhdTimescale);
   const ftyp = buildFtyp();
 
   const build = assembleMoov({ raw, tracksById, selection, schedule, newDurationMovieUnits, ftyp });

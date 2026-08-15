@@ -38,8 +38,8 @@ export interface RunRemuxExportInput {
   tracks: readonly TrackIndex[];
   sampleIndex: SampleIndex;
   selectedTrackIds: ReadonlySet<number>;
-  requestedInSec: number;
-  requestedOutSec: number;
+  requestedStartSec: number;
+  requestedEndSec: number;
   signal: CancelSignal;
   onProgress?: (progress: ExportProgress) => void;
 }
@@ -50,12 +50,12 @@ function errorMessage(err: unknown): string {
 
 export async function runRemuxExport(input: RunRemuxExportInput): Promise<ExportResult> {
   const t0 = Date.now();
-  const { source, sink, tracks, sampleIndex, selectedTrackIds, requestedInSec, requestedOutSec, signal, onProgress } = input;
+  const { source, sink, tracks, sampleIndex, selectedTrackIds, requestedStartSec, requestedEndSec, signal, onProgress } = input;
 
   const videoTrack = tracks.find((t) => t.kind === 'video');
   if (!videoTrack) return { ok: false, error: { kind: 'no-video-track' } };
 
-  const selectionResult = resolveExportSelection(sampleIndex, tracks, selectedTrackIds, requestedInSec, requestedOutSec);
+  const selectionResult = resolveExportSelection(sampleIndex, tracks, selectedTrackIds, requestedStartSec, requestedEndSec);
   if ('error' in selectionResult) return { ok: false, error: selectionResult.error };
   const selection = selectionResult;
 

@@ -1,7 +1,7 @@
 // Owns the parts of "open a real file" that are resource-shaped, not reducer-shaped: the File
 // itself, the built SampleIndex, the NativeVideoEngine instance, and the <video> ref -- mirroring
 // the precedent timeline-controller-state.ts already set for "not everything lives in the big
-// reducer." app-state.ts still owns screen/sel/tin/tout/openError; this hook dispatches into it
+// reducer." app-state.ts still owns screen/sel/tstart/tend/openError; this hook dispatches into it
 // at the right points rather than duplicating that state.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -175,7 +175,7 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
       lastCurrentSecondsUpdateMsRef.current = 0;
 
       dispatch({ type: 'sel/set', sel });
-      dispatch({ type: 'in-out/set', tin: 0, tout: durationSecondsValue });
+      dispatch({ type: 'start-end/set', tstart: 0, tend: durationSecondsValue });
 
       frameCacheRef.current?.dispose();
       frameCacheRef.current = null;

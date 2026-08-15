@@ -57,9 +57,9 @@ export const KEY_ROWS: readonly KeyRowFixture[] = [
   { chord: 'J / L', description: 'shuttle (accelerates)' },
   { chord: '← / →', description: 'step frame' },
   { chord: 'Shift + ← / →', description: 'step second' },
-  { chord: 'I / O', description: 'set in · out' },
-  { chord: 'Shift + I / O', description: 'jump to in · out' },
-  { chord: 'Alt + I / O', description: 'clear in · out' },
+  { chord: 'I / O', description: 'set start · end' },
+  { chord: 'Shift + I / O', description: 'jump to start · end' },
+  { chord: 'Alt + I / O', description: 'clear start · end' },
   { chord: '↑ / ↓', description: 'previous · next keyframe' },
   { chord: '+ / −', description: 'zoom' },
   { chord: 'Shift + Z', description: 'zoom to fit' },
@@ -87,5 +87,5 @@ export const EXPORT_OUT_PATH = '~/Recordings/session-4_clip.mp4';
 export const EXPORT_DURATION_LABEL = '2m 02s';
 
 export const PLAYHEAD_SECONDS = 6724.517;
-export const DEFAULT_IN_SECONDS = 6690;
-export const DEFAULT_OUT_SECONDS = 6812;
+export const DEFAULT_START_SECONDS = 6690;
+export const DEFAULT_END_SECONDS = 6812;

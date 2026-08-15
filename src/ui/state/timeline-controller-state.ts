@@ -6,7 +6,7 @@
 // `t`/`viewStart`/`viewSpan` are presentation ticks, not seconds -- every real API this state feeds
 // (FrameCache.setViewport/getNearest/getRange, SampleIndex's presentation-native queries,
 // PlaybackEngine.seek/currentTime/onFrame) is tick-native, so converting once at the React
-// boundary (app-state.ts's tin/tout, which stay seconds) is cheaper and safer than float-converting
+// boundary (app-state.ts's tstart/tend, which stay seconds) is cheaper and safer than float-converting
 // on every 60Hz cache lookup. See src/media/index/README.md's "never float seconds outside the
 // index module" rule and time.ts's ticksToSeconds/secondsToTicks for the two conversion points.
 
@@ -23,7 +23,7 @@ import type { BarColorTransition } from '../timeline/draw/handle-color.ts';
  * factory only" scope. */
 export type Time = number;
 
-export type DragTarget = 'in' | 'out' | null;
+export type DragTarget = 'start' | 'end' | null;
 
 export interface TimelineControllerState {
   /** Playhead, presentation ticks. */
@@ -35,15 +35,15 @@ export interface TimelineControllerState {
   playing: boolean;
   drag: DragTarget;
   /** Which handle (if any) the pointer is hovering, while not dragging -- gates the hover bar fill
-   * and the IN/OUT chip's visibility. Always null while `drag !== null`: hover is suppressed for
+   * and the START/END chip's visibility. Always null while `drag !== null`: hover is suppressed for
    * the whole duration of a drag, per design/scrub-chip-prompt.md's visibility rules. */
   hover: DragTarget;
-  /** Ghost in/out value while `drag !== null`, presentation ticks; null when not dragging a handle. */
+  /** Ghost start/end value while `drag !== null`, presentation ticks; null when not dragging a handle. */
   dragValueTicks: Time | null;
   /** Each handle bar's current rest/hover/active color transition -- draw/handle-color.ts resolves
    * these to an animated fill color every frame; TimelineController.draw() advances them whenever
    * the target state (derived from `drag`/`hover`) changes. */
-  barTransition: { in: BarColorTransition; out: BarColorTransition };
+  barTransition: { start: BarColorTransition; end: BarColorTransition };
   /** True during a handle drag OR a general playhead drag-scrub -- gates the cache-frame preview
    * overlay in PreviewSurface and suppresses PlaybackEngine.seek() until pointer-up's settle seek. */
   scrubActive: boolean;
@@ -67,8 +67,8 @@ export function createTimelineControllerState(
     hover: null,
     dragValueTicks: null,
     barTransition: {
-      in: { from: 'rest', to: 'rest', startedAt: -Infinity },
-      out: { from: 'rest', to: 'rest', startedAt: -Infinity },
+      start: { from: 'rest', to: 'rest', startedAt: -Infinity },
+      end: { from: 'rest', to: 'rest', startedAt: -Infinity },
     },
     scrubActive: false,
     panVelocityTicksPerMs: 0,

@@ -1,4 +1,4 @@
-// The in/out handle bar's rest/hover/active fill, animated over motion.handleBarTransitionMs --
+// The start/end handle bar's rest/hover/active fill, animated over motion.handleBarTransitionMs --
 // design/scrub-chip-prompt.md's "Transition background .12s ease-out". The bars are canvas-drawn
 // (draw/handles.ts), so a CSS transition isn't available; this computes the same eased color lerp
 // by hand, driven by TimelineControllerState's per-handle BarColorTransition (a timestamp + a pair

@@ -233,8 +233,8 @@ export function deriveJobsRows(
 export function deriveExportRows(
   tracks: readonly TrackSummary[],
   sel: TrackSelection,
-  tin: number,
-  tout: number,
+  tstart: number,
+  tend: number,
   sourceFileName: string,
   estimatedBytes: number | null,
 ): PanelRowFixture[] {
@@ -249,7 +249,7 @@ export function deriveExportRows(
       value: audioSelected === 0 ? 'none selected' : `stream copy × ${audioSelected.toString()}`,
       tone: audioSelected === 0 ? 'warning' : 'informational',
     },
-    { label: 'range', value: formatDurationHMS(tout - tin), tone: 'neutral' },
+    { label: 'range', value: formatDurationHMS(tend - tstart), tone: 'neutral' },
     { label: 'est. size', value: estSize, tone: 'muted' },
     { label: 'writer', value: 'file system access', tone: 'good' },
     { label: 'name', value: defaultExportFileName(sourceFileName), tone: 'muted' },

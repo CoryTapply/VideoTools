@@ -24,8 +24,8 @@ export interface StageProps {
   jobsRows: readonly PanelRowFixture[];
   sourceFileName: string;
   sel: TrackSelection;
-  tin: number;
-  tout: number;
+  tstart: number;
+  tend: number;
   estimatedExportBytes: number | null;
   frameLabel: string;
   timecode: string;
@@ -58,8 +58,8 @@ export function Stage({
   jobsRows,
   sourceFileName,
   sel,
-  tin,
-  tout,
+  tstart,
+  tend,
   estimatedExportBytes,
   frameLabel,
   timecode,
@@ -101,8 +101,8 @@ export function Stage({
           <ExportPanel
             tracks={tracks}
             sel={sel}
-            tin={tin}
-            tout={tout}
+            tstart={tstart}
+            tend={tend}
             sourceFileName={sourceFileName}
             estimatedBytes={estimatedExportBytes}
             onToggleTrack={onToggleTrack}

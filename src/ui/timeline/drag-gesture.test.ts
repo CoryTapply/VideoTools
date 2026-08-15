@@ -20,26 +20,26 @@ describe('scrubTimeFromPointer', () => {
 });
 
 describe('hitTestHandle', () => {
-  const inX = 100;
-  const outX = 400;
+  const startX = 100;
+  const endX = 400;
 
-  it('hits "in" inside its 32px zone', () => {
-    expect(hitTestHandle(inX, inX, outX)).toBe('in');
-    expect(hitTestHandle(inX + HANDLE_HIT_ZONE_PX / 2, inX, outX)).toBe('in');
+  it('hits "start" inside its 32px zone', () => {
+    expect(hitTestHandle(startX, startX, endX)).toBe('start');
+    expect(hitTestHandle(startX + HANDLE_HIT_ZONE_PX / 2, startX, endX)).toBe('start');
   });
 
-  it('hits "out" inside its 32px zone', () => {
-    expect(hitTestHandle(outX, inX, outX)).toBe('out');
-    expect(hitTestHandle(outX - HANDLE_HIT_ZONE_PX / 2, inX, outX)).toBe('out');
+  it('hits "end" inside its 32px zone', () => {
+    expect(hitTestHandle(endX, startX, endX)).toBe('end');
+    expect(hitTestHandle(endX - HANDLE_HIT_ZONE_PX / 2, startX, endX)).toBe('end');
   });
 
   it('misses when outside both zones', () => {
-    expect(hitTestHandle(250, inX, outX)).toBeNull();
-    expect(hitTestHandle(inX + HANDLE_HIT_ZONE_PX / 2 + 1, inX, outX)).toBeNull();
+    expect(hitTestHandle(250, startX, endX)).toBeNull();
+    expect(hitTestHandle(startX + HANDLE_HIT_ZONE_PX / 2 + 1, startX, endX)).toBeNull();
   });
 
-  it('prefers "in" on an exact tie', () => {
-    expect(hitTestHandle(250, 240, 260)).toBe('in');
+  it('prefers "start" on an exact tie', () => {
+    expect(hitTestHandle(250, 240, 260)).toBe('start');
   });
 });
 
@@ -47,23 +47,23 @@ describe('clampHandleDrag', () => {
   const ticksPerSecond = 1000; // 1000 ticks/sec for round numbers
   const durationTicks = 10_000; // 10s
 
-  it('keeps the in handle at least HANDLE_MIN_GAP_SECONDS before the out handle', () => {
-    expect(clampHandleDrag('in', 5900, 6000, durationTicks, ticksPerSecond)).toBe(5800); // 6000 - 200
-    expect(clampHandleDrag('in', 3000, 6000, durationTicks, ticksPerSecond)).toBe(3000); // unaffected
+  it('keeps the start handle at least HANDLE_MIN_GAP_SECONDS before the end handle', () => {
+    expect(clampHandleDrag('start', 5900, 6000, durationTicks, ticksPerSecond)).toBe(5800); // 6000 - 200
+    expect(clampHandleDrag('start', 3000, 6000, durationTicks, ticksPerSecond)).toBe(3000); // unaffected
   });
 
-  it('keeps the out handle at least HANDLE_MIN_GAP_SECONDS after the in handle', () => {
-    expect(clampHandleDrag('out', 2100, 2000, durationTicks, ticksPerSecond)).toBe(2200); // 2000 + 200
-    expect(clampHandleDrag('out', 8000, 2000, durationTicks, ticksPerSecond)).toBe(8000); // unaffected
+  it('keeps the end handle at least HANDLE_MIN_GAP_SECONDS after the start handle', () => {
+    expect(clampHandleDrag('end', 2100, 2000, durationTicks, ticksPerSecond)).toBe(2200); // 2000 + 200
+    expect(clampHandleDrag('end', 8000, 2000, durationTicks, ticksPerSecond)).toBe(8000); // unaffected
   });
 
   it('never leaves [0, durationTicks]', () => {
-    expect(clampHandleDrag('in', -500, 6000, durationTicks, ticksPerSecond)).toBe(0);
-    expect(clampHandleDrag('out', 50_000, 2000, durationTicks, ticksPerSecond)).toBe(durationTicks);
+    expect(clampHandleDrag('start', -500, 6000, durationTicks, ticksPerSecond)).toBe(0);
+    expect(clampHandleDrag('end', 50_000, 2000, durationTicks, ticksPerSecond)).toBe(durationTicks);
   });
 
-  it('never pushes the in handle negative even when the out handle is near 0', () => {
-    expect(clampHandleDrag('in', 50, 100, durationTicks, ticksPerSecond)).toBe(0);
+  it('never pushes the start handle negative even when the end handle is near 0', () => {
+    expect(clampHandleDrag('start', 50, 100, durationTicks, ticksPerSecond)).toBe(0);
   });
 });
 

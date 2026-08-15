@@ -40,14 +40,14 @@ describe('App', () => {
     expect(getByTitle('Play · pause (Space)')).toBeTruthy();
   });
 
-  it('Alt+I (clear-in) resets the in point to 0m 00s', () => {
+  it('Alt+I (clear-start) resets the start point to 0m 00s', () => {
     const { getByText } = render(<App initialState={{ screen: 'ready' }} />);
     fireEvent.keyDown(window, { key: 'i', altKey: true });
     expect(getByText('0m 00s')).toBeTruthy();
   });
 
-  it('Alt+O (clear-out) is a no-op without a real file open (no known duration)', () => {
-    const { queryByText } = render(<App initialState={{ screen: 'ready', tout: 6812 }} />);
+  it('Alt+O (clear-end) is a no-op without a real file open (no known duration)', () => {
+    const { queryByText } = render(<App initialState={{ screen: 'ready', tend: 6812 }} />);
     fireEvent.keyDown(window, { key: 'o', altKey: true });
     // 6812s -- unchanged, since media.durationSeconds is null pre-file-open.
     expect(queryByText('1h 53m 32s')).toBeTruthy();
@@ -68,11 +68,11 @@ describe('App', () => {
     expect(getByText('75%')).toBeTruthy();
   });
 
-  it('"Keep exact frame" restores the pre-enforcement in point and switches to exact mode', () => {
+  it('"Keep exact frame" restores the pre-enforcement start point and switches to exact mode', () => {
     // notice.at (6690.5s) is the keyframe-enforced value; notice.delta (0.5s) is enforced-minus-
     // original, so the restored value should be 6690.5 - 0.5 = 6690s.
     const { getByText } = render(
-      <App initialState={{ screen: 'ready', tin: 6690.5, tout: 6812, notice: { delta: 0.5, at: 6690.5, which: 'in' }, noticeOpen: true }} />,
+      <App initialState={{ screen: 'ready', tstart: 6690.5, tend: 6812, notice: { delta: 0.5, at: 6690.5, which: 'start' }, noticeOpen: true }} />,
     );
     fireEvent.click(getByText('Keep exact frame'));
     // 6690s.

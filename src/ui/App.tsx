@@ -19,8 +19,8 @@ import { TimelineRegion } from './chrome/TimelineRegion.tsx';
 import { TitleBar } from './chrome/TitleBar.tsx';
 import { TransportBar } from './chrome/TransportBar.tsx';
 import {
-  DEFAULT_IN_SECONDS,
-  DEFAULT_OUT_SECONDS,
+  DEFAULT_START_SECONDS,
+  DEFAULT_END_SECONDS,
   EXPORT_DURATION_LABEL,
   EXPORT_OUT_PATH,
   FILE_NAME,
@@ -71,7 +71,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   const [state, dispatch] = useReducer(
     appReducer,
     initialState,
-    (overrides) => createInitialAppState({ tin: DEFAULT_IN_SECONDS, tout: DEFAULT_OUT_SECONDS, ...overrides }),
+    (overrides) => createInitialAppState({ tstart: DEFAULT_START_SECONDS, tend: DEFAULT_END_SECONDS, ...overrides }),
   );
   const media = useMediaSession(dispatch);
   const exportSession = useExportSession(dispatch, media);
@@ -82,13 +82,13 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   const tracks = media.tracks ?? TRACKS;
   const sourceFileName = media.file?.name ?? FILE_NAME;
   const timelineControllerRef = useTimelineControllerRef();
-  const { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef, chipInRef, chipOutRef } = useTimelineController(
+  const { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef, chipStartRef, chipEndRef } = useTimelineController(
     media,
     timelineControllerRef,
     dispatch,
     state.trimMode,
-    state.tin,
-    state.tout,
+    state.tstart,
+    state.tend,
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
   // J/L shuttle rate, ticks/sec-multiplier-style (see state/shuttle.ts) -- a plain ref, not React
@@ -120,13 +120,13 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   const hasFile = state.screen !== 'empty' && state.screen !== 'degraded';
   const canExport = hasFile && state.screen !== 'exporting' && state.screen !== 'finalising';
 
-  // Kept fresh every render so the keydown handler below never closes over a stale tin/tout/
+  // Kept fresh every render so the keydown handler below never closes over a stale tstart/tend/
   // currentSeconds -- without this, either the effect would need those in its deps (re-subscribing
-  // on every playhead tick) or set-in/set-out would silently use whatever values were current when
-  // the listener was first attached.
+  // on every playhead tick) or set-start/set-end would silently use whatever values were current
+  // when the listener was first attached.
   const latestRef = useRef({
-    tin: state.tin,
-    tout: state.tout,
+    tstart: state.tstart,
+    tend: state.tend,
     currentSeconds: media.currentSeconds,
     durationSeconds: media.durationSeconds,
     sel: state.sel,
@@ -136,8 +136,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
   });
   useEffect(() => {
     latestRef.current = {
-      tin: state.tin,
-      tout: state.tout,
+      tstart: state.tstart,
+      tend: state.tend,
       currentSeconds: media.currentSeconds,
       durationSeconds: media.durationSeconds,
       sel: state.sel,
@@ -229,8 +229,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         case 'export':
           evt.preventDefault();
           if (canExport) {
-            const { tin, tout, sel, tracks: latestTracks, sourceFileName: latestSourceFileName, startExport } = latestRef.current;
-            void startExport({ tin, tout, sel, tracks: latestTracks, sourceFileName: latestSourceFileName });
+            const { tstart, tend, sel, tracks: latestTracks, sourceFileName: latestSourceFileName, startExport } = latestRef.current;
+            void startExport({ tstart, tend, sel, tracks: latestTracks, sourceFileName: latestSourceFileName });
           }
           break;
         case 'open-file':
@@ -270,49 +270,49 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           seekToSeconds(durationSeconds !== null ? Math.min(target, durationSeconds) : target);
           break;
         }
-        case 'set-in': {
+        case 'set-start': {
           evt.preventDefault();
           const videoTrack = media.videoTrackRef.current;
           if (videoTrack === null) break;
-          const { tout } = latestRef.current;
+          const { tend } = latestRef.current;
           // Reads the timeline controller's live playhead ref rather than media.currentSeconds --
           // that React state lags behind a scrub (it only updates once the async settle-seek's
           // 'seeked' event lands, see TimelineController.ts's onPointerUp), so a quick scrub-then-I
-          // would otherwise set the in point at the pre-scrub position.
+          // would otherwise set the start point at the pre-scrub position.
           const currentSeconds = ticksToSeconds(timelineControllerRef.current.t, videoTrack.timescale);
-          if (currentSeconds < tout) {
-            dispatch({ type: 'in-out/set', tin: currentSeconds, tout });
+          if (currentSeconds < tend) {
+            dispatch({ type: 'start-end/set', tstart: currentSeconds, tend });
           }
           break;
         }
-        case 'set-out': {
+        case 'set-end': {
           evt.preventDefault();
           const videoTrack = media.videoTrackRef.current;
           if (videoTrack === null) break;
-          const { tin } = latestRef.current;
+          const { tstart } = latestRef.current;
           const currentSeconds = ticksToSeconds(timelineControllerRef.current.t, videoTrack.timescale);
-          if (currentSeconds > tin) {
-            dispatch({ type: 'in-out/set', tin, tout: currentSeconds });
+          if (currentSeconds > tstart) {
+            dispatch({ type: 'start-end/set', tstart, tend: currentSeconds });
           }
           break;
         }
-        case 'jump-to-in':
+        case 'jump-to-start':
           evt.preventDefault();
-          seekToSeconds(latestRef.current.tin);
+          seekToSeconds(latestRef.current.tstart);
           break;
-        case 'jump-to-out':
+        case 'jump-to-end':
           evt.preventDefault();
-          seekToSeconds(latestRef.current.tout);
+          seekToSeconds(latestRef.current.tend);
           break;
-        case 'clear-in':
+        case 'clear-start':
           evt.preventDefault();
-          dispatch({ type: 'in-out/set', tin: 0, tout: latestRef.current.tout });
+          dispatch({ type: 'start-end/set', tstart: 0, tend: latestRef.current.tend });
           break;
-        case 'clear-out': {
+        case 'clear-end': {
           evt.preventDefault();
-          const { tin, durationSeconds } = latestRef.current;
+          const { tstart, durationSeconds } = latestRef.current;
           if (durationSeconds !== null) {
-            dispatch({ type: 'in-out/set', tin, tout: durationSeconds });
+            dispatch({ type: 'start-end/set', tstart, tend: durationSeconds });
           }
           break;
         }
@@ -438,21 +438,21 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     const sampleIndex = media.sampleIndexRef.current;
     if (sampleIndex === null) return null;
     const tracksRaw = sampleIndex.tracks();
-    const selection = resolveExportSelection(sampleIndex, tracksRaw, selectedRealTrackIds(tracks, state.sel), state.tin, state.tout);
+    const selection = resolveExportSelection(sampleIndex, tracksRaw, selectedRealTrackIds(tracks, state.sel), state.tstart, state.tend);
     if ('error' in selection) return null;
     const tracksById = new Map(tracksRaw.map((t) => [t.trackId, t]));
     return estimateExportBytes(selection, tracksById);
     // media.sampleIndexRef is a stable ref object; its `.current` mutation always coincides with
-    // one of these other deps changing (openFile dispatches sel/in-out right after setting it), so
-    // it doesn't need to be listed itself.
+    // one of these other deps changing (openFile dispatches sel/start-end right after setting it),
+    // so it doesn't need to be listed itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [media.file, tracks, state.sel, state.tin, state.tout]);
+  }, [media.file, tracks, state.sel, state.tstart, state.tend]);
 
   const timecode = media.file !== null ? media.timecode : formatDurationCompact(PLAYHEAD_SECONDS);
   const frameLabel = media.file !== null ? media.frameLabel : formatFrameNumber(PLAYHEAD_SECONDS * FPS);
-  const inTc = formatDurationCompact(state.tin);
-  const outTc = formatDurationCompact(state.tout);
-  const durTc = formatDurationCompact(state.tout - state.tin);
+  const startTc = formatDurationCompact(state.tstart);
+  const endTc = formatDurationCompact(state.tend);
+  const durTc = formatDurationCompact(state.tend - state.tstart);
 
   function handleFileInputChange(evt: ChangeEvent<HTMLInputElement>) {
     const file = evt.target.files?.[0];
@@ -481,7 +481,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           canExport={canExport}
           onOpen={triggerOpen}
           onExport={() => {
-            void exportSession.startExport({ tin: state.tin, tout: state.tout, sel: state.sel, tracks, sourceFileName });
+            void exportSession.startExport({ tstart: state.tstart, tend: state.tend, sel: state.sel, tracks, sourceFileName });
           }}
           onReconnect={() => {
             dispatch({ type: 'permission-lost/set', lost: false });
@@ -509,8 +509,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         jobsRows={jobsRows}
         sourceFileName={sourceFileName}
         sel={state.sel}
-        tin={state.tin}
-        tout={state.tout}
+        tstart={state.tstart}
+        tend={state.tend}
         estimatedExportBytes={estimatedExportBytes}
         frameLabel={frameLabel}
         timecode={timecode}
@@ -596,8 +596,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           onNextKeyframe={() => {
             jumpToKeyframe(1);
           }}
-          inTc={inTc}
-          outTc={outTc}
+          startTc={startTc}
+          endTc={endTc}
           durTc={durTc}
           trimMode={state.trimMode}
           exactAvailable={exactAvailable}
@@ -640,8 +640,8 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           heightPx={timelineHeight}
           indexing={state.screen === 'indexing' || state.screen === 'opening'}
           canvasRef={timelineCanvasRef}
-          chipInRef={chipInRef}
-          chipOutRef={chipOutRef}
+          chipStartRef={chipStartRef}
+          chipEndRef={chipEndRef}
         />
       )}
 
@@ -663,9 +663,9 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
             if (state.notice !== null) {
               const restoredSeconds = state.notice.at - state.notice.delta;
               dispatch({
-                type: 'in-out/set',
-                tin: state.notice.which === 'in' ? restoredSeconds : state.tin,
-                tout: state.notice.which === 'out' ? restoredSeconds : state.tout,
+                type: 'start-end/set',
+                tstart: state.notice.which === 'start' ? restoredSeconds : state.tstart,
+                tend: state.notice.which === 'end' ? restoredSeconds : state.tend,
               });
             }
             dispatch({ type: 'notice/keep-exact' });

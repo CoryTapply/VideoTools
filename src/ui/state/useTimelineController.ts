@@ -22,10 +22,11 @@ export interface TimelineControllerHandle {
   /** TransportBar's timecode node -- TimelineController writes textContent into it directly from
    * its rAF loop once constructed; see TransportBar.tsx's own doc comment. */
   transportTimecodeRef: RefObject<HTMLDivElement | null>;
-  /** IN/OUT chip DOM refs -- passed straight through to TimelineRegion.tsx's chipInRef/chipOutRef
-   * props; TimelineController writes their position/visibility/text directly. */
-  chipInRef: ChipRefs;
-  chipOutRef: ChipRefs;
+  /** START/END chip DOM refs -- passed straight through to TimelineRegion.tsx's
+   * chipStartRef/chipEndRef props; TimelineController writes their position/visibility/text
+   * directly. */
+  chipStartRef: ChipRefs;
+  chipEndRef: ChipRefs;
 }
 
 export function useTimelineController(
@@ -33,8 +34,8 @@ export function useTimelineController(
   controllerStateRef: RefObject<TimelineControllerState>,
   dispatch: Dispatch<AppAction>,
   trimMode: TrimMode,
-  tin: number,
-  tout: number,
+  tstart: number,
+  tend: number,
 ): TimelineControllerHandle {
   const [timelineCanvas, setTimelineCanvas] = useState<HTMLCanvasElement | null>(null);
   const timelineCanvasRef = useCallback<RefCallback<HTMLCanvasElement>>((node) => {
@@ -42,21 +43,21 @@ export function useTimelineController(
   }, []);
   const scrubOverlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const transportTimecodeRef = useRef<HTMLDivElement>(null);
-  const chipInWrapperRef = useRef<HTMLDivElement>(null);
-  const chipInTimeRef = useRef<HTMLSpanElement>(null);
-  const chipOutWrapperRef = useRef<HTMLDivElement>(null);
-  const chipOutTimeRef = useRef<HTMLSpanElement>(null);
-  const chipInRef: ChipRefs = { wrapper: chipInWrapperRef, time: chipInTimeRef };
-  const chipOutRef: ChipRefs = { wrapper: chipOutWrapperRef, time: chipOutTimeRef };
+  const chipStartWrapperRef = useRef<HTMLDivElement>(null);
+  const chipStartTimeRef = useRef<HTMLSpanElement>(null);
+  const chipEndWrapperRef = useRef<HTMLDivElement>(null);
+  const chipEndTimeRef = useRef<HTMLSpanElement>(null);
+  const chipStartRef: ChipRefs = { wrapper: chipStartWrapperRef, time: chipStartTimeRef };
+  const chipEndRef: ChipRefs = { wrapper: chipEndWrapperRef, time: chipEndTimeRef };
   const controllerRef = useRef<TimelineController | null>(null);
-  const tinToutRef = useRef({ tin, tout });
+  const startEndRef = useRef({ tstart, tend });
   const trimModeRef = useRef(trimMode);
 
   // Kept fresh every render so pointer handlers deep inside TimelineController -- attached once,
-  // at construction, long-lived -- never close over a stale trim mode or in/out pair. Same
+  // at construction, long-lived -- never close over a stale trim mode or start/end pair. Same
   // "latestRef" pattern App.tsx's keydown effect already uses for the same reason.
   useEffect(() => {
-    tinToutRef.current = { tin, tout };
+    startEndRef.current = { tstart, tend };
     trimModeRef.current = trimMode;
   });
 
@@ -88,23 +89,23 @@ export function useTimelineController(
         canvas,
         previewCanvas,
         transportTimecodeRef,
-        chipInWrapperRef,
-        chipInTimeRef,
-        chipOutWrapperRef,
-        chipOutTimeRef,
+        chipStartWrapperRef,
+        chipStartTimeRef,
+        chipEndWrapperRef,
+        chipEndTimeRef,
         stateRef: controllerStateRef,
         frameCacheRef: media.frameCacheRef,
         sampleIndexRef: media.sampleIndexRef,
         videoTrackRef: media.videoTrackRef,
         engineRef: media.engineRef,
-        tinToutRef,
+        startEndRef,
         trimModeRef,
         onHandleCommitted: (which, committedSeconds, shift) => {
-          const current = tinToutRef.current;
+          const current = startEndRef.current;
           dispatch({
-            type: 'in-out/set',
-            tin: which === 'in' ? committedSeconds : current.tin,
-            tout: which === 'out' ? committedSeconds : current.tout,
+            type: 'start-end/set',
+            tstart: which === 'start' ? committedSeconds : current.tstart,
+            tend: which === 'end' ? committedSeconds : current.tend,
           });
           if (shift !== null) {
             dispatch({ type: 'notice/set', notice: { delta: shift.deltaSeconds, at: shift.atSeconds, which } });
@@ -122,15 +123,15 @@ export function useTimelineController(
     };
     // (react-hooks/exhaustive-deps isn't enabled for plain .ts files in this project's eslint
     // config -- only .tsx -- so no disable comment is needed for the intentionally narrow deps.
-    // dispatch is useReducer's stable identity; tinToutRef/trimModeRef are refs -- neither needs
+    // dispatch is useReducer's stable identity; startEndRef/trimModeRef are refs -- neither needs
     // to be a dependency. timelineCanvas *does* need to be one: it's what makes this effect rerun
     // -- disposing the old controller and building a fresh one -- when fullscreen unmounts and
     // remounts TimelineRegion's canvas, instead of leaving a live controller bound to a detached
-    // node forever. All the state that would matter to preserve (playhead, zoom/pan, in/out drag)
+    // node forever. All the state that would matter to preserve (playhead, zoom/pan, start/end drag)
     // lives in stateRef, not on the controller instance, so rebuilding here doesn't reset any of
     // it -- see TimelineController.ts's `viewportInitialized` check, which reads state.viewSpan
     // and skips re-fitting once it's already been set.)
   }, [media.file, timelineCanvas]);
 
-  return { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef, chipInRef, chipOutRef };
+  return { timelineCanvasRef, scrubOverlayCanvasRef, transportTimecodeRef, chipStartRef, chipEndRef };
 }

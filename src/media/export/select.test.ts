@@ -32,7 +32,7 @@ function makeTrack(opts: {
 
 describe('resolveExportSelection -- inherits query.ts §7 B-frame correctness for free', () => {
   // Same decode-order pts pattern as query.test.ts's regression fixture, extended with a second
-  // sync sample at decode-index 2 (pts 2970) so the in-point snap has a real choice to make.
+  // sync sample at decode-index 2 (pts 2970) so the start-point snap has a real choice to make.
   const video = makeTrack({
     trackId: 1,
     kind: 'video',
@@ -42,13 +42,13 @@ describe('resolveExportSelection -- inherits query.ts §7 B-frame correctness fo
   });
   const index = new SampleIndex([video]);
 
-  it('snaps the in-point to the largest sync pts <= requested, matching query.ts\'s own worked example', () => {
-    // Requesting in at pts=3000 (0.1s @ 30000): largest sync pts <= 3000 is 2970 (decode-index 2)
+  it('snaps the start point to the largest sync pts <= requested, matching query.ts\'s own worked example', () => {
+    // Requesting start at pts=3000 (0.1s @ 30000): largest sync pts <= 3000 is 2970 (decode-index 2)
     // -- the exact counter-example from query.ts's §7 header comment. A decode-order forward scan
     // (the spike's select.ts bug) is not exercised here at all; sampleRange does the real work.
     const result = resolveExportSelection(index, [video], new Set([1]), 3000 / 30000, 5940 / 30000);
     if ('error' in result) throw new Error('expected a selection, got an error');
-    expect(result.actualInTicks).toBe(2970);
+    expect(result.actualStartTicks).toBe(2970);
     expect(result.keyframeShiftTicks).toBe(2970 - 3000);
     // sampleRange(1, 2970, 5940) -- window excludes decode-index 1 (pts 5940) by the half-open
     // upper bound despite it being decoded before index 3. Matches query.test.ts exactly.
@@ -66,8 +66,8 @@ describe('resolveExportSelection -- multi-track selection', () => {
   it('video (unsnapped, all-sync) supplies the presentation window [0.1, 0.35)', () => {
     const result = resolveExportSelection(index, tracks, new Set([1, 2, 3]), 0.1, 0.35);
     if ('error' in result) throw new Error('expected a selection, got an error');
-    expect(result.actualInTicks).toBe(100);
-    expect(result.actualOutTicks).toBe(350);
+    expect(result.actualStartTicks).toBe(100);
+    expect(result.actualEndTicks).toBe(350);
     expect(result.keyframeShiftTicks).toBe(0);
   });
 
@@ -86,7 +86,7 @@ describe('resolveExportSelection -- multi-track selection', () => {
   it('exporting only the mic track: video supplies the cut grid but is absent from ranges -- no special case', () => {
     const result = resolveExportSelection(index, tracks, new Set([2]), 0.1, 0.35);
     if ('error' in result) throw new Error('expected a selection, got an error');
-    expect(result.actualInTicks).toBe(100); // still derived from the video track
+    expect(result.actualStartTicks).toBe(100); // still derived from the video track
     expect(result.ranges).toEqual([{ trackId: 2, first: 1, last: 3 }]);
   });
 
@@ -104,7 +104,7 @@ describe('resolveExportSelection -- error cases', () => {
     expect(result).toEqual({ error: { kind: 'no-video-track' } });
   });
 
-  it('requested out-point at or before the (possibly-snapped) in-point', () => {
+  it('requested end point at or before the (possibly-snapped) start point', () => {
     const video = makeTrack({ trackId: 1, kind: 'video', timescale: 1000, pts: [0, 100, 200, 300, 400] });
     const index = new SampleIndex([video]);
     const result = resolveExportSelection(index, [video], new Set([1]), 0.2, 0.05);

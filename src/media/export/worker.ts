@@ -2,7 +2,7 @@
 // real logic (RemuxStrategy.ts through copy-loop.ts) stays pure and worker-agnostic.
 //
 // Deliberately re-derives the selection itself (resolveExportSelection, inside runRemuxExport)
-// from the raw ingredients (tracks, selectedTrackIds, requested in/out) rather than trusting a
+// from the raw ingredients (tracks, selectedTrackIds, requested start/end) rather than trusting a
 // pre-computed plan shipped over postMessage -- the same function the main thread calls for its
 // live "est. size" estimate is invoked here independently, so nothing correctness-critical crosses
 // the worker boundary as a pre-trusted value.
@@ -32,7 +32,7 @@ self.onmessage = (e: MessageEvent<ExportWorkerRequest>) => {
 };
 
 async function handleStart(req: ExportWorkerStartRequest): Promise<void> {
-  const { requestId, file, fileHandle, tracks: serializedTracks, selectedTrackIds, requestedInSec, requestedOutSec } = req;
+  const { requestId, file, fileHandle, tracks: serializedTracks, selectedTrackIds, requestedStartSec, requestedEndSec } = req;
   const signal: CancelSignal = { cancelled: false };
   signals.set(requestId, signal);
 
@@ -47,8 +47,8 @@ async function handleStart(req: ExportWorkerStartRequest): Promise<void> {
       tracks,
       sampleIndex,
       selectedTrackIds: new Set(selectedTrackIds),
-      requestedInSec,
-      requestedOutSec,
+      requestedStartSec,
+      requestedEndSec,
       signal,
       onProgress: (progress) => {
         self.postMessage({ type: 'progress', requestId, progress });
