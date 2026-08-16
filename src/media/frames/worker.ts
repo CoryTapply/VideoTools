@@ -19,6 +19,15 @@ import type { DecodeJobDescriptor } from './worker-pool';
 let file: File | undefined;
 let decoder: RealFrameDecoder | undefined;
 let configuredCodec = '';
+/**
+ * Sticky per-worker, set once a hardware decode wedges and a software retry (see the
+ * `!preferSoftware` branch in handleDecode()) recovers it. A hardware flush() hang observed on
+ * one batch is a driver-level problem, not a property of that one batch's bytes -- every later
+ * batch this worker decodes would otherwise pay the same ~16s hardware timeout again before
+ * falling back. A fresh worker (a new file, or the pool respawning one) always starts on hardware
+ * again.
+ */
+let preferSoftware = false;
 const cancelled = new Set<number>();
 
 function configKey(config: FrameDecoderConfig): string {
@@ -38,7 +47,7 @@ function closeAll(bitmaps: DecodedBitmap[]): void {
 async function handleDecode(req: Extract<FrameWorkerRequest, { type: 'decode' }>): Promise<void> {
   if (!decoder || configKey(req.config) !== configuredCodec) {
     decoder?.close();
-    const candidate = new RealFrameDecoder(createFrameLifecycleRegistry());
+    const candidate = new RealFrameDecoder(createFrameLifecycleRegistry(), preferSoftware ? 'prefer-software' : 'prefer-hardware');
     // Checked first, per the task spec -- a clean, specific "unsupported config" result beats
     // discovering the same fact indirectly via a cascade of opaque "closed codec" decode errors.
     const supported = await candidate.isConfigSupported(req.config);
@@ -71,7 +80,32 @@ async function handleDecode(req: Extract<FrameWorkerRequest, { type: 'decode' }>
     }
 
     const decodeJobs = await Promise.all(group.map(readJobBytes));
-    const result = await decoder.decodeBatch(decodeJobs, req.size, decodeJobs.length);
+    let result = await decoder.decodeBatch(decodeJobs, req.size, decodeJobs.length);
+
+    if (result.errors.length > 0 && !preferSoftware) {
+      // A hardware decode failure is very often a driver-level flush() hang (RealFrameDecoder's
+      // timeout-raced flush() exists precisely because this happens -- see that file's header
+      // comment on a real observed Windows GPU decoder wedge), not a fault in this batch's bytes.
+      // Retry the SAME batch once on a fresh software decoder before giving up on it: if software
+      // succeeds, the file itself is fine, so stick with software for the rest of this worker's
+      // life instead of re-paying a ~16s hardware timeout on every later batch too.
+      closeAll(result.thumbnails.map((t) => t.bitmap));
+      decoder.close();
+      const fallback = new RealFrameDecoder(createFrameLifecycleRegistry(), 'prefer-software');
+      if (await fallback.isConfigSupported(req.config)) {
+        fallback.configure(req.config);
+        const retryResult = await fallback.decodeBatch(decodeJobs, req.size, decodeJobs.length);
+        if (retryResult.errors.length === 0) {
+          preferSoftware = true;
+          decoder = fallback;
+          configuredCodec = configKey(req.config);
+          result = retryResult;
+        } else {
+          fallback.close();
+        }
+      }
+    }
+
     for (const t of result.thumbnails) thumbnails.push({ id: t.id, presentationTime: t.presentationTime, bitmap: t.bitmap });
     errors.push(...result.errors);
     if (result.errors.length > 0) {
