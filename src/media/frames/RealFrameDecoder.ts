@@ -24,9 +24,15 @@
 //   - VideoDecoderConfig.description must be the avcC/hvcC box's CONTENT only, not the same bytes
 //     as TrackIndex.description (which deliberately includes the box's own 8-byte header for its
 //     other consumers) -- see FrameDecoderConfig.description's doc comment and stripBoxHeader().
-// `hardwareAcceleration: 'prefer-hardware'` per the task prompt; a machine without hardware H.264
-// decode measured ~4x slower in spike C, so which path is active is worth surfacing to a caller
-// (see `hardwareAccelerationUsed` below) rather than left silent.
+// Defaults to `hardwareAcceleration: 'prefer-hardware'` per the task prompt; a machine without
+// hardware H.264 decode measured ~4x slower in spike C, so which path is active is worth
+// surfacing to a caller (see `hardwareAccelerationUsed` below) rather than left silent. The
+// constructor also accepts 'prefer-software' -- worker.ts uses it for a one-shot fallback
+// decoder when a hardware decode wedges (see that file's decodeGroup()): a driver-level hang
+// during flush() is a real, observed failure mode (some Windows GPU decoders hang rather than
+// erroring on specific bitstreams), not something a retry on the SAME hardware path can recover
+// from, so the fallback deliberately forces software.
+
 
 import { stripNonVclNals } from '../../spikes/C-decode/nal-strip';
 import { withFrameAsync, type FrameLifecycleRegistry } from './frame-lifecycle';
@@ -48,9 +54,12 @@ export class RealFrameDecoder implements FrameDecoder {
    */
   private lastDecoderError: string | undefined;
   private readonly registry: FrameLifecycleRegistry;
+  private readonly hardwareAcceleration: 'prefer-hardware' | 'prefer-software';
 
-  constructor(registry: FrameLifecycleRegistry) {
+  /** hardwareAcceleration defaults to 'prefer-hardware' -- worker.ts passes 'prefer-software' explicitly for its post-hang fallback decoder (see that file's decodeGroup()). */
+  constructor(registry: FrameLifecycleRegistry, hardwareAcceleration: 'prefer-hardware' | 'prefer-software' = 'prefer-hardware') {
     this.registry = registry;
+    this.hardwareAcceleration = hardwareAcceleration;
   }
 
   async isConfigSupported(config: FrameDecoderConfig): Promise<boolean> {
@@ -78,7 +87,7 @@ export class RealFrameDecoder implements FrameDecoder {
     });
     decoder.configure(this.toVideoDecoderConfig(config));
     this.decoder = decoder;
-    this.hardwareAccelerationUsed = 'prefer-hardware';
+    this.hardwareAccelerationUsed = this.hardwareAcceleration;
   }
 
   async decodeBatch(jobs: readonly DecodeJob[], size: ThumbnailSize, batchSize = 16): Promise<FrameDecodeBatchResult> {
@@ -169,7 +178,7 @@ export class RealFrameDecoder implements FrameDecoder {
       codedWidth: config.codedWidth,
       codedHeight: config.codedHeight,
       description: config.description,
-      hardwareAcceleration: 'prefer-hardware',
+      hardwareAcceleration: this.hardwareAcceleration,
     };
   }
 
