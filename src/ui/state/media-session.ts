@@ -11,7 +11,7 @@ import { SampleIndex } from '../../media/index/query.ts';
 import { secondsToTicks, ticksToSeconds } from '../../media/index/time.ts';
 import { FrameCache, defaultWorkerCount } from '../../media/frames/FrameCache.ts';
 import { FrameWorkerClient } from '../../media/frames/worker-client.ts';
-import { DEFAULT_INITIAL_STAGGER_MS, FrameWorkerPool } from '../../media/frames/worker-pool.ts';
+import { FrameWorkerPool } from '../../media/frames/worker-pool.ts';
 import { formatPlaybackError } from '../../media/playback/errors.ts';
 import { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.ts';
 import { RealVideoElement } from '../../media/playback/RealVideoElement.ts';
@@ -181,10 +181,7 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
       frameCacheRef.current = null;
       if (videoTrack?.video !== undefined) {
         const workerCount = defaultWorkerCount(navigator.hardwareConcurrency);
-        const pool = new FrameWorkerPool(
-          Array.from({ length: workerCount }, () => new FrameWorkerClient(selected)),
-          { initialStaggerMs: DEFAULT_INITIAL_STAGGER_MS },
-        );
+        const pool = new FrameWorkerPool(Array.from({ length: workerCount }, () => new FrameWorkerClient(selected)));
         const frameCache = new FrameCache({ sampleIndex, videoTrackId: videoTrack.trackId, pool });
         frameCacheRef.current = frameCache;
         setThumbsJob({ status: 'running', percent: 0 });
