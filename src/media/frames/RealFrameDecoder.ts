@@ -124,6 +124,13 @@ export class RealFrameDecoder implements FrameDecoder {
         // when the decoder closed between the state check above and this call) -- prefer the
         // captured async error() reason if one exists, since it's almost always the real cause.
         errors.push({ kind: 'decode-error', message: this.lastDecoderError ?? (err instanceof Error ? err.message : String(err)), jobId: batch[0]?.id ?? -1 });
+        // Nothing below this point is going to await framePromises for this batch -- clear
+        // `pending` so that if the decoder still emits output() for an already-queued decode()
+        // (queued before the throw), output()'s `this.pending.shift()` finds nothing and takes
+        // its own `else frame.close()` branch, instead of resolving into a VideoFrame no one will
+        // ever close (surfaces later as "A VideoFrame was garbage collected without being
+        // closed").
+        this.pending = [];
         break;
       }
 
@@ -147,6 +154,15 @@ export class RealFrameDecoder implements FrameDecoder {
         await Promise.race([decoder.flush(), timeout]);
       } catch (err) {
         errors.push({ kind: 'decode-error', message: err instanceof Error ? err.message : String(err), jobId: batch[0]?.id ?? -1 });
+        // A flush() timeout does NOT mean the underlying (often hardware) decoder actually
+        // stopped -- confirmed by a real observed hang where decodeQueueSize was still nonzero at
+        // timeout, i.e. genuinely in-flight work at the driver level. If that work eventually
+        // completes and calls output() after this point, `pending` must no longer hold its entry
+        // -- otherwise output()'s `this.pending.shift()` resolves an abandoned promise (nothing
+        // here still awaits framePromises for this batch) and the VideoFrame is never closed. See
+        // the matching comment above for the sync-throw case; this is the same leak, reached via
+        // the timeout path instead.
+        this.pending = [];
         break;
       } finally {
         clearTimeout(timeoutHandle);
