@@ -67,6 +67,16 @@ export function defaultWorkerCount(hardwareConcurrency: number): number {
   return Math.min(2, cap);
 }
 
+/**
+ * Default `initialStaggerMs` for real (non-test) pools -- see the constructor's doc comment for
+ * why this exists. Not a measured value (no direct signal exists for "a hardware decode session
+ * finished initializing" short of the flush() timeout itself) -- picked as a reasonable guess at
+ * clearing a D3D11 video-decode-session init handshake, deliberately generous since the cost of
+ * guessing too long is a few hundred ms of extra warm-up latency, and the cost of guessing too
+ * short is the exact hang this exists to avoid.
+ */
+export const DEFAULT_INITIAL_STAGGER_MS = 400;
+
 interface QueuedJob {
   readonly request: WorkerDecodeRequest;
   readonly resolve: (result: WorkerDecodeResult) => void;
@@ -84,10 +94,41 @@ export class FrameWorkerPool {
   private readonly inFlight = new Map<number, WorkerHandle>();
   private disposed = false;
 
-  constructor(handles: readonly WorkerHandle[]) {
+  /**
+   * `initialStaggerMs` (default 0, i.e. every handle free immediately -- what every existing test
+   * in worker-pool.test.ts assumes) delays each handle AFTER the first from joining `free` by
+   * `initialStaggerMs * itsIndex`, so only one worker's FIRST decode -- the one that triggers its
+   * RealFrameDecoder to open a brand new hardware VideoDecoder session -- ever happens at a time.
+   * Real-world motivation: a Windows machine hit a hardware flush() timeout on literally the
+   * first coarse-tier chunk of a freshly opened file (`worker-pool.ts`'s own header doc, and
+   * RealFrameDecoder.ts's flush-timeout handling, both predate this and assumed a lone hang, not
+   * a startup-specific one). `chrome://media-internals` on that same machine showed Chrome's OWN
+   * `<video>` element -- which only ever opens ONE D3D11 decode session -- play the identical file
+   * on the identical GPU/adapter LUID for hours with zero errors. The one structural difference
+   * this pool introduces that a single `<video>` element never exercises: TWO independent
+   * hardware decode sessions opening on the same GPU at the same instant, since `pump()` normally
+   * hands the first chunk to every free worker synchronously. Staggering only the FIRST dispatch
+   * per handle costs a one-time `(workerCount - 1) * initialStaggerMs` at file-open and nothing
+   * thereafter -- once a handle's session exists, every later batch on it dispatches at full
+   * speed exactly as before.
+   */
+  constructor(handles: readonly WorkerHandle[], options: { initialStaggerMs?: number } = {}) {
     if (handles.length === 0) throw new Error('FrameWorkerPool: at least one worker handle is required');
     this.handles = handles;
-    this.free = [...handles];
+    const staggerMs = options.initialStaggerMs ?? 0;
+    if (staggerMs <= 0) {
+      this.free = [...handles];
+      return;
+    }
+    this.free = [handles[0]];
+    for (let i = 1; i < handles.length; i += 1) {
+      const handle = handles[i];
+      setTimeout(() => {
+        if (this.disposed) return;
+        this.free.push(handle);
+        this.pump();
+      }, staggerMs * i);
+    }
   }
 
   get size(): number {
