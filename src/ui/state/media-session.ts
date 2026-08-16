@@ -255,6 +255,11 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
     const index = sampleIndexRef.current;
     const videoTrack = videoTrackRef.current;
     if (engine === null || index === null || videoTrack === null) return;
+    // Only the backward jump pauses first. While playing, currentTicks keeps advancing forward on
+    // its own, so nextSyncPresentation naturally lands on a later keyframe each key-repeat -- but
+    // prevSyncPresentation would keep recomputing from a playhead barely past the last target,
+    // returning that same keyframe every time, unless playback is stopped first.
+    if (dir === -1 && engine.state === 'playing') engine.pause();
     const currentTicks = engine.currentTime;
     const sampleNumber =
       dir === 1 ? index.nextSyncPresentation(videoTrack.trackId, currentTicks) : index.prevSyncPresentation(videoTrack.trackId, currentTicks);
