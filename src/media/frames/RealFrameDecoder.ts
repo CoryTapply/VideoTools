@@ -163,7 +163,18 @@ export class RealFrameDecoder implements FrameDecoder {
       // here rather than assumed safe, since dense-tier delta-frame decoding is a genuinely new
       // code path (every prior use of WebCodecs in this project, coarse tier included, only ever
       // decoded keyframes).
-      const timeoutMs = Math.max(10_000, batch.length * 1_000);
+      //
+      // 3_000 base / 200-per-job, not the original 10_000/1_000: a real Windows hang (worker.ts's
+      // hardware->software fallback) showed decodeQueueSize sitting at the SAME nonzero value for
+      // the entire original 16s wait -- zero incremental progress, not just slow -- while the
+      // software fallback that follows it, doing the identical batch, consistently finishes in
+      // 300-400ms. There's no evidence a genuine hang ever partially completes given more time, and
+      // strong evidence a healthy decode (even in software, the slower path per spike C) finishes
+      // in under half a second -- so the original floor was paying full timeout length on every
+      // wedge for no benefit. Still generous (~10-14x the observed real cost) against a slower
+      // machine or heavier batch, just no longer 16s of pure dead time on a hang that was never
+      // going to resolve.
+      const timeoutMs = Math.max(3_000, batch.length * 200);
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => {
