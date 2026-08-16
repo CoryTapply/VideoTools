@@ -11,7 +11,7 @@ declare const self: {
 };
 
 import { createFrameLifecycleRegistry } from './frame-lifecycle';
-import { DEFAULT_BATCH_SIZE, groupIntoFlushBatches, type DecodeJob, type DecodedBitmap, type FrameDecodeError, type FrameDecoderConfig } from './FrameDecoder';
+import { DEFAULT_BATCH_SIZE, formatFrameDecodeError, groupIntoFlushBatches, type DecodeJob, type DecodedBitmap, type FrameDecodeError, type FrameDecoderConfig } from './FrameDecoder';
 import { RealFrameDecoder } from './RealFrameDecoder';
 import type { FrameWorkerRequest, FrameWorkerResponse, WireThumbnail } from './worker-protocol';
 import type { DecodeJobDescriptor } from './worker-pool';
@@ -91,15 +91,23 @@ async function handleDecode(req: Extract<FrameWorkerRequest, { type: 'decode' }>
       // life instead of re-paying a ~16s hardware timeout on every later batch too.
       closeAll(result.thumbnails.map((t) => t.bitmap));
       decoder.close();
+      const failedErrors = result.errors;
       const fallback = new RealFrameDecoder(createFrameLifecycleRegistry(), 'prefer-software');
       if (await fallback.isConfigSupported(req.config)) {
         fallback.configure(req.config);
+        const retryStartMs = performance.now();
         const retryResult = await fallback.decodeBatch(decodeJobs, req.size, decodeJobs.length);
         if (retryResult.errors.length === 0) {
           preferSoftware = true;
           decoder = fallback;
           configuredCodec = configKey(req.config);
           result = retryResult;
+          // A successful fallback leaves `errors` empty below (correctly -- the batch DID
+          // eventually succeed), which would otherwise make this recovery invisible: no exception,
+          // no rejected promise, nothing in the result the main thread ever sees. Log it
+          // explicitly so "why did this batch take 16+ seconds" has an answer in DevTools instead
+          // of silently costing time on every file open with zero trace of why.
+          console.info(`frame worker: hardware decode failed (${failedErrors.map(formatFrameDecodeError).join('; ')}) -- recovered on software in ${String(Math.round(performance.now() - retryStartMs))}ms, switching this worker to software for the rest of this file`);
         } else {
           fallback.close();
         }
