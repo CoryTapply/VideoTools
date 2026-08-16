@@ -10,7 +10,7 @@ function avc1SampleEntry(width: number, height: number): Uint8Array {
 }
 
 function mp4aSampleEntry(): Uint8Array {
-  return box('mp4a', new Uint8Array(20));
+  return box('mp4a', new Uint8Array(28));
 }
 
 function encvSampleEntry(): Uint8Array {

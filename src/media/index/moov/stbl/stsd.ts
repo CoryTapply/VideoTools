@@ -126,9 +126,9 @@ export function parseStsd(view: DataView, box: BoxHeader, kind: 'video' | 'audio
   }
 
   if (kind === 'audio') {
-    const channelCount = view.getUint16(entryContentStart + 8);
-    const sampleRate = view.getUint32(entryContentStart + 16) >>> 16; // 16.16 fixed point; the fraction half is always 0 in practice
-    const childrenStart = entryContentStart + 20; // fixed AudioSampleEntry fields per ISO/IEC 14496-12
+    const channelCount = view.getUint16(entryContentStart + 16);
+    const sampleRate = view.getUint32(entryContentStart + 24) >>> 16; // 16.16 fixed point; the fraction half is always 0 in practice
+    const childrenStart = entryContentStart + 28; // fixed AudioSampleEntry fields per ISO/IEC 14496-12 (8-byte SampleEntry + 8-byte reserved + 12 bytes of audio fields)
     const esds = findChild(view, childrenStart, entryEnd, 'esds');
     if (esds) return { codec: parseEsdsCodecString(view, esds), description: rawBoxBytes(view, esds), entryCount, sampleEntryType: entry.type, channelCount, sampleRate };
     return { codec: entry.type, description: new Uint8Array(0), entryCount, sampleEntryType: entry.type, channelCount, sampleRate };
