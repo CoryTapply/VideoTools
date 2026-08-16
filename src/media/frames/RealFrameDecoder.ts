@@ -33,10 +33,28 @@
 // erroring on specific bitstreams), not something a retry on the SAME hardware path can recover
 // from, so the fallback deliberately forces software.
 
-
 import { stripNonVclNals } from '../../spikes/C-decode/nal-strip';
 import { withFrameAsync, type FrameLifecycleRegistry } from './frame-lifecycle';
 import { groupIntoFlushBatches, type DecodeJob, type DecodedThumbnail, type FrameDecodeBatchResult, type FrameDecodeError, type FrameDecoder, type FrameDecoderConfig, type ThumbnailSize } from './FrameDecoder';
+
+/**
+ * Closes every VideoFrame among `promises` that has ALREADY resolved by the time this runs.
+ * Called only when decodeBatch() is bailing out of a batch (a flush() timeout or a synchronous
+ * decode() throw) and the promises' owning `framePromises` array is about to go out of scope
+ * un-awaited. With a whole batch racing a single flush()/timeout, most jobs in it typically
+ * finish decoding well before whichever one job hangs or throws stops the batch -- their
+ * VideoFrames are sitting resolved right now, and nothing else in decodeBatch() is ever going to
+ * reach them once it breaks out. `.then()` on an already-settled promise still fires (on a fresh
+ * microtask), so this closes those; it's a harmless no-op for promises that are still pending
+ * (nothing to close yet -- decodeBatch() also clears `pending` in the same catch, which routes
+ * any later output() through its own `else frame.close()` branch) or that reject (no frame to
+ * close).
+ */
+function closeSettledFrames(promises: readonly Promise<VideoFrame>[]): void {
+  for (const p of promises) {
+    p.then((frame) => { frame.close(); }).catch(() => { /* rejection carries no frame to close */ });
+  }
+}
 
 export class RealFrameDecoder implements FrameDecoder {
   /** Set once configure() resolves; reflects which decode path Chrome actually chose, not just what was requested. */
@@ -129,8 +147,10 @@ export class RealFrameDecoder implements FrameDecoder {
         // (queued before the throw), output()'s `this.pending.shift()` finds nothing and takes
         // its own `else frame.close()` branch, instead of resolving into a VideoFrame no one will
         // ever close (surfaces later as "A VideoFrame was garbage collected without being
-        // closed").
+        // closed"). That covers jobs whose output() hasn't fired yet -- see closeSettledFrames()
+        // below for the OTHER half: jobs that already output before we got here.
         this.pending = [];
+        closeSettledFrames(framePromises);
         break;
       }
 
@@ -156,13 +176,21 @@ export class RealFrameDecoder implements FrameDecoder {
         errors.push({ kind: 'decode-error', message: err instanceof Error ? err.message : String(err), jobId: batch[0]?.id ?? -1 });
         // A flush() timeout does NOT mean the underlying (often hardware) decoder actually
         // stopped -- confirmed by a real observed hang where decodeQueueSize was still nonzero at
-        // timeout, i.e. genuinely in-flight work at the driver level. If that work eventually
-        // completes and calls output() after this point, `pending` must no longer hold its entry
-        // -- otherwise output()'s `this.pending.shift()` resolves an abandoned promise (nothing
-        // here still awaits framePromises for this batch) and the VideoFrame is never closed. See
-        // the matching comment above for the sync-throw case; this is the same leak, reached via
-        // the timeout path instead.
+        // timeout, i.e. genuinely in-flight work at the driver level. Two distinct leaks follow
+        // from that, both surfacing as "A VideoFrame was garbage collected without being closed":
+        //   1. Jobs whose output() hasn't fired yet: if the decoder's still-in-flight work
+        //      eventually completes and calls output() after this point, `pending` must no longer
+        //      hold its entry, or output()'s `this.pending.shift()` resolves an abandoned promise
+        //      that nothing here still awaits. Clearing `pending` routes it into output()'s own
+        //      `else frame.close()` branch instead.
+        //   2. Jobs whose output() ALREADY fired: with the whole batch racing a single flush()
+        //      timeout, most of a batch typically finishes decoding before the one job that hangs
+        //      -- their framePromises are already resolved to a live VideoFrame by the time this
+        //      catch runs, and `framePromises` (a local variable) is about to go out of scope
+        //      without that frame ever reaching withFrameAsync's close(). closeSettledFrames()
+        //      below closes exactly those.
         this.pending = [];
+        closeSettledFrames(framePromises);
         break;
       } finally {
         clearTimeout(timeoutHandle);
