@@ -63,7 +63,8 @@ describe('parseStsd (audio / mp4a)', () => {
     const esds = box('esds', [fullBoxHeader(0), esDescriptor]);
 
     const mp4a = box('mp4a', [
-      new Uint8Array(8), // reserved
+      new Uint8Array(8), // SampleEntry reserved[6] + data_reference_index(2)
+      new Uint8Array(8), // AudioSampleEntry reserved[2x32bit]
       u16(2), // channelcount
       u16(16), // samplesize
       u16(0), // pre_defined
