@@ -1,0 +1,87 @@
+name: Deploy Staging
+
+# Manual-only: builds `main` (production, unchanged) AND an arbitrary branch into a /staging/
+# subpath of the SAME Pages site, so a branch can be tested on a real HTTPS URL before merging.
+# Ephemeral by design: deploy.yml's normal push-to-main deploy uploads a pages-dist containing
+# ONLY the production build, so the next ordinary production deploy silently wipes /staging/ --
+# expected, not a bug. Re-run this workflow to bring it back if that happens mid-test.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to deploy under /staging/'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main (production)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-checkout
+
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          path: staging-checkout
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            main-checkout/package-lock.json
+            staging-checkout/package-lock.json
+
+      - name: Build main
+        working-directory: main-checkout
+        env:
+          GH_PAGES_BASE: /${{ github.event.repository.name }}/
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build staging branch
+        working-directory: staging-checkout
+        env:
+          GH_PAGES_BASE: /${{ github.event.repository.name }}/staging/
+        run: |
+          npm ci
+          npm run build
+
+      - name: Assemble combined Pages output
+        run: |
+          mkdir -p pages-dist/staging
+          cp main-checkout/dist/app.html pages-dist/index.html
+          cp -r main-checkout/dist/assets pages-dist/assets
+          cp -r main-checkout/dist/icons pages-dist/icons
+          cp staging-checkout/dist/app.html pages-dist/staging/index.html
+          cp -r staging-checkout/dist/assets pages-dist/staging/assets
+          cp -r staging-checkout/dist/icons pages-dist/staging/icons
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages-dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
