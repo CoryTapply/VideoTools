@@ -10,6 +10,7 @@ export default defineConfig({
       'src/media/playback/**/*.test.ts',
       'src/media/frames/**/*.test.ts',
       'src/media/export/**/*.test.ts',
+      'src/media/waveform/**/*.test.ts',
       'src/ui/**/*.test.{ts,tsx}',
     ],
     globals: false,

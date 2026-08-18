@@ -73,7 +73,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     initialState,
     (overrides) => createInitialAppState({ tstart: DEFAULT_START_SECONDS, tend: DEFAULT_END_SECONDS, ...overrides }),
   );
-  const media = useMediaSession(dispatch);
+  const media = useMediaSession(dispatch, state.sel);
   const exportSession = useExportSession(dispatch, media);
   const { togglePlay, stepFrame, jumpToKeyframe, seekToSeconds } = media;
   // Real once a file is open; otherwise the design fixture -- moved up from the other derived
@@ -427,7 +427,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       : exportSession.job.status === 'running'
         ? { status: 'running', fileName: exportSession.job.fileName, percent: state.exportPct }
         : exportSession.job;
-  const realJobsRows = deriveJobsRows(media.indexJob, media.thumbsJob, exportJobStatus);
+  const realJobsRows = deriveJobsRows(media.indexJob, media.thumbsJob, media.waveformJob, exportJobStatus);
   const jobsRows = realJobsRows.length > 0 ? realJobsRows : JOBS_PANEL_ROWS;
   const openErrorMessage = state.openError !== null ? formatIndexError(state.openError) : null;
   const exportErrorMessage = state.exportError !== null ? formatExportError(state.exportError) : null;

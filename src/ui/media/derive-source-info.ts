@@ -160,6 +160,15 @@ export function selectedRealTrackIds(tracks: readonly TrackSummary[], sel: Track
   return new Set(tracks.filter((t) => sel[t.id]).map((t) => t.trackId));
 }
 
+/** The real MP4 track id of the first selected audio track, in file order (deriveTrackSummaries's
+ * own iteration order over the source TrackIndex[] -- video first, then audio in track order).
+ * Drives which track's pyramid the single waveform lane shows -- media-session.ts's
+ * activateWaveformTrack effect re-derives this whenever `sel` changes, so the lane tracks live
+ * export-selection changes rather than staying fixed to whatever was selected at file-open. */
+export function firstSelectedAudioTrackId(tracks: readonly TrackSummary[], sel: TrackSelection): number | undefined {
+  return tracks.find((t) => t.kind === 'audio' && sel[t.id])?.trackId;
+}
+
 /**
  * The Export panel's rows. `folder` stays an illustrative approximation (unknowable before a save
  * destination is actually chosen) -- flagged, not silently presented as measured. `est. size` is a
@@ -177,13 +186,20 @@ export function defaultExportFileName(sourceFileName: string): string {
 }
 
 /** Real job/export state for the Jobs panel -- see ../panels/JobsPanel.tsx. Deliberately has no
- * "keyframe map" or "waveform" row: keyframes are a free query over the already-built SampleIndex
- * (not a separate timed job), and waveform generation doesn't exist yet (M2) -- same convention as
- * deriveSourceRows's deliberately-omitted "heap" row above: no fabricated rows for work that isn't
- * actually happening. */
+ * "keyframe map" row: keyframes are a free query over the already-built SampleIndex, never a
+ * separate timed job -- same convention as deriveSourceRows's deliberately-omitted "heap" row
+ * above: no fabricated rows for work that isn't actually happening. (Waveform generation *does*
+ * exist now, M2 -- see WaveformJobStatus below.) */
 export type IndexJobStatus = { status: 'running' } | { status: 'done'; ms: number };
 
 export type ThumbsJobStatus = { status: 'running'; percent: number } | { status: 'done'; ms: number };
+
+/** Real timing for the Jobs panel's "waveform" row. Binary, not percent-based like ThumbsJobStatus
+ * -- WaveformCache.build() has no progress callback (unlike FrameCache.warmCoarse()'s real
+ * per-frame one), so there's no percentage to show, only running/done. Driven by
+ * media-session.ts's activateWaveformTrack -- reflects whichever audio track is CURRENTLY active
+ * for the waveform lane, not every track's build status. */
+export type WaveformJobStatus = { status: 'running' } | { status: 'done'; ms: number };
 
 export type ExportJobStatus =
   | { status: 'running'; fileName: string; percent: number }
@@ -194,6 +210,7 @@ export type ExportJobStatus =
 export function deriveJobsRows(
   indexJob: IndexJobStatus | null,
   thumbsJob: ThumbsJobStatus | null,
+  waveformJob: WaveformJobStatus | null,
   exportJob: ExportJobStatus | null,
 ): PanelRowFixture[] {
   const rows: PanelRowFixture[] = [];
@@ -209,6 +226,13 @@ export function deriveJobsRows(
       thumbsJob.status === 'done'
         ? { label: 'Thumbnails', value: `done · ${thumbsJob.ms.toString()} ms`, tone: 'good' }
         : { label: 'Thumbnails', value: `${thumbsJob.percent.toString()}% · running`, tone: 'informational' },
+    );
+  }
+  if (waveformJob !== null) {
+    rows.push(
+      waveformJob.status === 'done'
+        ? { label: 'Waveform', value: `done · ${waveformJob.ms.toString()} ms`, tone: 'good' }
+        : { label: 'Waveform', value: 'running', tone: 'informational' },
     );
   }
   if (exportJob !== null) {

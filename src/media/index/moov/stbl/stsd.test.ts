@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readBoxHeaderInView } from '../../box-cursor';
 import { box, concatBytes, fullBoxHeader, u16, u32, u8 } from '../../test-helpers/build-box';
-import { parseStsd } from './stsd';
+import { extractAudioSpecificConfig, parseStsd } from './stsd';
 
 function viewOf(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -81,6 +81,47 @@ describe('parseStsd (audio / mp4a)', () => {
     expect(result.channelCount).toBe(2);
     expect(result.sampleRate).toBe(44100);
     expect(result.entryCount).toBe(1);
+  });
+});
+
+describe('extractAudioSpecificConfig', () => {
+  function buildEsds(decSpecInfoContent: Uint8Array): Uint8Array {
+    const decSpecInfo = descriptor(0x05, decSpecInfoContent);
+    const decConfigContent = concatBytes([
+      u8(0x40), // objectTypeIndication: MPEG-4 Audio
+      u8(0x15), // streamType/upstream/reserved
+      Uint8Array.of(0, 0, 0), // bufferSizeDB
+      u32(0), // maxBitrate
+      u32(0), // avgBitrate
+      decSpecInfo,
+    ]);
+    const decConfig = descriptor(0x04, decConfigContent);
+    const slConfig = descriptor(0x06, Uint8Array.of(0x02));
+    const esContent = concatBytes([u16(1), u8(0x00), decConfig, slConfig]);
+    const esDescriptor = descriptor(0x03, esContent);
+    return box('esds', [fullBoxHeader(0), esDescriptor]);
+  }
+
+  it('extracts exactly the AudioSpecificConfig payload bytes, not the surrounding esds structure', () => {
+    const audioObjectType2Config = Uint8Array.of(0x12, 0x08); // AAC-LC, 44.1kHz, stereo
+    const esds = buildEsds(audioObjectType2Config);
+    expect(Array.from(extractAudioSpecificConfig(esds))).toEqual(Array.from(audioObjectType2Config));
+  });
+
+  it('extracts a different AudioSpecificConfig unchanged', () => {
+    const config = Uint8Array.of(0x11, 0x90, 0x56, 0xe5, 0x00);
+    const esds = buildEsds(config);
+    expect(Array.from(extractAudioSpecificConfig(esds))).toEqual(Array.from(config));
+  });
+
+  it('returns an empty array for an esds too short to contain a real ES_Descriptor', () => {
+    const tooShort = box('esds', [fullBoxHeader(0)]);
+    expect(extractAudioSpecificConfig(tooShort).byteLength).toBe(0);
+  });
+
+  it('returns an empty array when the outer descriptor is not tag 0x03 (ES_Descriptor)', () => {
+    const wrongTag = box('esds', [fullBoxHeader(0), descriptor(0x99, Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8))]);
+    expect(extractAudioSpecificConfig(wrongTag).byteLength).toBe(0);
   });
 });
 

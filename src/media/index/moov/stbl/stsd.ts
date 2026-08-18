@@ -65,12 +65,25 @@ function readDescriptor(view: DataView, pos: number): { tag: number; length: num
   return { tag, length, dataStart: p, next: p + length };
 }
 
-/** Walks the MPEG-4 ES_Descriptor -> DecoderConfigDescriptor -> DecSpecificInfo chain to get the object type and (for MPEG-4 Audio) the audioObjectType, per RFC 6381's mp4a.OO[.A] convention. */
-function parseEsdsCodecString(view: DataView, esds: BoxHeader): string {
-  const contentStart = esds.offset + esds.headerSize + 4; // skip fullbox version+flags
-  const boxEnd = esds.offset + esds.boxSize;
+interface EsdsDecoderConfig {
+  readonly objectTypeIndication: number;
+  /** -1 if this esds has no DecSpecificInfo descriptor (a valid, if unusual, esds). */
+  readonly decSpecDataStart: number;
+  readonly decSpecLength: number;
+}
+
+/**
+ * Walks the MPEG-4 ES_Descriptor -> DecoderConfigDescriptor -> DecSpecificInfo chain starting at
+ * `contentStart` (already past the fullbox version+flags), ending at `boxEnd`. Shared by
+ * `parseEsdsCodecString` (below, wants just `objectTypeIndication` and the first
+ * AudioSpecificConfig byte for the RFC 6381 string) and `extractAudioSpecificConfig` (wants the
+ * DecSpecificInfo descriptor's raw byte range, which the codec-string path parses one byte of and
+ * discards the rest of) -- one walk, two consumers. Returns undefined if the ES_Descriptor or
+ * DecoderConfigDescriptor tags aren't where expected (a malformed or unusual esds).
+ */
+function walkEsdsDecoderConfig(view: DataView, contentStart: number, boxEnd: number): EsdsDecoderConfig | undefined {
   const es = readDescriptor(view, contentStart);
-  if (es.tag !== 0x03) return 'mp4a';
+  if (es.tag !== 0x03) return undefined;
 
   let p = es.dataStart + 2; // ES_ID
   const flags = view.getUint8(p);
@@ -79,18 +92,61 @@ function parseEsdsCodecString(view: DataView, esds: BoxHeader): string {
   if (flags & 0x40) p += 1 + view.getUint8(p); // URLlength + URLstring
   if (flags & 0x20) p += 2; // OCR_ES_Id
 
-  if (p >= boxEnd) return 'mp4a';
+  if (p >= boxEnd) return undefined;
   const decConfig = readDescriptor(view, p);
-  if (decConfig.tag !== 0x04) return 'mp4a';
+  if (decConfig.tag !== 0x04) return undefined;
   const objectTypeIndication = view.getUint8(decConfig.dataStart);
 
   const decSpecPos = decConfig.dataStart + 1 + 12; // streamType+upStream+reserved(1) + bufferSizeDB(3) + maxBitrate(4) + avgBitrate(4)
-  if (decSpecPos >= decConfig.next) return `mp4a.${hex2(objectTypeIndication)}`;
+  if (decSpecPos >= decConfig.next) return { objectTypeIndication, decSpecDataStart: -1, decSpecLength: 0 };
   const decSpec = readDescriptor(view, decSpecPos);
-  if (decSpec.tag !== 0x05 || decSpec.length < 1) return `mp4a.${hex2(objectTypeIndication)}`;
+  if (decSpec.tag !== 0x05 || decSpec.length < 1) return { objectTypeIndication, decSpecDataStart: -1, decSpecLength: 0 };
 
-  const audioObjectType = view.getUint8(decSpec.dataStart) >> 3; // top 5 bits of AudioSpecificConfig
-  return `mp4a.${hex2(objectTypeIndication)}.${String(audioObjectType)}`;
+  return { objectTypeIndication, decSpecDataStart: decSpec.dataStart, decSpecLength: decSpec.length };
+}
+
+/** Object type and (for MPEG-4 Audio) the audioObjectType, per RFC 6381's mp4a.OO[.A] convention. */
+function parseEsdsCodecString(view: DataView, esds: BoxHeader): string {
+  const contentStart = esds.offset + esds.headerSize + 4; // skip fullbox version+flags
+  const boxEnd = esds.offset + esds.boxSize;
+  const config = walkEsdsDecoderConfig(view, contentStart, boxEnd);
+  if (!config) return 'mp4a';
+  if (config.decSpecDataStart < 0) return `mp4a.${hex2(config.objectTypeIndication)}`;
+
+  const audioObjectType = view.getUint8(config.decSpecDataStart) >> 3; // top 5 bits of AudioSpecificConfig
+  return `mp4a.${hex2(config.objectTypeIndication)}.${String(audioObjectType)}`;
+}
+
+/**
+ * Extracts the AudioSpecificConfig payload (the DecSpecificInfo descriptor's raw bytes) from a
+ * verbatim esds box -- the same bytes stored as `TrackIndex.description` for an audio track, and
+ * exactly what `AudioDecoderConfig.description` wants (see M2's waveform module, the first real
+ * consumer). `parseEsdsCodecString` above already walks this same descriptor chain for the RFC
+ * 6381 codec string but only reads the payload's first byte and discards the rest -- this is that
+ * walk applied to a standalone extracted box (no live file view or BoxHeader available once
+ * `description` has been copied out on its own), so `esds` is assumed to start at byte 0 of
+ * `esdsBoxBytes` with a standard 8-byte box header (4-byte size + 4-byte 'esds' fourcc) -- esds is
+ * always a small box, never the 64-bit largesize form. Returns an empty array if the esds doesn't
+ * have the expected descriptor shape.
+ */
+export function extractAudioSpecificConfig(esdsBoxBytes: Uint8Array): Uint8Array {
+  const headerSize = 8;
+  const contentStart = headerSize + 4; // skip fullbox version+flags
+  if (esdsBoxBytes.byteLength <= contentStart) return new Uint8Array(0);
+  const view = new DataView(esdsBoxBytes.buffer, esdsBoxBytes.byteOffset, esdsBoxBytes.byteLength);
+  // walkEsdsDecoderConfig assumes a well-formed descriptor chain (same as parseEsdsCodecString,
+  // which runs against a live, generously-bounded file view where an odd offset just reads
+  // unrelated-but-in-bounds bytes) -- here the view is scoped exactly to this one box, so a
+  // truncated or malformed esds can walk past its end and throw a RangeError. Caught rather than
+  // guarded field-by-field: this function's contract is "best-effort, empty array for anything
+  // unusual," matching parseStsd's own style elsewhere in this file.
+  try {
+    const config = walkEsdsDecoderConfig(view, contentStart, esdsBoxBytes.byteLength);
+    if (!config || config.decSpecDataStart < 0) return new Uint8Array(0);
+    return esdsBoxBytes.slice(config.decSpecDataStart, config.decSpecDataStart + config.decSpecLength);
+  } catch {
+    return new Uint8Array(0);
+  }
 }
 
 /**

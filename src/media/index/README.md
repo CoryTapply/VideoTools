@@ -189,3 +189,40 @@ export-cost investigation) -- so the delta gets measured, not assumed.
 difference to a specific cause rather than a guess at "production has more validation/error-path
 checks." Whoever runs this: record the top few self-time frames from both profiles here, replacing
 this paragraph with the actual finding.
+
+## Metadata parsed but not yet surfaced in UI (M2 note)
+
+M2 considered a "metadata inspector" panel and decided not to build one -- `SourcePanel` already
+covers what `design/README.md` treats as the metadata-bearing panel, and adding a fourth `PanelId`
+or growing that one further wasn't scoped. Recorded here instead, so a future inspector doesn't
+have to rediscover what's already available:
+
+**Already parsed, just not rendered anywhere:**
+- Every audio track beyond the one `SourcePanel` summarizes today. `AudioTrackMeta.channelCount`/
+  `sampleRate`/`language`/`handlerName` (`track-index.ts:14-19`) exist per track, for every track
+  in `BuildIndexResult.tracks` -- not just the primary one. A file with multiple audio tracks
+  (`fixtures/27gb.mp4` has six) has this sitting unused for every track but the one shown.
+- Codec profile/level. Already encoded in `TrackIndex.codec`'s RFC 6381 string
+  (`stsd.ts`'s `parseAvcCCodecString`/`parseHvcCCodecString`, e.g. `avc1.640028` --
+  profile_idc/profile_compatibility/level_idc) but never decoded to a human-readable
+  "High Profile, Level 4.0"-style label.
+- Edit list presence/detail. `TrackIndex.editList`/`editOffsetTicks` (`track-index.ts:51,53`) and
+  the `non-trivial-edit-list` parse warning already flag AAC-priming-delay-style edit lists per
+  track -- not shown per-track in any panel today.
+- `handlerType` / `kind: 'other'` tracks. The parser already classifies and retains tracks the UI
+  never lists (a timecode or subtitle track would come through as `kind: 'other'` with its own
+  `handlerType` string).
+- Per-track sample stats. `sampleCount` is already a top-level `TrackIndex` field; average sample
+  size, bitrate-over-time, etc. are trivial derivations from the already-loaded `size`/`pts`
+  arrays -- no new parsing needed.
+
+**Present in bytes already being read, but not yet parsed into a field:**
+- `mvhd`'s `creation_time`/`modification_time`. `parseMvhd` (`moov/mvhd.ts`) currently reads only
+  `timescale`/`duration` from a box it already has fully open -- the two time fields are a couple
+  more `getUint32`/`getBigUint64` reads away, not a new box to locate.
+- Color/HDR metadata (`colr` box: primaries, transfer function, matrix coefficients) -- not parsed
+  at all today. Relevant given HDR is called out as an M4 stress-test case.
+
+**Not currently detectable per track:** fragmentation is a whole-file property here (a top-level
+`moof` fails the whole parse with `fragmented-mp4`, `top-level-scan.ts:48`), not a per-track flag
+-- there's no notion of "this one track is fragmented" to surface.

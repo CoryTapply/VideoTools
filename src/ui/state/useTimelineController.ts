@@ -95,6 +95,8 @@ export function useTimelineController(
         chipEndTimeRef,
         stateRef: controllerStateRef,
         frameCacheRef: media.frameCacheRef,
+        waveformCacheRef: media.waveformCacheRef,
+        waveformTrackRef: media.waveformTrackRef,
         sampleIndexRef: media.sampleIndexRef,
         videoTrackRef: media.videoTrackRef,
         engineRef: media.engineRef,
