@@ -3,11 +3,12 @@
 // no cache/viewport access -- mirrors filmstrip.ts's shape: the caller resolves a viewport range
 // into an already-fetched array before calling this.
 //
-// Bars are bottom-anchored (VU-meter style), not centered -- prompts/waveform-bars-prompt.md's
-// change request, applied here since the request's own target (Video Trimmer.dc.html) isn't
-// checked into this repo. Top corners only are chamfered, matching handles.ts's drawRoundedBar
-// technique (CanvasLike has no arcTo) but asymmetric -- square at the bottom so a bar reads as
-// flush against the row's floor, not floating.
+// Bars are vertically centered, mirrored above/below the row's midline -- prompts/
+// waveform-bars-prompt.md's bottom-anchored (VU-meter) alternative was tried and reverted back to
+// this. No corner rounding: at this bar width (1px) a chamfer and a square corner are visually
+// indistinguishable through CanvasLike's line-only primitives (no arcTo), so plain fillRect is the
+// simpler choice -- same reasoning handles.ts's drawRoundedBar documents for why IT bothers with a
+// chamfer at its own (larger) bar width.
 
 import { color, rowHeight } from '../../tokens.ts';
 import type { PeakColumn } from '../../../media/waveform/types.ts';
@@ -23,39 +24,24 @@ export const WAVEFORM_HEIGHT = rowHeight.waveform;
  * filmstrip when this row isn't shown, so 27 (not 26) is the number a caller's height math needs. */
 export const WAVEFORM_TOTAL_HEIGHT = WAVEFORM_HEIGHT + 1;
 
-const BAR_WIDTH_PX = 2;
-const BAR_PITCH_PX = 5;
+const BAR_WIDTH_PX = 1;
+const BAR_PITCH_PX = 2;
 const BAR_MIN_HEIGHT_PX = 3;
-const BAR_MAX_HEIGHT_PX = 20;
-const BAR_RADIUS_PX = 1;
+/** The loudest bar's height ceiling BEFORE BAR_HEIGHT_SCALE is applied -- set to the full row
+ * height (not some smaller fixed px figure) so BAR_HEIGHT_SCALE alone controls how much headroom
+ * is left at the row's edges, rather than two constants each eating into it independently. */
+const BAR_MAX_HEIGHT_PX = WAVEFORM_HEIGHT;
 /** Applied to the min/max-derived height, after the fact, so the tallest peaks don't touch the
- * row's top edge -- prompts/waveform-bars-prompt.md's explicit ask, not a change to BAR_MIN/MAX
- * themselves. */
-const BAR_HEIGHT_SCALE = 0.9;
+ * row's top/bottom edges. Centered bars split this headroom evenly above and below the midline
+ * (unlike the bottom-anchored design this replaced, which put all of it at the top) -- 0.95 leaves
+ * a deliberately thin ~0.65px sliver on each side, not a proportionate margin. */
+const BAR_HEIGHT_SCALE = 0.95;
 
 /** How many columns a caller should ask a WaveformCache.getRange() for to fill `widthPx` at the
  * bar pitch below -- exported so TimelineController computes the same count it draws, never a
  * second hardcoded copy of BAR_PITCH_PX. */
 export function waveformBarCount(widthPx: number): number {
   return Math.max(1, Math.ceil(widthPx / BAR_PITCH_PX));
-}
-
-/** Chamfered top corners, square bottom corners -- matches handles.ts's drawRoundedBar chamfer
- * technique (CanvasLike has no arcTo) but only cuts the two top corners, so the bar's bottom edge
- * stays a flush straight line against `bottom`. */
-function drawBottomAnchoredBar(ctx: CanvasLike, x: number, bottom: number, width: number, height: number, radius: number): void {
-  const top = bottom - height;
-  const right = x + width;
-  const r = Math.min(radius, height, width / 2);
-  ctx.beginPath();
-  ctx.moveTo(x, bottom);
-  ctx.lineTo(x, top + r);
-  ctx.lineTo(x + r, top);
-  ctx.lineTo(right - r, top);
-  ctx.lineTo(right, top + r);
-  ctx.lineTo(right, bottom);
-  ctx.lineTo(x, bottom);
-  ctx.fill();
 }
 
 /** A column's height-relevant amplitude: loudest channel's peak, not an average -- nothing in the
@@ -75,8 +61,8 @@ function columnPeak(col: PeakColumn): number {
  * draws no bar, just the background showing through. `accent` decides a non-null column's fill --
  * the caller resolves in/out-range membership (a seconds comparison against StartEnd, sidestepping
  * the video-vs-audio timescale mismatch entirely) rather than this function knowing about ticks at
- * all. Bars grow up from the row's bottom edge (VU-meter style), not out from the middle -- see
- * this file's header comment.
+ * all. Bars are vertically centered on the row's midline, mirrored equally above and below it --
+ * see this file's header comment.
  *
  * Heights are normalized to the LOUDEST bar in `columns` (the current viewport, not the whole
  * track) -- that bar always reaches BAR_MAX_HEIGHT_PX regardless of its absolute amplitude, and
@@ -98,7 +84,7 @@ export function drawWaveform(ctx: CanvasLike, widthPx: number, top: number, heig
   ctx.fillStyle = color.bgWaveform;
   ctx.fillRect(0, top, widthPx, height);
 
-  const rowBottom = top + height;
+  const midY = top + height / 2;
   const barCount = waveformBarCount(widthPx);
 
   let maxPeak = 0;
@@ -112,11 +98,11 @@ export function drawWaveform(ctx: CanvasLike, widthPx: number, top: number, heig
     const col = columns[i] ?? null;
     if (col === null || col.channels.length === 0) continue;
 
-    // maxPeak === 0 means every visible column is exactly silent -- every bar falls out to the
+    // maxPeak === 0 means every visible column is exactly silent -- every bar falls back to the
     // floor rather than dividing by zero (which would otherwise produce NaN, not "loud").
     const normalizedPeak = maxPeak > 0 ? columnPeak(col) / maxPeak : 0;
     const barHeight = (BAR_MIN_HEIGHT_PX + normalizedPeak * (BAR_MAX_HEIGHT_PX - BAR_MIN_HEIGHT_PX)) * BAR_HEIGHT_SCALE;
     ctx.fillStyle = accent(col) ? color.waveformAccent : color.waveformOutOfRange;
-    drawBottomAnchoredBar(ctx, i * BAR_PITCH_PX, rowBottom, BAR_WIDTH_PX, barHeight, BAR_RADIUS_PX);
+    ctx.fillRect(i * BAR_PITCH_PX, midY - barHeight / 2, BAR_WIDTH_PX, barHeight);
   }
 }
