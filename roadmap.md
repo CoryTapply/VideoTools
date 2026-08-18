@@ -1,6 +1,6 @@
 # Roadmap
 
-**Last updated:** after M1 task 4c.
+**Last updated:** M2 planning.
 Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 
 ---
@@ -13,7 +13,8 @@ Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 | M0.5 | Remux, index at scale, WebCodecs scrub | ✔ complete |
 | T0 | Export cost diagnosis + merged read pass | ✔ complete |
 | **M1** | **Walking skeleton — open, scrub, trim, export** | **✔ 8 of 8 tasks done — exit criteria met, two gaps flagged** |
-| M2 | Timeline polish | not started |
+| M2 | Timeline polish | in progress |
+| M2.5 | Dense-tier budget re-tune | not started |
 | M3 | Frame accuracy (smart render) | not started |
 | M4 | Production hardening | not started |
 | M5 | Editor foundations | not started |
@@ -207,11 +208,94 @@ All checked against the real 27GB fixture in a real, non-automated browser sessi
 
 ---
 
-## M2 — timeline polish (3 weeks)
+## M2 — timeline polish
 
-Dense-tier tuning on zoom. Waveform: demux the audio track and stream it through `AudioDecoder` in a worker, reducing to a peak pyramid in OPFS. **Never `decodeAudioData`** — four hours of 48 kHz stereo float32 is ~5.5 GB.
+Scope was re-derived from a real audit of what M1 already shipped, rather than taken as-written
+from the original five-item list below. Two items turned out to already be effectively done, one
+turned out to need a formatter that doesn't exist yet, and one was split out as its own milestone.
+See each item for the reasoning; not to be relitigated without new information.
 
-Drop-frame timecode (29.97/59.94 display format, not a time base). Full keyboard map and the `?` overlay. Metadata inspector.
+**Waveform (done — data pipeline built, tested, and confirmed against real Chrome, including the
+real 27GB stress fixture and a real Task Manager memory reading).** Demux each audio track and
+stream it through `AudioDecoder` in a worker, reducing to a multi-resolution min/max peak pyramid
+in OPFS. **Never `decodeAudioData`** — four hours of 48 kHz stereo float32 is ~5.5 GB, vs. a
+confirmed ~49.4 MB for the same file as a pyramid (`estimatePyramidBytes`, cross-checked in
+`pyramid.test.ts`). New module: `src/media/waveform/`, mirroring `src/media/frames/`'s
+worker-pool/decoder/cache pattern — `PyramidBuilder`'s two-phase incremental-then-fold design
+(level 0 live during decode, everything above built once in `finish()`), a self-describing OPFS
+blob format, `WaveformCache` as the orchestrator. No canvas drawing in this pass — that's separate
+follow-up scope once the data pipeline exists.
+
+**Status: everything closed.** 629 tests repo-wide (up from 487), typecheck/lint/build all clean.
+Three real-browser sessions (full numbers: `results/m2-waveform-session-notes.md`):
+- **Part 1** (automated, three smaller real fixtures, mono/stereo up to 1.26GB): zero decode
+  errors, a real OPFS cache round-trip (351.6ms fresh build → 6.1ms cache-hit rebuild), ~108-125x
+  real-time decode throughput.
+- **Part 2** (human, the real `fixtures/27gb.mp4`, all six audio tracks via the normal file
+  picker): zero decode errors across all twelve builds; every track's real `l0BucketCount` matched
+  the closed-form sample-count math exactly; ~43.7s/track fresh build (~96.7x real-time),
+  ~13.7ms/track cache-hit rebuild (3183x speedup); pyramid size ~13.8MB/track, ~82.9MB for all
+  six — matching this plan's original estimate closely.
+- **Part 3** (human, Chrome Task Manager — this project's own stated ground truth for memory,
+  `src/measure/memory.ts`): **+250MB** real process-memory rise building one track's pyramid
+  against the real 27GB file (334MB idle → 584MB after build) — ~6.2x smaller than even that one
+  track's own raw float32 PCM cost (1.51GB), let alone the roadmap's four-hour/six-track worst
+  case. The JS-heap-only `measureUserAgentSpecificMemory()` proxy used in Parts 1-2 (+1.4MB on a
+  smaller fixture) had entirely missed this — the real overhead is transient pipeline buffers
+  (Worker/decoder state, `AudioData` cycling through before being reduced), not the pyramid data
+  itself (~13.8MB, 5.5% of the measured delta).
+
+One substantive bug found and fixed during implementation, before these sessions:
+`PyramidBuilder`'s first design (a fully incremental fold-on-every-partial-flush cascade) had a
+genuine infinite-loop/OOM bug for any file whose top level ends in a lonely single bucket — caught
+by a real crash, not a hypothetical, fixed by building levels above level 0 as a one-shot fold in
+`finish()` instead (see `pyramid.ts`'s header comment). A second, smaller bug caught during Part 2:
+the harness's own size-estimate log line was computing from the wrong sample-count unit (fixed).
+
+**Two things surfaced by real testing, tracked as explicit follow-ups, not blockers**: a real UX
+gap (~44s with no progress indicator before a track's waveform first appears on a file this long —
+the lazy per-track build avoids paying this six times, not once), and mid-stream AAC decode-start
+was never exercised (a prerequisite for a possible future parallel-segment split, not this pass).
+
+**Keyboard map and `?` overlay (done).** Turned out to already be fully built in M1
+(`KeyboardOverlay.tsx`, `keyboard-map.ts`'s `matchShortcut`, wired into `App.tsx` and `Rail.tsx`).
+The only real gap was `src/ui/fixtures.ts`'s `KEY_ROWS` list having drifted from the real chord
+map — missing the ⌘/Ctrl+O (open-file) row. Fixed, with a comment flagging the two lists as
+independently maintained so this doesn't recur silently.
+
+**Metadata inspector (descoped — documented instead).** `SourcePanel` already is what
+`design/README.md` treats as the metadata-bearing panel, and `PanelId` is closed to three values.
+Rather than add a fourth panel or grow that one, decided not to build any new metadata UI this
+milestone. What the parser already has available but unsurfaced (extra audio tracks, codec
+profile/level, edit-list detail, and what would need new parsing — `mvhd` creation time, `colr`/
+HDR) is catalogued in `src/media/index/README.md`'s "Metadata parsed but not yet surfaced in UI"
+section, so a future inspector doesn't have to rediscover it.
+
+**Drop-frame timecode (dropped from scope).** Investigation found no `HH:MM:SS:FF` formatter
+exists at all yet — `design/README.md` specifies one but M1 never built it, only whole-second and
+compact-duration formatting (`snap-notice.ts`). Building drop-frame display would have meant
+building the baseline non-drop formatter first. Decided not worth it for M2; timecode display
+stays as-is. Revisit only if a real need for frame-accurate timecode display surfaces.
+
+**Dense-tier tuning on zoom (moved to M2.5).** The zoom→dense-tier hook already exists and works
+(`FrameCache.setViewport`, `src/media/frames/`). What's left — re-deriving `DEFAULT_BUDGET_BYTES`
+against the ~3.4x real/nominal memory gap Task 3.5 found — is real, separable work, but not part
+of this milestone. See M2.5 below.
+
+---
+
+## M2.5 — dense-tier budget re-tune
+
+Split out of M2's original scope (see above) as a small, separable follow-up once M2's
+own work is far enough along to revisit it.
+
+Re-derive `DEFAULT_BUDGET_BYTES` (currently 96MB, compared against a nominal estimate that's
+~3.4x too low vs. real measured memory — coarse-warm alone measured +199–202MB against an
+86MB nominal ceiling, `results/task-3-frame-cache-summary.md`'s "Part B.2") and validate the
+existing fixed `denseTriggerPxPerKeyframe`/`denseWindowSeconds` constants against real data.
+Explicitly **not** in scope: making dense-tier window/fps size adapt dynamically to zoom level —
+that's a bigger, untested change closer to a new feature than a tune, and was deliberately left
+out when this task was split from M2.
 
 ---
 
@@ -249,7 +333,7 @@ Multi-clip EDL on one track. Ripple and roll trim. Undo/redo via commands with d
 
 | Risk | Severity | State |
 |---|---|---|
-| Coarse tier evicted by dense windows, emptying the filmstrip | High | Suspected, unconfirmed — task 3.5 |
+| Coarse tier evicted by dense windows, emptying the filmstrip | High | Ruled out — task 3.5's real Activity Monitor re-runs showed `evictionCount: 0` and unchanged coarse residency (1015→1015) across the coarse-warm→dense-warm transition at both tested window sizes. Separately, `DEFAULT_BUDGET_BYTES` itself is under-calibrated (~3.4x real/nominal gap) — tracked as M2.5, not this risk |
 | Post-load seeks landing one frame off under decoder load | Low | Task 4c: did not reproduce across 51 real settle-seeks (mixed scrub/scroll/zoom, incl. rapid re-scrub clusters) on two real fixtures in a real, non-automated browser session. Not exhaustive (~1 min/fixture) — dev-only drift diagnostic left in place (`window.__seekDriftLog`) in case it resurfaces |
 | `createWritable()`/`abort()` doesn't protect an existing destination file from a cancelled write | High | Confirmed against real Chrome (task 5) — `abort()` does not restore a truncated file, contradicting the spec text. Fixed: real temp-name-and-rename via `FileSystemFileHandle.move()`, checksum-verified safe at real scale |
 | Real-world containers the parser rejects (fMP4 from OBS, MKV) | Medium | Detected and refused cleanly; product-scope question for M4 |

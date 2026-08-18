@@ -9,6 +9,7 @@ import {
   deriveJobsRows,
   deriveSourceRows,
   deriveTrackSummaries,
+  firstSelectedAudioTrackId,
   formatFileSize,
   friendlyCodecName,
   selectedRealTrackIds,
@@ -205,48 +206,83 @@ describe('deriveExportRows', () => {
 
 describe('deriveJobsRows', () => {
   it('returns no rows when nothing has run yet', () => {
-    expect(deriveJobsRows(null, null, null)).toEqual([]);
+    expect(deriveJobsRows(null, null, null, null)).toEqual([]);
   });
 
   it('shows a running index job before it finishes', () => {
-    const rows = deriveJobsRows({ status: 'running' }, null, null);
+    const rows = deriveJobsRows({ status: 'running' }, null, null, null);
     expect(rows).toEqual([{ label: 'Indexing Video', value: 'running', tone: 'informational' }]);
   });
 
   it('shows a real elapsed-ms duration once indexing finishes', () => {
-    const rows = deriveJobsRows({ status: 'done', ms: 138 }, null, null);
+    const rows = deriveJobsRows({ status: 'done', ms: 138 }, null, null, null);
     expect(rows).toEqual([{ label: 'Indexing Video', value: 'done · 138 ms', tone: 'good' }]);
   });
 
-  it('shows real thumbnail progress while warming and "done" once complete, with no keyframe map or waveform rows', () => {
-    const running = deriveJobsRows(null, { status: 'running', percent: 68 }, null);
+  it('shows real thumbnail progress while warming and "done" once complete, with no keyframe map row (keyframes are a free query, never a timed job)', () => {
+    const running = deriveJobsRows(null, { status: 'running', percent: 68 }, null, null);
     expect(running).toEqual([{ label: 'Thumbnails', value: '68% · running', tone: 'informational' }]);
 
-    const done = deriveJobsRows(null, { status: 'done', ms: 41 }, null);
+    const done = deriveJobsRows(null, { status: 'done', ms: 41 }, null, null);
     expect(done).toEqual([{ label: 'Thumbnails', value: 'done · 41 ms', tone: 'good' }]);
 
     expect(running.find((r) => r.label === 'keyframe map')).toBeUndefined();
-    expect(running.find((r) => r.label === 'waveform')).toBeUndefined();
+  });
+
+  it('shows a running waveform job before it finishes, and a real elapsed-ms duration once done', () => {
+    const running = deriveJobsRows(null, null, { status: 'running' }, null);
+    expect(running).toEqual([{ label: 'Waveform', value: 'running', tone: 'informational' }]);
+
+    const done = deriveJobsRows(null, null, { status: 'done', ms: 43700 }, null);
+    expect(done).toEqual([{ label: 'Waveform', value: 'done · 43700 ms', tone: 'good' }]);
+  });
+
+  it('omits the waveform row entirely when no audio track is active for it (waveformJob null)', () => {
+    const rows = deriveJobsRows({ status: 'done', ms: 10 }, null, null, null);
+    expect(rows.find((r) => r.label === 'Waveform')).toBeUndefined();
   });
 
   it('reflects the current export job by real filename and status', () => {
-    expect(deriveJobsRows(null, null, { status: 'running', fileName: 'clip_03.mp4', percent: 42 })).toEqual([
+    expect(deriveJobsRows(null, null, null, { status: 'running', fileName: 'clip_03.mp4', percent: 42 })).toEqual([
       { label: 'clip_03.mp4', value: '42% · running', tone: 'informational' },
     ]);
-    expect(deriveJobsRows(null, null, { status: 'done', fileName: 'clip_03.mp4', durationLabel: '2m 02s' })).toEqual([
+    expect(deriveJobsRows(null, null, null, { status: 'done', fileName: 'clip_03.mp4', durationLabel: '2m 02s' })).toEqual([
       { label: 'clip_03.mp4', value: 'done · 2m 02s', tone: 'good' },
     ]);
-    expect(deriveJobsRows(null, null, { status: 'canceled', fileName: 'clip_02.mp4' })).toEqual([
+    expect(deriveJobsRows(null, null, null, { status: 'canceled', fileName: 'clip_02.mp4' })).toEqual([
       { label: 'clip_02.mp4', value: 'canceled', tone: 'warning' },
     ]);
-    expect(deriveJobsRows(null, null, { status: 'failed', fileName: 'clip_02.mp4' })).toEqual([
+    expect(deriveJobsRows(null, null, null, { status: 'failed', fileName: 'clip_02.mp4' })).toEqual([
       { label: 'clip_02.mp4', value: 'failed', tone: 'warning' },
     ]);
   });
 
-  it('composes all three jobs together', () => {
-    const rows = deriveJobsRows({ status: 'done', ms: 138 }, { status: 'running', percent: 68 }, { status: 'running', fileName: 'clip_03.mp4', percent: 10 });
-    expect(rows.map((r) => r.label)).toEqual(['Indexing Video', 'Thumbnails', 'clip_03.mp4']);
+  it('composes all four jobs together, in order', () => {
+    const rows = deriveJobsRows(
+      { status: 'done', ms: 138 },
+      { status: 'running', percent: 68 },
+      { status: 'running' },
+      { status: 'running', fileName: 'clip_03.mp4', percent: 10 },
+    );
+    expect(rows.map((r) => r.label)).toEqual(['Indexing Video', 'Thumbnails', 'Waveform', 'clip_03.mp4']);
+  });
+});
+
+describe('firstSelectedAudioTrackId', () => {
+  it('returns the real trackId of the first selected audio track, in file order', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack({ trackId: 3 }), makeAudioTrack({ trackId: 7 })]);
+    expect(firstSelectedAudioTrackId(summaries, { V1: true, A1: false, A2: true })).toBe(7);
+    expect(firstSelectedAudioTrackId(summaries, { V1: true, A1: true, A2: true })).toBe(3);
+  });
+
+  it('returns undefined when no audio track is selected', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack({ trackId: 3 })]);
+    expect(firstSelectedAudioTrackId(summaries, { V1: true, A1: false })).toBeUndefined();
+  });
+
+  it('returns undefined for a file with no audio tracks', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack()]);
+    expect(firstSelectedAudioTrackId(summaries, { V1: true })).toBeUndefined();
   });
 });
 

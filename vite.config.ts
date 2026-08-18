@@ -36,6 +36,7 @@ export default defineConfig({
         mediaIndex: 'media-index.html',
         playback: 'playback.html',
         frames: 'frames.html',
+        waveform: 'waveform.html',
         app: 'app.html',
         uiHarness: 'ui-harness.html',
       },

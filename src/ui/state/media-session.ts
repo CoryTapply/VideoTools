@@ -7,7 +7,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 // Direct submodule imports, not the barrel -- see app-state.ts's comment on why.
 import { IndexWorkerClient } from '../../media/index/worker-client.ts';
+import { computeFingerprint } from '../../media/index/fingerprint.ts';
 import { SampleIndex } from '../../media/index/query.ts';
+import { FileByteSource } from '../../media/index/sources/file-byte-source.ts';
 import { secondsToTicks, ticksToSeconds } from '../../media/index/time.ts';
 import { FrameCache, defaultWorkerCount } from '../../media/frames/FrameCache.ts';
 import { FrameWorkerClient } from '../../media/frames/worker-client.ts';
@@ -15,8 +17,11 @@ import { FrameWorkerPool } from '../../media/frames/worker-pool.ts';
 import { formatPlaybackError } from '../../media/playback/errors.ts';
 import { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.ts';
 import { RealVideoElement } from '../../media/playback/RealVideoElement.ts';
-import { defaultTrackSelection, deriveFormatChip, deriveSourceRows, deriveTrackSummaries, friendlyCodecName } from '../media/derive-source-info.ts';
-import type { IndexJobStatus, ThumbsJobStatus } from '../media/derive-source-info.ts';
+import { WaveformCache } from '../../media/waveform/WaveformCache.ts';
+import { WaveformWorkerClient } from '../../media/waveform/worker-client.ts';
+import { WaveformWorkerPool } from '../../media/waveform/worker-pool.ts';
+import { defaultTrackSelection, deriveFormatChip, deriveSourceRows, deriveTrackSummaries, firstSelectedAudioTrackId, friendlyCodecName } from '../media/derive-source-info.ts';
+import type { IndexJobStatus, ThumbsJobStatus, WaveformJobStatus } from '../media/derive-source-info.ts';
 import { recordRecentFile } from './recent-files.ts';
 import { formatDurationCompact, formatFrameNumber } from './snap-notice.ts';
 import type { Dispatch, RefObject } from 'react';
@@ -26,7 +31,7 @@ import type { PlaybackError } from '../../media/playback/errors.ts';
 import type { Result } from '../../media/playback/result.ts';
 import type { PanelRowFixture } from '../media/panel-row.ts';
 import type { TrackSummary } from '../media/track-summary.ts';
-import type { AppAction } from './app-state.ts';
+import type { AppAction, TrackSelection } from './app-state.ts';
 
 export interface UnsupportedInfo {
   message: string;
@@ -49,6 +54,13 @@ export interface MediaSession {
   /** The two-tier frame cache backing the filmstrip and cache-only drag-scrub preview. Built and
    * warmCoarse()'d once per file open; null until then. */
   frameCacheRef: RefObject<FrameCache | null>;
+  /** The waveform lane's ACTIVE cache -- repointed by activateWaveformTrack whenever `sel`'s first
+   * selected audio track changes, not fixed to whatever was selected at file-open. Null until a
+   * file with at least one audio track is open and one is selected. */
+  waveformCacheRef: RefObject<WaveformCache | null>;
+  /** The audio TrackIndex backing waveformCacheRef -- TimelineController needs its OWN timescale
+   * (never the video track's) to convert WaveformCache.getRange()'s ticks correctly. */
+  waveformTrackRef: RefObject<TrackIndex | null>;
   file: File | null;
   tracks: TrackSummary[] | null;
   sourceRows: PanelRowFixture[] | null;
@@ -61,6 +73,10 @@ export interface MediaSession {
   /** Real progress for the Jobs panel's "thumbs" row, driven by FrameCache.warmCoarse()'s
    * onProgress -- null when the current file has no video track to warm thumbnails for. */
   thumbsJob: ThumbsJobStatus | null;
+  /** Real timing for the Jobs panel's "waveform" row -- reflects the CURRENTLY ACTIVE track (see
+   * waveformCacheRef), not every audio track's build status. Null when there's no active track
+   * (no audio tracks, or none selected). */
+  waveformJob: WaveformJobStatus | null;
   playing: boolean;
   currentSeconds: number;
   timecode: string;
@@ -105,13 +121,27 @@ async function waitForVideoElement(ref: RefObject<HTMLVideoElement | null>): Pro
   });
 }
 
-export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
+export function useMediaSession(dispatch: Dispatch<AppAction>, sel: TrackSelection): MediaSession {
   const videoRef = useRef<HTMLVideoElement>(null);
   const engineRef = useRef<NativeVideoEngine | null>(null);
   const sampleIndexRef = useRef<SampleIndex | null>(null);
   const videoTrackRef = useRef<TrackIndex | null>(null);
   const frameCacheRef = useRef<FrameCache | null>(null);
   const lastCurrentSecondsUpdateMsRef = useRef(0);
+
+  // Live-reactive waveform lane state -- one WaveformCache per audio track (constructed, not
+  // built, at file-open), sharing one WaveformWorkerPool per file. activateWaveformTrack below
+  // repoints waveformCacheRef/waveformTrackRef (the pair TimelineController actually reads) to
+  // whichever track is currently active, lazily build()-ing it the first time it becomes active.
+  const waveformCachesRef = useRef<Map<number, WaveformCache>>(new Map());
+  const audioTracksRef = useRef<Map<number, TrackIndex>>(new Map());
+  const waveformPoolRef = useRef<WaveformWorkerPool | null>(null);
+  // Real build duration per track, recorded the first time each one resolves -- so re-activating
+  // an already-built track can show its real recorded time rather than fabricating one.
+  const waveformBuildMsRef = useRef<Map<number, number>>(new Map());
+  const waveformCacheRef = useRef<WaveformCache | null>(null);
+  const waveformTrackRef = useRef<TrackIndex | null>(null);
+  const activeWaveformTrackIdRef = useRef<number | undefined>(undefined);
 
   const [file, setFile] = useState<File | null>(null);
   const [tracks, setTracks] = useState<TrackSummary[] | null>(null);
@@ -123,11 +153,77 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
   const [currentSeconds, setCurrentSeconds] = useState(0);
   const [indexJob, setIndexJob] = useState<IndexJobStatus | null>(null);
   const [thumbsJob, setThumbsJob] = useState<ThumbsJobStatus | null>(null);
+  const [waveformJob, setWaveformJob] = useState<WaveformJobStatus | null>(null);
+
+  /** Repoints the single ref pair TimelineController reads to whichever audio track (by real
+   * trackId) should currently be active, lazily build()-ing it the first time -- safe to call
+   * again on an already-building/already-built cache, per WaveformCache.build()'s own idempotency.
+   * No-ops if `trackId` already matches the current active track (e.g. `sel` changed for an
+   * unrelated reason, like the video track's own checkbox).
+   *
+   * Only records `trackId` into activeWaveformTrackIdRef once it's actually been resolved to a
+   * real cache (or is `undefined`, a real "nothing selected" state) -- NOT when a lookup finds
+   * nothing in waveformCachesRef/audioTracksRef. openFile() populates those maps before the
+   * setTracks/dispatch(sel/set) that trigger this function, specifically so that gap can't happen
+   * in practice -- but recording a failed lookup as "handled" would make a real occurrence of it
+   * (a future refactor reordering openFile(), an unanticipated interleaving) permanently un-retriable,
+   * since nothing else re-invokes this once [sel, tracks] stop changing. Leaving the ref alone on
+   * failure means a later call with the same trackId (if one ever comes) isn't a silent no-op. */
+  const activateWaveformTrack = useCallback((trackId: number | undefined) => {
+    if (trackId === activeWaveformTrackIdRef.current) return;
+
+    if (trackId === undefined) {
+      activeWaveformTrackIdRef.current = undefined;
+      waveformCacheRef.current = null;
+      waveformTrackRef.current = null;
+      setWaveformJob(null);
+      return;
+    }
+    const cache = waveformCachesRef.current.get(trackId);
+    const track = audioTracksRef.current.get(trackId);
+    if (cache === undefined || track === undefined) {
+      waveformCacheRef.current = null;
+      waveformTrackRef.current = null;
+      setWaveformJob(null);
+      return;
+    }
+    activeWaveformTrackIdRef.current = trackId;
+    waveformCacheRef.current = cache;
+    waveformTrackRef.current = track;
+
+    if (cache.isBuilt) {
+      setWaveformJob({ status: 'done', ms: waveformBuildMsRef.current.get(trackId) ?? 0 });
+      return;
+    }
+    setWaveformJob({ status: 'running' });
+    const startMs = performance.now();
+    void cache.build().then(() => {
+      const elapsedMs = Math.round(performance.now() - startMs);
+      waveformBuildMsRef.current.set(trackId, elapsedMs);
+      // A superseded activation (the user switched away, or opened a different file) must not
+      // clobber a newer track's job status with this stale one's -- same staleness-guard pattern
+      // thumbsJob's warmCoarse callback already uses.
+      if (waveformCacheRef.current !== cache) return;
+      setWaveformJob({ status: 'done', ms: elapsedMs });
+    });
+  }, []);
+
+  // Drives both the INITIAL waveform activation (openFile()'s dispatch({type:'sel/set'}) and
+  // setTracks(...) land together in the same render, so this effect picks up the fresh sel/tracks
+  // right after a file opens) and every later live change when the user toggles which audio track
+  // is selected in the Export panel -- one effect handles both, no separate call needed in
+  // openFile() itself.
+  useEffect(() => {
+    if (tracks === null) return;
+    activateWaveformTrack(firstSelectedAudioTrackId(tracks, sel));
+  }, [sel, tracks, activateWaveformTrack]);
 
   useEffect(
     () => () => {
       engineRef.current?.dispose();
       frameCacheRef.current?.dispose();
+      waveformPoolRef.current?.dispose();
+      for (const cache of waveformCachesRef.current.values()) cache.dispose();
     },
     [],
   );
@@ -160,8 +256,49 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
       const summaries = deriveTrackSummaries(rawTracks);
       const rows = deriveSourceRows(rawTracks, selected.size);
       const chip = deriveFormatChip(rawTracks, selected.size);
-      const sel = defaultTrackSelection(summaries);
+      // Named to avoid colliding with the hook's own `sel` parameter (the PREVIOUS file's
+      // selection, still current until the dispatch below flows through a re-render) -- this is
+      // the freshly computed default for the file being opened right now.
+      const initialSel = defaultTrackSelection(summaries);
       const durationSecondsValue = videoTrack !== undefined ? ticksToSeconds(videoTrack.duration, videoTrack.timescale) : 0;
+
+      // Dispose the previous file's waveform resources and construct this file's before setTracks/
+      // dispatch(sel/set) below -- NOT after, unlike frameCache's own construction further down.
+      // setTracks/dispatch land in the same render and immediately trigger the activateWaveformTrack
+      // effect (keyed on [sel, tracks]); if waveformCachesRef weren't already fully populated by
+      // then, that effect could look up a trackId, find nothing yet (the await below hasn't
+      // resolved), and record it as "already handled" -- permanently skipping it, since nothing
+      // else re-triggers the effect once the map is populated a moment later. Awaiting the
+      // (cheap -- first/last 1MB only, fingerprint.ts's own doc comment) fingerprint here instead
+      // closes that gap entirely rather than working around it with a retry mechanism.
+      waveformPoolRef.current?.dispose();
+      waveformPoolRef.current = null;
+      for (const cache of waveformCachesRef.current.values()) cache.dispose();
+      waveformCachesRef.current = new Map();
+      audioTracksRef.current = new Map();
+      waveformBuildMsRef.current = new Map();
+      waveformCacheRef.current = null;
+      waveformTrackRef.current = null;
+      activeWaveformTrackIdRef.current = undefined;
+      setWaveformJob(null);
+
+      const audioTracks = rawTracks.filter((t) => t.kind === 'audio' && t.audio !== undefined);
+      if (audioTracks.length > 0) {
+        // The index worker computes an equivalent fingerprint internally but never surfaces it
+        // here, so this is a deliberate, acceptable duplication rather than plumbing a new return
+        // value through IndexWorkerClient's protocol.
+        const fingerprint = await computeFingerprint(new FileByteSource(selected), selected.lastModified);
+        const pool = new WaveformWorkerPool([new WaveformWorkerClient(selected)]);
+        waveformPoolRef.current = pool;
+        const cachesMap = new Map<number, WaveformCache>();
+        const tracksMap = new Map<number, TrackIndex>();
+        for (const audioTrack of audioTracks) {
+          cachesMap.set(audioTrack.trackId, new WaveformCache({ sampleIndex, audioTrackId: audioTrack.trackId, pool, fingerprint }));
+          tracksMap.set(audioTrack.trackId, audioTrack);
+        }
+        waveformCachesRef.current = cachesMap;
+        audioTracksRef.current = tracksMap;
+      }
 
       sampleIndexRef.current = sampleIndex;
       videoTrackRef.current = videoTrack ?? null;
@@ -174,7 +311,7 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
       setCurrentSeconds(0);
       lastCurrentSecondsUpdateMsRef.current = 0;
 
-      dispatch({ type: 'sel/set', sel });
+      dispatch({ type: 'sel/set', sel: initialSel });
       dispatch({ type: 'start-end/set', tstart: 0, tend: durationSecondsValue });
 
       frameCacheRef.current?.dispose();
@@ -294,6 +431,8 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
     sampleIndexRef,
     videoTrackRef,
     frameCacheRef,
+    waveformCacheRef,
+    waveformTrackRef,
     file,
     tracks,
     sourceRows,
@@ -303,6 +442,7 @@ export function useMediaSession(dispatch: Dispatch<AppAction>): MediaSession {
     unsupported,
     indexJob,
     thumbsJob,
+    waveformJob,
     playing,
     currentSeconds,
     timecode: formatDurationCompact(currentSeconds),

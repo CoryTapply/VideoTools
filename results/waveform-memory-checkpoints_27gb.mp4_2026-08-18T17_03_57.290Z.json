@@ -1,0 +1,25 @@
+{
+  "spike": "waveform-memory-checkpoints",
+  "machine": "local",
+  "browser": "Chrome",
+  "browserVersion": "151.0.0.0",
+  "fixture": "27gb.mp4",
+  "metrics": {
+    "checkpoints": [
+      {
+        "label": "1-idle",
+        "jsHeapBytes": 66194558,
+        "jsHeapMethod": "measureUserAgentSpecificMemory",
+        "activityMonitorMB": 334
+      },
+      {
+        "label": "2-after-build",
+        "jsHeapBytes": 66161030,
+        "jsHeapMethod": "measureUserAgentSpecificMemory",
+        "activityMonitorMB": 584
+      }
+    ]
+  },
+  "timestamp": "2026-08-18T17:03:57.290Z",
+  "notes": "1-idle: 334MB (Activity Monitor) | 2-after-build: 584MB (Activity Monitor)"
+}

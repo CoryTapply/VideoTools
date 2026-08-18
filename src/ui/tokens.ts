@@ -26,6 +26,10 @@ export const color = {
   bgIndexingStripeA: '#151517',
   bgIndexingStripeB: '#121214',
   bgWaveform: '#0F0F11',
+  // Waveform bar fill inside vs. outside the current in/out range -- design/README.md's "4.
+  // Waveform" section.
+  waveformAccent: 'rgba(76,141,246,.62)',
+  waveformOutOfRange: '#2E2E33',
   bgTileEmpty: '#1B1B1F',
   // The preview stage's placeholder-frame stripe texture (stands in for a real decoded frame) --
   // design/reference/Video Trimmer.dc.html's video-box background, not in the main token table.

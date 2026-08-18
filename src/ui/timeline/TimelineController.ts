@@ -17,6 +17,7 @@ import { drawPlayhead } from './draw/playhead.ts';
 import { drawRuler, RULER_HEIGHT } from './draw/ruler.ts';
 import { drawScrubPreview } from './draw/scrub-preview.ts';
 import { drawSnapFlash, snapFlashOpacity } from './draw/snap-flash.ts';
+import { drawWaveform, waveformBarCount, WAVEFORM_HEIGHT, WAVEFORM_TOTAL_HEIGHT } from './draw/waveform.ts';
 import { decayVelocity, isCoastingDone, updateVelocity } from './kinetic-pan.ts';
 import { describeSeekDrift } from './seek-drift.ts';
 import { snapToViewport } from './snap.ts';
@@ -29,6 +30,8 @@ import type { SampleIndex } from '../../media/index/query.ts';
 import type { TrackIndex } from '../../media/index/track-index.ts';
 import type { NativeVideoEngine } from '../../media/playback/NativeVideoEngine.ts';
 import type { Unsubscribe } from '../../media/playback/PlaybackEngine.ts';
+import type { WaveformCache } from '../../media/waveform/WaveformCache.ts';
+import type { PeakColumn } from '../../media/waveform/types.ts';
 import type { RefObject } from 'react';
 import type { TrimMode } from '../state/app-state.ts';
 import type { DragTarget, TimelineControllerState } from '../state/timeline-controller-state.ts';
@@ -64,6 +67,13 @@ export interface TimelineControllerDeps {
   chipEndTimeRef: RefObject<HTMLSpanElement | null>;
   stateRef: RefObject<TimelineControllerState>;
   frameCacheRef: RefObject<FrameCache | null>;
+  /** The waveform lane's active WaveformCache -- tracks whichever audio track is currently
+   * selected (see media-session.ts's activateWaveformTrack), null while none is active/built yet. */
+  waveformCacheRef: RefObject<WaveformCache | null>;
+  /** The audio track backing waveformCacheRef, needed for its OWN timescale -- WaveformCache.
+   * getRange()'s ticks are in the audio track's timescale, never the video track's (see draw()'s
+   * conversion below). */
+  waveformTrackRef: RefObject<TrackIndex | null>;
   sampleIndexRef: RefObject<SampleIndex | null>;
   videoTrackRef: RefObject<TrackIndex | null>;
   engineRef: RefObject<NativeVideoEngine | null>;
@@ -97,6 +107,8 @@ export class TimelineController {
   private readonly chipEndTimeRef: RefObject<HTMLSpanElement | null>;
   private readonly stateRef: RefObject<TimelineControllerState>;
   private readonly frameCacheRef: RefObject<FrameCache | null>;
+  private readonly waveformCacheRef: RefObject<WaveformCache | null>;
+  private readonly waveformTrackRef: RefObject<TrackIndex | null>;
   private readonly sampleIndexRef: RefObject<SampleIndex | null>;
   private readonly videoTrackRef: RefObject<TrackIndex | null>;
   private readonly engineRef: RefObject<NativeVideoEngine | null>;
@@ -142,6 +154,8 @@ export class TimelineController {
     this.chipEndTimeRef = deps.chipEndTimeRef;
     this.stateRef = deps.stateRef;
     this.frameCacheRef = deps.frameCacheRef;
+    this.waveformCacheRef = deps.waveformCacheRef;
+    this.waveformTrackRef = deps.waveformTrackRef;
     this.sampleIndexRef = deps.sampleIndexRef;
     this.videoTrackRef = deps.videoTrackRef;
     this.engineRef = deps.engineRef;
@@ -591,7 +605,7 @@ export class TimelineController {
     drawRuler(this.ctx, widthPx, viewport, timescale, ticksPerFrame, this.keyframeTimesFor(videoTrack), { accentTimes: [startTicks, endTicks] });
 
     const filmstripTop = RULER_HEIGHT;
-    const filmstripHeight = Math.max(0, contentHeightPx - filmstripTop);
+    const filmstripHeight = Math.max(0, contentHeightPx - filmstripTop - WAVEFORM_TOTAL_HEIGHT);
     const tileCount = Math.max(1, Math.ceil(widthPx / FILMSTRIP_TILE_WIDTH_PX) + 1);
     const frameCache = this.frameCacheRef.current;
     const tiles =
@@ -599,6 +613,27 @@ export class TimelineController {
         ? frameCache.getRange(viewport.viewStart, viewport.viewStart + viewport.viewSpan, tileCount).map((f) => f?.bitmap ?? null)
         : new Array<null>(tileCount).fill(null);
     drawFilmstrip(this.ctx, widthPx, filmstripTop, filmstripHeight, tiles);
+
+    // WaveformCache.getRange()'s ticks are in the AUDIO track's own timescale, never the video
+    // track's -- types.ts's own doc comment is explicit that bridging is the caller's job. viewport
+    // is in the video track's timescale, so the conversion goes through seconds rather than
+    // assuming either tick space lines up (they essentially never do -- video timescale is
+    // frame-rate-derived, audio timescale is the sample rate).
+    const waveformTop = filmstripTop + filmstripHeight + 1;
+    const waveformCache = this.waveformCacheRef.current;
+    const waveformTrack = this.waveformTrackRef.current;
+    let waveformColumns: readonly (PeakColumn | null)[] = [];
+    if (waveformCache !== null && waveformTrack !== null) {
+      const fromSeconds = ticksToSeconds(viewport.viewStart, timescale);
+      const toSeconds = ticksToSeconds(viewport.viewStart + viewport.viewSpan, timescale);
+      const fromAudioTicks = secondsToTicks(fromSeconds, waveformTrack.timescale);
+      const toAudioTicks = secondsToTicks(toSeconds, waveformTrack.timescale);
+      waveformColumns = waveformCache.getRange(fromAudioTicks, toAudioTicks, waveformBarCount(widthPx));
+    }
+    drawWaveform(this.ctx, widthPx, waveformTop, WAVEFORM_HEIGHT, waveformColumns, (col) => {
+      const colSeconds = waveformTrack !== null ? ticksToSeconds(col.time, waveformTrack.timescale) : 0;
+      return colSeconds >= startEnd.tstart && colSeconds <= startEnd.tend;
+    });
 
     const startX = timeToX(startTicks, viewport.viewStart, viewport.viewSpan, widthPx);
     const endX = timeToX(endTicks, viewport.viewStart, viewport.viewSpan, widthPx);

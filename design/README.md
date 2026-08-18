@@ -189,9 +189,19 @@ the same timeline height. This is the intended trade — a permanently blank
 audio band for the length of a milestone reads as a bug, and the filmstrip is
 the row that benefits from every pixel it can get.
 
-When it ships: bg `#0F0F11`, `border-top:1px #232326`. 2px bars every 5px,
-radius 1, vertically centered, height `3–20px`. Inside the in/out range
-`rgba(76,141,246,.62)`; outside `#2E2E33`. Deliberately quiet — it is
+When it ships: bg `#0F0F11`, `border-top:1px #232326`. 1px bars every 2px, no
+corner rounding (indistinguishable from square at this width through
+CanvasLike's line-only primitives), vertically centered on the row's midline
+and mirrored equally above/below it, height up to `(3–26px) × 0.95` so the
+tallest peaks leave only a thin sliver at each edge rather than touching
+either one. A bottom-anchored (VU-meter style) alternative was tried
+(`prompts/waveform-bars-prompt.md`) and reverted back to centered/mirrored.
+Heights are normalized per visible viewport, not to a fixed absolute
+amplitude: the loudest bar currently on screen always reaches the full
+height, and every other visible bar scales relative to it — a quiet passage
+fills the row the same as a loud one, trading absolute-loudness accuracy for
+always-visible variation regardless of zoom or content. Inside the in/out
+range `rgba(76,141,246,.62)`; outside `#2E2E33`. Deliberately quiet — it is
 reference, not the primary target.
 
 The canvas layer stack should be built with the row present from the start and

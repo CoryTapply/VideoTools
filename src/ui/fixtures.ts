@@ -52,6 +52,12 @@ export interface KeyRowFixture {
   description: string;
 }
 
+// Every ShortcutAction in keyboard-map.ts should have a row here (Escape is the one deliberate
+// exception -- the overlay's own header already reads "Esc to close"). This list is currently
+// hand-maintained separately from matchShortcut()'s chord table, so it drifts silently when a new
+// action is added there without a matching row added here -- Cmd/Ctrl+O was missing for a while
+// before this comment was added. Check keyboard-map.ts's ShortcutAction union against this list
+// when either changes.
 export const KEY_ROWS: readonly KeyRowFixture[] = [
   { chord: 'Space / K', description: 'play · pause' },
   { chord: 'J / L', description: 'shuttle (accelerates)' },
@@ -68,6 +74,7 @@ export const KEY_ROWS: readonly KeyRowFixture[] = [
   { chord: 'M', description: 'mute output' },
   { chord: 'Shift + ↑ / ↓', description: 'volume up · down' },
   { chord: '⌘ / Ctrl + E', description: 'export clip' },
+  { chord: '⌘ / Ctrl + O', description: 'open file' },
   { chord: '⌘ / Ctrl + Z', description: 'undo' },
   { chord: 'Alt (drag)', description: 'disable snapping' },
   { chord: '?', description: 'this overlay' },
