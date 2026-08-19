@@ -12,6 +12,7 @@ import {
   firstSelectedAudioTrackId,
   formatFileSize,
   friendlyCodecName,
+  selectedAudioRealTrackIds,
   selectedRealTrackIds,
 } from './derive-source-info.ts';
 import type { TrackIndex } from '../../media/index/track-index.ts';
@@ -291,5 +292,27 @@ describe('selectedRealTrackIds', () => {
     const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack({ trackId: 3 }), makeAudioTrack({ trackId: 7 })]);
     // V1 -> trackId 1, A1 -> trackId 3, A2 -> trackId 7 (construction order, see deriveTrackSummaries)
     expect(selectedRealTrackIds(summaries, { V1: true, A1: false, A2: true })).toEqual(new Set([1, 7]));
+  });
+});
+
+describe('selectedAudioRealTrackIds', () => {
+  it('maps selected display ids back to real MP4 track ids, audio-kind only', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack({ trackId: 3 }), makeAudioTrack({ trackId: 7 })]);
+    expect(selectedAudioRealTrackIds(summaries, { V1: true, A1: true, A2: true })).toEqual(new Set([3, 7]));
+  });
+
+  it('excludes the video track even when its checkbox is selected', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack({ trackId: 3 })]);
+    expect(selectedAudioRealTrackIds(summaries, { V1: true, A1: false })).toEqual(new Set());
+  });
+
+  it('returns an empty set when no audio track is selected', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack(), makeAudioTrack({ trackId: 3 })]);
+    expect(selectedAudioRealTrackIds(summaries, { V1: true, A1: false })).toEqual(new Set());
+  });
+
+  it('returns an empty set for a file with no audio tracks', () => {
+    const summaries = deriveTrackSummaries([makeVideoTrack()]);
+    expect(selectedAudioRealTrackIds(summaries, { V1: true })).toEqual(new Set());
   });
 });
