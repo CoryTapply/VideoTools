@@ -160,6 +160,13 @@ export function selectedRealTrackIds(tracks: readonly TrackSummary[], sel: Track
   return new Set(tracks.filter((t) => sel[t.id]).map((t) => t.trackId));
 }
 
+/** Same as selectedRealTrackIds, but audio-kind tracks only -- what the live audio-mix engine
+ * (src/media/audio-mix/AudioMixEngine.ts) needs to know which tracks should currently be
+ * decoding+playing, unlike export's own selection which also includes the video track. */
+export function selectedAudioRealTrackIds(tracks: readonly TrackSummary[], sel: TrackSelection): Set<number> {
+  return new Set(tracks.filter((t) => t.kind === 'audio' && sel[t.id]).map((t) => t.trackId));
+}
+
 /** The real MP4 track id of the first selected audio track, in file order (deriveTrackSummaries's
  * own iteration order over the source TrackIndex[] -- video first, then audio in track order).
  * Drives which track's pyramid the single waveform lane shows -- media-session.ts's

@@ -136,7 +136,18 @@ ffmpeg -y -loglevel error \
   -b:v 8500k -c:a aac -b:a 192k \
   "$OUT_DIR/test.mkv"
 
+# --- tiny-2audio.mp4 (2 distinguishable audio tracks, for the audio-mix ----
+# harness -- src/media/audio-mix/README.md / plan doc) -- 5s of mid-1080p's
+# picture plus two synthesized tones an octave apart (440Hz vs 880Hz), so a
+# human can tell by ear alone which track is actually playing.
+echo "encoding tiny-2audio.mp4"
+ffmpeg -y -loglevel error -i "$OUT_DIR/mid-1080p.mp4" \
+  -f lavfi -i "sine=frequency=440:duration=5" \
+  -f lavfi -i "sine=frequency=880:duration=5" \
+  -map 0:v:0 -map 1:a -map 2:a -t 5 -c:v copy -c:a aac -shortest \
+  "$OUT_DIR/tiny-2audio.mp4"
+
 # --- report -------------------------------------------------------------
-for f in large-2160p.mp4 large-noqs.mp4 mid-1080p.mp4 longgop.mp4 vfr-screen.mp4 test.mkv; do
+for f in large-2160p.mp4 large-noqs.mp4 mid-1080p.mp4 longgop.mp4 vfr-screen.mp4 test.mkv tiny-2audio.mp4; do
   report_fixture "$OUT_DIR/$f"
 done

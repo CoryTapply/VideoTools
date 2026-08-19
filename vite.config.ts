@@ -37,6 +37,7 @@ export default defineConfig({
         playback: 'playback.html',
         frames: 'frames.html',
         waveform: 'waveform.html',
+        audioMix: 'audio-mix.html',
         app: 'app.html',
         uiHarness: 'ui-harness.html',
       },

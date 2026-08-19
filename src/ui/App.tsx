@@ -38,6 +38,7 @@ import { useChromeVisibility } from './state/useChromeVisibility.ts';
 import { useExportSession } from './state/export-session.ts';
 import { matchShortcut } from './state/keyboard-map.ts';
 import { useMediaSession } from './state/media-session.ts';
+import { useAudioMix } from './state/use-audio-mix.ts';
 import { nextShuttleRate } from './state/shuttle.ts';
 import { formatDurationCompact, formatFrameNumber } from './state/snap-notice.ts';
 import { useTimelineControllerRef } from './state/timeline-controller-state.ts';
@@ -74,6 +75,17 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     (overrides) => createInitialAppState({ tstart: DEFAULT_START_SECONDS, tend: DEFAULT_END_SECONDS, ...overrides }),
   );
   const media = useMediaSession(dispatch, state.sel);
+  const audioMix = useAudioMix({
+    file: media.file,
+    tracks: media.tracks,
+    sel: state.sel,
+    sampleIndexRef: media.sampleIndexRef,
+    engineRef: media.engineRef,
+    videoTrackRef: media.videoTrackRef,
+    videoRef: media.videoRef,
+    vol: state.vol,
+    muted: state.muted,
+  });
   const exportSession = useExportSession(dispatch, media);
   const { togglePlay, stepFrame, jumpToKeyframe, seekToSeconds } = media;
   // Real once a file is open; otherwise the design fixture -- moved up from the other derived
@@ -202,6 +214,10 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           if (engine === null) return;
           stopReverseShuttle();
           shuttleRateRef.current = nextShuttleRate(shuttleRateRef.current, 1);
+          // Ahead of engine.play() below -- if that call synchronously fires onStateChange
+          //('playing'), the mixers must already know they're at a non-1x rate so they don't start
+          // only to be immediately paused again by this same hint a moment later.
+          audioMix.setPlaybackRateHint(shuttleRateRef.current);
           engine.setPlaybackRate(shuttleRateRef.current);
           if (engine.state !== 'playing') engine.play();
           break;
@@ -379,6 +395,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       if (key !== 'j' && key !== 'l') return;
       shuttleRateRef.current = 0;
       stopReverseShuttle();
+      audioMix.setPlaybackRateHint(1);
       const engine = media.engineRef.current;
       if (engine === null) return;
       engine.setPlaybackRate(1);
@@ -391,16 +408,12 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
       window.removeEventListener('keyup', handleKeyUp);
       stopReverseShuttle();
     };
-  }, [state.shortcuts, state.panel, state.full, state.vol, canExport, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds, media.videoTrackRef, media.engineRef, timelineControllerRef]);
+  }, [state.shortcuts, state.panel, state.full, state.vol, canExport, togglePlay, stepFrame, jumpToKeyframe, seekToSeconds, media.videoTrackRef, media.engineRef, timelineControllerRef, audioMix]);
 
-  // Monitoring-only gain: applies straight to the preview <video> element, never touches the
-  // export path (which remuxes the source file directly, not this element) --
-  // design/volume-slider-prompt.md's "must not affect export output". Re-runs on media.file so a
-  // freshly mounted <video> picks up the current level/mute state right away.
-  useEffect(() => {
-    media.setVolume(state.vol);
-    media.setMuted(state.muted);
-  }, [state.vol, state.muted, media]);
+  // Monitoring-only gain now lives in useAudioMix's own Effect C, driving the Web Audio mix's
+  // master GainNode instead of the native <video> element directly -- see that hook's header
+  // comment. design/volume-slider-prompt.md's "must not affect export output" constraint still
+  // holds either way (export remuxes the source file directly, never touches this preview gain).
 
   const showChrome = !state.full;
   // Title bar, status bar, transport bar, splitter, and timeline all have nothing to report with

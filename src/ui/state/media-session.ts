@@ -86,10 +86,6 @@ export interface MediaSession {
   stepFrame: (n: number) => void;
   jumpToKeyframe: (dir: 1 | -1) => void;
   seekToSeconds: (seconds: number) => void;
-  /** Preview-only monitoring gain -- design/volume-slider-prompt.md. A no-op until the <video>
-   * element mounts; the caller re-applies once it does (see App.tsx's effect keyed on media.file). */
-  setVolume: (vol: number) => void;
-  setMuted: (muted: boolean) => void;
 }
 
 /** setCurrentSeconds only needs to be fresh enough for the transport bar's fallback text and the
@@ -412,16 +408,6 @@ export function useMediaSession(dispatch: Dispatch<AppAction>, sel: TrackSelecti
     void engine.seek(secondsToTicks(seconds, track.timescale), 'accurate');
   }, []);
 
-  const setVolume = useCallback((vol: number) => {
-    const el = videoRef.current;
-    if (el !== null) el.volume = vol;
-  }, []);
-
-  const setMuted = useCallback((muted: boolean) => {
-    const el = videoRef.current;
-    if (el !== null) el.muted = muted;
-  }, []);
-
   const trackFps = videoTrackRef.current?.video?.nominalFrameRate ?? null;
   const formattingFps = trackFps ?? 60;
 
@@ -452,7 +438,5 @@ export function useMediaSession(dispatch: Dispatch<AppAction>, sel: TrackSelecti
     stepFrame,
     jumpToKeyframe,
     seekToSeconds,
-    setVolume,
-    setMuted,
   };
 }
