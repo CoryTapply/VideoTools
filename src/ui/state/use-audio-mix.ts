@@ -14,19 +14,20 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AudioMixEngine } from '../../media/audio-mix/AudioMixEngine';
 import { ticksToSeconds } from '../../media/index/time';
-import { selectedAudioRealTrackIds } from '../media/derive-source-info';
+import { audioRealTrackVolumes, selectedAudioRealTrackIds } from '../media/derive-source-info';
 import type { RefObject } from 'react';
 import type { SampleIndex } from '../../media/index/query';
 import type { TrackIndex } from '../../media/index/track-index';
 import type { NativeVideoEngine } from '../../media/playback/NativeVideoEngine';
 import type { PlaybackState } from '../../media/playback/PlaybackEngine';
 import type { TrackSummary } from '../media/track-summary';
-import type { TrackSelection } from './app-state';
+import type { TrackSelection, TrackVolume } from './app-state';
 
 export interface UseAudioMixOptions {
   readonly file: File | null;
   readonly tracks: TrackSummary[] | null;
   readonly sel: TrackSelection;
+  readonly trackVol: TrackVolume;
   readonly sampleIndexRef: RefObject<SampleIndex | null>;
   readonly engineRef: RefObject<NativeVideoEngine | null>;
   readonly videoTrackRef: RefObject<TrackIndex | null>;
@@ -47,7 +48,7 @@ export interface AudioMix {
 }
 
 export function useAudioMix(opts: UseAudioMixOptions): AudioMix {
-  const { file, tracks, sel, sampleIndexRef, engineRef, videoTrackRef, videoRef, vol, muted } = opts;
+  const { file, tracks, sel, trackVol, sampleIndexRef, engineRef, videoTrackRef, videoRef, vol, muted } = opts;
   const audioMixEngineRef = useRef<AudioMixEngine | null>(null);
 
   // Effect A -- one AudioMixEngine per open file, mirroring engineRef's own per-file lifecycle in
@@ -96,6 +97,19 @@ export function useAudioMix(opts: UseAudioMixOptions): AudioMix {
     if (!tracks) return;
     audioMixEngineRef.current?.setEnabledTracks(selectedAudioRealTrackIds(tracks, sel));
   }, [tracks, sel]);
+
+  // Effect B.5 -- per-track volume sliders (TrackList.tsx), same "preview-only" scope as Effect C's
+  // master volume below. Runs every render trackVol/tracks changes, independent of Effect B's
+  // enable/disable reconciliation so toggling one track's checkbox never has to re-touch every
+  // other track's gain.
+  useEffect(() => {
+    if (!tracks) return;
+    const engine = audioMixEngineRef.current;
+    if (!engine) return;
+    for (const [trackId, vol] of audioRealTrackVolumes(tracks, trackVol)) {
+      engine.setTrackVolume(trackId, vol);
+    }
+  }, [tracks, trackVol]);
 
   // Effect C -- the global volume slider/mute button now drives the mix's master gain instead of
   // the native <video> element's own volume/muted (see media-session.ts's removed setVolume/

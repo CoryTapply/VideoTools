@@ -148,6 +148,30 @@ describe('AudioMixEngine', () => {
     expect(created.get(2)?.disposed).toBe(true);
   });
 
+  it('setTrackVolume applies immediately to an already-live mixer', () => {
+    const { engine, created } = makeEngine([1]);
+    engine.setEnabledTracks(new Set([1]));
+    engine.setTrackVolume(1, 0.3);
+    expect(created.get(1)?.setVolumeCalls).toEqual([0.3]);
+  });
+
+  it('setTrackVolume is remembered and applied to a mixer created later', () => {
+    const { engine, created } = makeEngine([1]);
+    engine.setTrackVolume(1, 0.3); // set before the track is ever enabled
+    engine.setEnabledTracks(new Set([1]));
+    expect(created.get(1)?.setVolumeCalls).toEqual([0.3]);
+  });
+
+  it('setTrackVolume survives a dispose/recreate cycle (unchecking then rechecking a track)', () => {
+    const { engine, created } = makeEngine([1]);
+    engine.setEnabledTracks(new Set([1]));
+    engine.setTrackVolume(1, 0.3);
+    engine.setEnabledTracks(new Set([])); // uncheck -- disposes the mixer
+    expect(created.get(1)?.disposed).toBe(true);
+    engine.setEnabledTracks(new Set([1])); // recheck -- creates a fresh mixer
+    expect(created.get(1)?.setVolumeCalls).toEqual([0.3]);
+  });
+
   it('setEnabledTracks after dispose() is a safe no-op', () => {
     const { engine, created } = makeEngine([1]);
     engine.dispose();

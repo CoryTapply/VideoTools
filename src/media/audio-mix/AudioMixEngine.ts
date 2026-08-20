@@ -51,6 +51,10 @@ export class AudioMixEngine {
   private vol = 1;
   private muted = false;
   private disposed = false;
+  /** Per-track volume, keyed by real MP4 track id -- survives a mixer's dispose/recreate cycle
+   * (e.g. unchecking then rechecking a track's export selection), since a fresh LiveAudioMixer
+   * would otherwise reset to unity gain. */
+  private readonly trackVolumes = new Map<number, number>();
 
   constructor(opts: AudioMixEngineOptions) {
     this.audioTracks = opts.audioTracks;
@@ -87,7 +91,10 @@ export class AudioMixEngine {
       (trackId) => {
         const track = this.audioTracks.get(trackId);
         if (!track) throw new Error(`AudioMixEngine: no audio track with real id ${String(trackId)}`);
-        return this.createMixerFn(trackId, track, this.ctx, this.masterGain);
+        const mixer = this.createMixerFn(trackId, track, this.ctx, this.masterGain);
+        const vol = this.trackVolumes.get(trackId);
+        if (vol !== undefined) mixer.setVolume(vol);
+        return mixer;
       },
       { playing: this.lastState === 'playing' && this.atUnityRate, atSeconds: this.lastSeconds },
     );
@@ -117,6 +124,14 @@ export class AudioMixEngine {
     if (this.disposed) return;
     this.lastSeconds = atSeconds;
     for (const mixer of this.mixers.values()) mixer.reportMasterPosition(atSeconds);
+  }
+
+  /** Sets one track's own gain (1 = unity), independent of the shared master gain. Applied
+   * immediately if the track currently has a live mixer, and remembered for whenever it next
+   * gets one (see setEnabledTracks's createMixer callback above). */
+  setTrackVolume(trackId: number, vol: number): void {
+    this.trackVolumes.set(trackId, vol);
+    this.mixers.get(trackId)?.setVolume(vol);
   }
 
   setMasterVolume(vol: number): void {

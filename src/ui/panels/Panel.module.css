@@ -160,4 +160,57 @@
   font-size: 10px;
   color: var(--color-text-tertiary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Per-track volume slider, TrackList export-mode audio rows only -- sits under the track name in
+   .trackMeta's own second line (replacing .trackMetaLine there), so it's full-width rather than
+   the fixed-size popover slider VolumeControl.module.css uses. */
+.trackVolumeWrap {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.trackVolumeTrack {
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-volume-track-bg);
+  overflow: hidden;
+}
+
+/* Fixed at the wrap's midpoint -- unity/100%, since the slider's range is [0, MAX_TRACK_VOLUME]
+   (TrackList.tsx). A sibling of .trackVolumeTrack, not a child -- the track clips its own
+   contents (overflow: hidden, for the fill's rounded end), which would clip this too. */
+.trackVolumeUnityTick {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1px;
+  height: 7px;
+  background: var(--color-border-base);
+  transform: translate(-50%, -50%);
+}
+
+.trackVolumeFill {
+  height: 100%;
+  background: var(--color-accent);
+}
+
+.trackVolumeKnob {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1px solid var(--color-bg-panel);
+  background: var(--color-accent);
+  transform: translate(-50%, -50%);
 }

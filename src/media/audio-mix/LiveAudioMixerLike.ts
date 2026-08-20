@@ -11,4 +11,6 @@ export interface LiveAudioMixerLike {
   dispose(): void;
   reportMasterPosition(masterSeconds: number): void;
   estimatedPositionSeconds(): number | undefined;
+  /** Sets this track's own gain (1 = unity), independent of the shared master gain. */
+  setVolume(vol: number): void;
 }

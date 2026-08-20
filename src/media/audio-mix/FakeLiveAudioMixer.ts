@@ -9,6 +9,7 @@ export class FakeLiveAudioMixer implements LiveAudioMixerLike {
   readonly seekCalls: number[] = [];
   pauseCallCount = 0;
   disposed = false;
+  readonly setVolumeCalls: number[] = [];
 
   private estimatedPosition: number | undefined;
 
@@ -36,6 +37,10 @@ export class FakeLiveAudioMixer implements LiveAudioMixerLike {
 
   estimatedPositionSeconds(): number | undefined {
     return this.estimatedPosition;
+  }
+
+  setVolume(vol: number): void {
+    this.setVolumeCalls.push(vol);
   }
 
   // ---- test-only controls, not part of LiveAudioMixerLike -------------------------------------
