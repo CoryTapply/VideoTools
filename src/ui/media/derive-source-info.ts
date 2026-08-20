@@ -7,7 +7,7 @@
 import { ticksToSeconds } from '../../media/index/time.ts';
 import { formatDurationHMS } from '../state/snap-notice.ts';
 import type { TrackIndex } from '../../media/index/track-index.ts';
-import type { TrackId, TrackSelection } from '../state/app-state.ts';
+import type { TrackId, TrackSelection, TrackVolume } from '../state/app-state.ts';
 import type { PanelRowFixture } from './panel-row.ts';
 import type { TrackSummary } from './track-summary.ts';
 
@@ -174,6 +174,17 @@ export function selectedAudioRealTrackIds(tracks: readonly TrackSummary[], sel: 
  * export-selection changes rather than staying fixed to whatever was selected at file-open. */
 export function firstSelectedAudioTrackId(tracks: readonly TrackSummary[], sel: TrackSelection): number | undefined {
   return tracks.find((t) => t.kind === 'audio' && sel[t.id])?.trackId;
+}
+
+/** Maps display-id-keyed `TrackVolume` to real-MP4-track-id-keyed, audio-kind tracks only --
+ * what AudioMixEngine.setTrackVolume needs. Missing entries default to 1 (unity), matching
+ * app-state.ts's TrackVolume doc comment. */
+export function audioRealTrackVolumes(tracks: readonly TrackSummary[], trackVol: TrackVolume): Map<number, number> {
+  const result = new Map<number, number>();
+  for (const t of tracks) {
+    if (t.kind === 'audio') result.set(t.trackId, trackVol[t.id] ?? 1);
+  }
+  return result;
 }
 
 /**

@@ -16,6 +16,7 @@ Companion to `architecture-v3.md` and `PROJECT-CONTEXT.md`.
 | M2 | Timeline polish | in progress |
 | M2.5 | Dense-tier budget re-tune | not started |
 | M3 | Frame accuracy (smart render) | not started |
+| M3.5 | Per-track volume export (audio transcode) | not started -- scoping only, see below |
 | M4 | Production hardening | not started |
 | M5 | Editor foundations | not started |
 | M6 | Multi-track | not started |
@@ -309,6 +310,48 @@ Hazards: parameter-set mismatch may need a second `stsd` entry or in-band SPS/PP
 
 ---
 
+## M3.5 — per-track volume export (1-2+ weeks, likely more)
+
+Bake the per-track preview volume sliders (M2 follow-up, shipped ahead of this milestone --
+`src/ui/panels/TrackList.tsx`, `src/media/audio-mix/`) into the actual exported file, so a track
+adjusted in the Export panel plays back at that adjusted level everywhere, not just live in this
+app. **Scoping only below — not started, no design decisions made yet.**
+
+**This directly conflicts with an existing firm scope boundary** (see "Scope boundaries" below):
+*"transcoding as a product feature"* is listed as firmly out, "not to be relitigated without new
+information." A user request to bake preview volume into export output *is* that new information,
+but the conflict is real and deliberate, not an oversight -- any implementation plan for this
+milestone needs to either get an explicit go-ahead to carve out this one exception, or find a
+non-transcoding way to hit the same goal (neither of which this scoping pass has resolved).
+
+**Why this is a new subsystem, not a tweak.** `src/media/export/` is currently pure stream-copy:
+raw sample bytes are copied byte-for-byte from source to output (`RemuxStrategy.ts`,
+`moov-builder.ts`, `schedule.ts`, `copy-loop.ts`); its own README says outright "no decode/encode
+anywhere in this module." No `AudioEncoder` exists anywhere in the codebase yet -- `AudioDecoder`
+exists only in the live-preview path (`LiveAudioMixer.ts`, via `RealWaveformDecoder.ts`), decoding
+into a real-time Web Audio playback graph, not into offline PCM for re-encoding. Applying a
+per-track gain to the exported file means, for every track with a non-unity volume: decode to PCM
+→ scale the samples → re-encode → write a genuinely new `stbl`/`mdat` (re-encoded audio won't have
+the source's original sample sizes/offsets, unlike the current byte-identical copy path) --
+alongside the existing fast remux path for video and any untouched-volume audio tracks, which
+`RemuxStrategy.ts` would need to run as two parallel per-track pipelines instead of one uniform
+one. Also unresolved: matching the source codec/profile on re-encode vs. transcoding to a fixed
+target (simpler, but changes output track properties from the original), and keeping AV sync
+correct through encoder latency/padding now that export no longer trivially guarantees
+byte-identical timing.
+
+Given this project's real history with AV work needing multiple real-browser iterations to get
+right (waveform pipeline, live audio-mix, the HW-decode flush fix -- see
+`feedback_real_browser_verification_loop` in project memory), expect verification against a real
+exported file in real players to add meaningfully beyond initial implementation time, not to be a
+formality at the end.
+
+A ready-to-use prompt for a from-scratch implementation pass exists at
+`prompts/export-track-volume-prompt.md`, written but **deliberately not run yet** -- start this
+milestone by resolving the scope-boundary conflict above, then hand that prompt to a fresh session.
+
+---
+
 ## M4 — production hardening (3 weeks)
 
 Capability detection and degradation paths. ffmpeg.wasm tier-4 fallback behind a lazy chunk. Error taxonomy with actionable messages. Stress matrix: VFR, rotated, HDR, 8-hour, B-frame-heavy, 4:2:2, fragmented MP4, HEVC.
@@ -347,6 +390,6 @@ Multi-clip EDL on one track. Ripple and roll trim. Undo/redo via commands with d
 
 ## Scope boundaries
 
-Firmly out, and not to be relitigated without new information: multi-resolution export, transcoding as a product feature, MKV or WebM containers, server-side anything, mobile.
+Firmly out, and not to be relitigated without new information: multi-resolution export, transcoding as a product feature (**contested by M3.5, per-track volume export -- see that section; unresolved, not a silent exception**), MKV or WebM containers, server-side anything, mobile.
 
 Deliberately deferred: multi-clip and multi-track until M5/M6, waveform until M2, smart render until M3 and possibly never.

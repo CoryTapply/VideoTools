@@ -8,7 +8,7 @@ import { PreviewSurface } from './PreviewSurface.tsx';
 import { Rail } from './Rail.tsx';
 import styles from './Stage.module.css';
 import type { ReactNode, RefObject } from 'react';
-import type { PanelId, Screen, TrackId, TrackSelection } from '../state/app-state.ts';
+import type { PanelId, Screen, TrackId, TrackSelection, TrackVolume } from '../state/app-state.ts';
 import type { UnsupportedInfo } from '../state/media-session.ts';
 import type { PanelRowFixture } from '../media/panel-row.ts';
 import type { TrackSummary } from '../media/track-summary.ts';
@@ -41,6 +41,8 @@ export interface StageProps {
   onUnpinPanel: () => void;
   onToggleShortcuts: () => void;
   onToggleTrack: (id: TrackId) => void;
+  trackVol: TrackVolume;
+  onSetTrackVolume: (id: TrackId, vol: number) => void;
   overlay?: ReactNode;
   toast?: ReactNode;
 }
@@ -75,6 +77,8 @@ export function Stage({
   onUnpinPanel,
   onToggleShortcuts,
   onToggleTrack,
+  trackVol,
+  onSetTrackVolume,
   overlay,
   toast,
 }: StageProps) {
@@ -106,6 +110,8 @@ export function Stage({
             sourceFileName={sourceFileName}
             estimatedBytes={estimatedExportBytes}
             onToggleTrack={onToggleTrack}
+            trackVol={trackVol}
+            onSetTrackVolume={onSetTrackVolume}
           />
         );
       case 'queue':

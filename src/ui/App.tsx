@@ -79,6 +79,7 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
     file: media.file,
     tracks: media.tracks,
     sel: state.sel,
+    trackVol: state.trackVol,
     sampleIndexRef: media.sampleIndexRef,
     engineRef: media.engineRef,
     videoTrackRef: media.videoTrackRef,
@@ -552,6 +553,10 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
         }}
         onToggleTrack={(track) => {
           dispatch({ type: 'track/toggle', track });
+        }}
+        trackVol={state.trackVol}
+        onSetTrackVolume={(track, vol) => {
+          dispatch({ type: 'track-volume/set', track, vol });
         }}
         overlay={
           (state.screen === 'exporting' || state.screen === 'finalising') && (

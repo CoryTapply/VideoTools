@@ -65,6 +65,8 @@ export interface LiveAudioMixerOptions {
   /** Where this track's own GainNode connects to -- typically a shared master GainNode the owner
    * also controls (for the global preview volume/mute), not ctx.destination directly. */
   readonly destination: AudioNode;
+  /** This track's own initial gain (1 = unity). Changeable later via setVolume(). */
+  readonly volume?: number;
   readonly onError?: (message: string) => void;
 }
 
@@ -110,7 +112,7 @@ export class LiveAudioMixer implements LiveAudioMixerLike {
 
     this.ctx = opts.ctx;
     this.gain = this.ctx.createGain();
-    this.gain.gain.value = 1;
+    this.gain.gain.value = opts.volume ?? 1;
     this.gain.connect(opts.destination);
     this.registry = createFrameLifecycleRegistry();
     this.decoder = new RealWaveformDecoder(this.registry);
@@ -141,6 +143,10 @@ export class LiveAudioMixer implements LiveAudioMixerLike {
    * 2 windows ahead of video" spike that vanished the instant the next chunk's own tiny gap didn't
    * line up with a poll. This scan is immune to that: array order and which entry happens to be
    * "last" don't matter, only each entry's own ctxStart relative to `now`. */
+  setVolume(vol: number): void {
+    this.gain.gain.value = vol;
+  }
+
   estimatedPositionSeconds(): number | undefined {
     if (this.scheduled.length === 0) return undefined;
     const now = this.ctx.currentTime;

@@ -29,6 +29,17 @@ export type TrackId = string;
 
 export type TrackSelection = Record<TrackId, boolean>;
 
+/** Per-track preview volume, keyed by display id -- 1 is unity/100% (the default for a missing
+ * entry, see TrackList.tsx), up to MAX_TRACK_VOLUME (200%) for boosting a quiet track. Same
+ * "preview-only, never affects export output" scope as `vol`/`muted` above; see use-audio-mix.ts. */
+export type TrackVolume = Record<TrackId, number>;
+
+/** Per-track volume slider's ceiling (200%) -- unlike the master transport-bar volume (capped at
+ * 1, `volume/set` below), individual tracks can be boosted past unity to bring up a quiet mic
+ * against a louder one. TrackList.tsx renders unity at the slider's midpoint, this max at its
+ * right edge. */
+export const MAX_TRACK_VOLUME = 2;
+
 export interface KeyframeShiftNotice {
   /** Signed seconds the edge moved by; negative means it moved earlier. */
   delta: number;
@@ -48,6 +59,7 @@ export interface AppState {
   panel: PanelId | null;
   pinned: PanelId | null;
   sel: TrackSelection;
+  trackVol: TrackVolume;
   notice: KeyframeShiftNotice | null;
   noticeOpen: boolean;
   shortcuts: boolean;
@@ -77,6 +89,7 @@ export function createInitialAppState(overrides: Partial<AppState> = {}): AppSta
     panel: null,
     pinned: null,
     sel: { V1: true, A1: true, A2: false, A3: false, A4: false, A5: false, A6: false },
+    trackVol: {},
     notice: null,
     noticeOpen: false,
     shortcuts: false,
@@ -103,6 +116,7 @@ export type AppAction =
   | { type: 'mute/set'; muted: boolean }
   | { type: 'track/toggle'; track: TrackId }
   | { type: 'sel/set'; sel: TrackSelection }
+  | { type: 'track-volume/set'; track: TrackId; vol: number }
   | { type: 'start-end/set'; tstart: number; tend: number }
   | { type: 'open-error/set'; error: IndexError | null }
   | { type: 'export-error/set'; error: ExportError | null }
@@ -147,6 +161,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, sel: { ...state.sel, [action.track]: !state.sel[action.track] } };
     case 'sel/set':
       return { ...state, sel: action.sel };
+    case 'track-volume/set':
+      return { ...state, trackVol: { ...state.trackVol, [action.track]: Math.min(MAX_TRACK_VOLUME, Math.max(0, action.vol)) } };
     case 'start-end/set':
       return { ...state, tstart: action.tstart, tend: action.tend };
     case 'open-error/set':

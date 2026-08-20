@@ -57,6 +57,17 @@ describe('appReducer', () => {
     expect(state.sel).toEqual({ V1: true, A1: true });
   });
 
+  it('track-volume/set sets one track\'s volume without touching others, clamped to [0, MAX_TRACK_VOLUME]', () => {
+    let state = appReducer(createInitialAppState(), { type: 'track-volume/set', track: 'A1', vol: 0.4 });
+    expect(state.trackVol).toEqual({ A1: 0.4 });
+    state = appReducer(state, { type: 'track-volume/set', track: 'A2', vol: 1.5 }); // boosted, under the 2x ceiling
+    expect(state.trackVol).toEqual({ A1: 0.4, A2: 1.5 });
+    state = appReducer(state, { type: 'track-volume/set', track: 'A2', vol: 2.5 });
+    expect(state.trackVol.A2).toBe(2);
+    state = appReducer(state, { type: 'track-volume/set', track: 'A2', vol: -0.5 });
+    expect(state.trackVol.A2).toBe(0);
+  });
+
   it('trim-mode/set to exact clears any pending notice', () => {
     const withNotice = createInitialAppState({
       notice: { delta: -4.17, at: 6690, which: 'start' },
