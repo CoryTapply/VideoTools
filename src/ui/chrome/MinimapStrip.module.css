@@ -1,0 +1,59 @@
+.root {
+  flex: 0 0 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: var(--color-bg-base);
+  border-top: 1px solid var(--color-minimap-hairline);
+  cursor: pointer;
+  position: relative;
+}
+
+.track {
+  flex: 1;
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-minimap-track);
+}
+
+.trimBand {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 10px;
+  background: var(--color-accent);
+  border-radius: 3px;
+}
+
+.zoomCapsule {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  border: 1px solid var(--color-minimap-zoom-border);
+  border-radius: 6px;
+  background: var(--color-minimap-zoom-fill);
+  pointer-events: none;
+}
+
+.playheadLine {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--color-minimap-playhead);
+  pointer-events: none;
+}
+
+.playheadDot {
+  position: absolute;
+  top: -9px;
+  width: 5px;
+  height: 5px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: var(--color-minimap-playhead);
+  pointer-events: none;
+}

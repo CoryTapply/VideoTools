@@ -124,6 +124,20 @@ export const color = {
   // Speaker button's active background when muted -- design/volume-slider-prompt.md. A fourth,
   // distinct amber-tint pairing alongside warnBannerBg/warnNoticeBg/warnButtonHoverBg above.
   warnVolumeActiveBg: 'rgba(239,159,39,.14)',
+
+  // Whole-file minimap strip's track background (chrome/MinimapStrip.tsx).
+  minimapTrack: '#1F1F23',
+  // Minimap zoom-window capsule's outline.
+  minimapZoomBorder: '#8A8A88',
+  // Minimap zoom-window capsule's fill -- same RGB as textPrimary (#E8E8E6) at 6% opacity, kept
+  // separate: unrelated surfaces.
+  minimapZoomFill: 'rgba(232,232,230,.06)',
+  // Minimap playhead line + dot -- deliberately distinct from `playhead` (#E2574F) above; its own
+  // spec'd hex, not a reuse.
+  minimapPlayhead: '#E5484D',
+  // Minimap strip's top hairline. Same hex as bgSplitterHover but kept its own token -- unrelated
+  // surfaces, same convention as bgRecentRowHover/volumeTrackBg above.
+  minimapHairline: '#16161A',
 } as const;
 
 export const type = {
@@ -165,6 +179,7 @@ export const rowHeight = {
   ruler: 26,
   waveform: 26,
   splitter: 5,
+  minimap: 22,
   railWidth: 34,
   floatingPanel: 250,
   pinnedPanel: 258,
