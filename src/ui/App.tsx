@@ -12,6 +12,7 @@ import { ExportOverlay } from './chrome/ExportOverlay.tsx';
 import { ExportToast } from './chrome/ExportToast.tsx';
 import { railClearancePx, transportPillBottomPx } from './chrome/floating-offsets.ts';
 import { KeyboardOverlay } from './chrome/KeyboardOverlay.tsx';
+import { MinimapStrip } from './chrome/MinimapStrip.tsx';
 import { NoticeChip } from './chrome/NoticeChip.tsx';
 import { Splitter } from './chrome/Splitter.tsx';
 import { Stage } from './chrome/Stage.tsx';
@@ -641,6 +642,16 @@ export function App({ initialState, exactAvailable = true }: AppProps) {
           onMouseLeave={() => {
             setTransportHovered(false);
           }}
+        />
+      )}
+
+      {showFileChrome && (
+        <MinimapStrip
+          durationSeconds={media.durationSeconds}
+          tstart={state.tstart}
+          tend={state.tend}
+          controllerStateRef={timelineControllerRef}
+          videoTrackRef={media.videoTrackRef}
         />
       )}
 

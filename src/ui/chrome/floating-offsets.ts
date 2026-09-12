@@ -11,11 +11,13 @@ export function railClearancePx(pinned: PanelId | null): number {
   return pinned === null ? rowHeight.railWidth : rowHeight.railWidth + rowHeight.pinnedPanel;
 }
 
-/** The transport pill's `bottom`: 14px above the splitter, which sits atop the timeline --
- * design/floating-chrome-changes.md's "2. Transport becomes a floating pill" (19 = 14px gap +
- * rowHeight.splitter). */
+/** The transport pill's `bottom`: 14px above the splitter, which sits atop the timeline, plus the
+ * always-visible minimap strip above that -- design/floating-chrome-changes.md's "2. Transport
+ * becomes a floating pill" (19 = 14px gap + rowHeight.splitter), plus rowHeight.minimap (22px) so
+ * the pill clears the strip. Unconditional: MinimapStrip shares this function's callers' own
+ * showFileChrome visibility gate, so it's never rendered without the minimap also present. */
 export function transportPillBottomPx(timelineHeightPx: number): number {
-  return timelineHeightPx + rowHeight.splitter + 14;
+  return timelineHeightPx + rowHeight.splitter + rowHeight.minimap + 14;
 }
 
 // NoticeChip reuses transportPillBottomPx directly: by default it sits at the same height as the

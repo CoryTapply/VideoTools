@@ -17,7 +17,7 @@ export function xToTime(x: number, viewStart: Time, viewSpan: Time, widthPx: num
   return viewStart + (x / widthPx) * viewSpan;
 }
 
-function clampViewStart(viewStart: Time, viewSpan: Time, durationTicks: Time): Time {
+export function clampViewStart(viewStart: Time, viewSpan: Time, durationTicks: Time): Time {
   const maxStart = Math.max(0, durationTicks - viewSpan);
   return Math.min(Math.max(0, viewStart), maxStart);
 }
