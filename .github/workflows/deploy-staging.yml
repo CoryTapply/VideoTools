@@ -49,7 +49,7 @@ jobs:
       - name: Build main
         working-directory: main-checkout
         env:
-          GH_PAGES_BASE: /${{ github.event.repository.name }}/
+          GH_PAGES_BASE: /
         run: |
           npm ci
           npm run build
@@ -57,7 +57,7 @@ jobs:
       - name: Build staging branch
         working-directory: staging-checkout
         env:
-          GH_PAGES_BASE: /${{ github.event.repository.name }}/staging/
+          GH_PAGES_BASE: /staging/
         run: |
           npm ci
           npm run build

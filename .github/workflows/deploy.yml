@@ -29,7 +29,7 @@ jobs:
 
       - name: Build
         env:
-          GH_PAGES_BASE: /${{ github.event.repository.name }}/
+          GH_PAGES_BASE: /
         run: npm run build
 
       - name: Assemble Pages output
